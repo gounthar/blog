@@ -27,10 +27,10 @@ sources:
     kind: dockerimage
     spec:
       image: hugomods/hugo
-      tagfilter: "exts$"
+      tagfilter: "^\\d+\\.\\d+\\.\\d+-exts$"
       versionfilter:
-        kind: regex
-        pattern: "^exts$"
+        kind: semver
+        pattern: "*-exts"
 
 targets:
   docker-compose:
@@ -41,12 +41,4 @@ targets:
     spec:
       file: docker-compose.yml
       key: "$.services.hugo.image"
-
-  gitlab-ci:
-    name: "Update .gitlab-ci.yml Hugo image"
-    kind: yaml
-    scmid: default
-    sourceid: hugo-image
-    spec:
-      file: .gitlab-ci.yml
-      key: "$.image"
+      value: 'hugomods/hugo:{{ source "hugo-image" }}'
