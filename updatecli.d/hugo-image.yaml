@@ -1,0 +1,52 @@
+---
+name: "Update Hugo Docker image tag"
+
+scms:
+  default:
+    kind: github
+    spec:
+      owner: gounthar
+      repository: blog
+      branch: main
+      user: "{{ .github.user }}"
+      token: "{{ .github.token }}"
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    spec:
+      title: "chore(deps): update Hugo Docker image"
+      labels:
+        - dependencies
+        - docker
+
+sources:
+  hugo-image:
+    name: "Get latest hugomods/hugo tag"
+    kind: dockerimage
+    spec:
+      image: hugomods/hugo
+      tagfilter: "exts$"
+      versionfilter:
+        kind: regex
+        pattern: "^exts$"
+
+targets:
+  docker-compose:
+    name: "Update docker-compose.yml Hugo image"
+    kind: yaml
+    scmid: default
+    sourceid: hugo-image
+    spec:
+      file: docker-compose.yml
+      key: "$.services.hugo.image"
+
+  gitlab-ci:
+    name: "Update .gitlab-ci.yml Hugo image"
+    kind: yaml
+    scmid: default
+    sourceid: hugo-image
+    spec:
+      file: .gitlab-ci.yml
+      key: "$.image"
