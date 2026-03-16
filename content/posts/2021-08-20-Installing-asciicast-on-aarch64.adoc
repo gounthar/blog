@@ -1,0 +1,203 @@
+---
+author: gounthar
+categories:
+- aarch64
+- stationp1
+- Armbian
+- Firefly
+- Linux
+- RK3399
+- howto
+- bullseye
+description: Asciicast is needed to generate a GIF from termtosvg
+featured: true
+hidden: false
+image: assets/images/2021/08/20/glitter.gif
+tags:
+- aarch64
+- stationp1
+- Armbian
+- Firefly
+- Linux
+- RK3399
+- howto
+- bullseye
+title: Installing asciicast2gif on aarch64 Debian bullseye
+toc: true
+---
+
+== asciicast2gif: one way to produce a GIF file from your terminal session
+
+== Why?
+
+Last year, I wrote a blog post about producing SVG and GIF files from a recording of terminal sessions thanks to link:/2020/01/03/Terminal-recording-on-the-OrangePi-Zero/[termtosvg]. 
+This makes sense if you want to illustrate your tutorials with nice moving pictures of what's going on on the machine.
+You can see an example of the result of this process just at the beginning of the post.
+Why should you use a GIF file, an old (1987, same year as PowerPoint!) and bulky format with a very limited color palette instead of SVG?
+Well, you shouldn't, but sometimes you have to. Or you think you have to.
+
+image::/assets/images/2021/08/20/obama-what.gif[obama-what]
+
+Okay, sometimes you really have to, like when using a meme, or posting something on Medium (because yes, Medium can't (or don't want to) handle SVG). 
+My problem is now solved, as I sort of got kicked out of Medium, without further explanation (This account is under investigation or was found in violation of the link:https://policy.medium.com/medium-rules-30e5502c4eb4[Medium Rules]).
+
+Now what? There may be other ways to generate GIF files from SVG or from the `.cast` recordings, or directly when recording the terminal, but today, we'll do it with link:https://github.com/asciinema/asciicast2gif[asciicast2gif].
+
+asciicast2gif is, as its name implies, some kind of converter that will take a `. cast` file as an input, and produce a GIF file. Last time I tried to install asciicast2gif on an ARM machine, it was a painful experience.
+
+image::/assets/images/2021/08/20/pain-in-the-rear-football.gif[pain-in-the-rear-football]
+
+The thing is, one of the most important dependency is link:https://phantomjs.org/[PhantomJS] whose development is suspended, so don't expect to get a standard package available in your link:https://www.armbian.com/download/[ARM distro] anytime. I tried several times to get it to compile, but failed. 
+Furthermore, when you manage to install it, you'd better be patient, because it is really CPU hungry, and even the smallest GIF rendering will takes ages on a powerful machine.
+
+You're now convinced that you need it, so why not try it together?
+
+== How?
+
+This time, I did not try to install asciicast2gif on an ARMV7 machine, nor on a X86_64 machine, but on an ARMV8, the amazing link:https://www.youtube.com/watch?v=TS1nYM260XI[StationP1] from link:https://www.firefly.store/goods.php?id=114[Firefly].
+It sports a Rockchip RK3399, a 32GB eMMC, 4GB of RAM and a very sturdy box which doubles as a very efficient heatsink.
+I own and use a few RK3399-based machine, and it's the most successful one. This thing just works, and it rocks!
+
+=== Prerequisites
+
+To get asciicast2gif to work, you will need a JRE, link:https://github.com/kohler/gifsicle[gifsicle], link:https://imagemagick.org/index.php[ImageMagick], link:https://nodejs.org/en/[Node.js] and link:https://www.npmjs.com/[npm]. Fortunately, everything is available straight from link:https://www.armbian.com/kernel/[Armbian].
+
+[source,bash]
+----
+sudo apt install -y gifsicle imagemagick nodejs npm openjdk-11-jre
+
+----
+
+You will also need to install link:https://github.com/technomancy/leiningen/[leiningen] in your `PATH`, so that you can automate Clojure projects without setting your hair on fire.
+
+image::/assets/images/2021/08/20/beaker-fire.gif[beaker-fire]
+
+[source,bash]
+----
+wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein && sudo mv lein /usr/local/bin/
+
+----
+
+I told you earlier that I failed several times at building PhantomJS on anything ARM. Once more, I failed today. You could hope that I would get wiser as I'm getting older, but it looks like it's the other way around. So I took the easy way out. I downloaded a pre-build AARCH64 binary. 
+
+image::/assets/images/2021/08/20/no-guts-no-glory-right-tough.gif[no-guts-no-glory-right-tough]
+
+[source,bash]
+----
+cd && wget https://github.com/fg2it/phantomjs-on-raspberry/releases/download/v2.1.1-jessie-stretch-arm64/phantomjs_2.1.1_arm64.tgz && tar -xvzf phantomjs_2.1.1_arm64.tgz && sudo mv phantomjs /usr/local/bin/ && rm phantomjs_2.1.1_arm64.tgz
+
+----
+
+=== Installation
+
+Now that all the prerequisites are installed, let's go straight to the point:
+
+[source,bash]
+----
+cd && git clone --recursive https://github.com/asciinema/asciicast2gif.git && cd asciicast2gif/
+npm install && lein cljsbuild once main && lein cljsbuild once page
+
+----
+
+Looks like we're done? On this machine, we're not. If I had an link:https://store.avantek.co.uk/ampere-emag-64bit-arm-workstation.html[ARM Workstation] that would be ok. But as we're working on a machine with very limited capacity (disk and RAM), we have to make a few adjustments.
+
+[source,bash]
+----
+== Need more room for generating GIFs
+sudo vi /etc/ImageMagick-6/policy.xml
+
+----
+
+In this file, you will have to change a value of `1GiB` to `8GiB` so that you won't get an error message after a long time.
+
+[source,xml]
+----
+[...]
+== from   <policy domain="resource" name="disk" value="1GiB"/> to
+<policy domain="resource" name="disk" value="8GiB"/>
+[...]
+
+----
+
+You will also have to temporarily grow the size of the partition hosting `/tmp` if you don't want to face `convert-im6.q16: unable to write pixel cache "/tmp/magick-doISVFWvo4dMZbegtgZqkiee3mpVUZ6N": No space left on device @ error/cache.c/WritePixelCachePixels/6012.`
+
+[source,bash]
+----
+sudo mount -o remount,size=8G,noexec,nosuid,nodev,noatime /tmp
+
+----
+
+Edit the /etc/fstab file to make this changes permanently.
+
+[source,bash]
+----
+vim /etc/fstab
+
+----
+
+[source,bash]
+----
+== <file system>                                 <mount point>   <type>  <options>                                                       <dump>  <pass>
+tmpfs                                           /tmp            tmpfs   size=8G,defaults,nosuid                                                 0       0
+UUID=147a0457-31cc-44c0-b92a-a9a6b2305749       /               ext4    defaults,noatime,nodiratime,commit=600,errors=remount-ro,x-gvfs-hide    0       1
+
+----
+
+Now we're good to go.
+
+=== Use
+
+[source,bash]
+----
+./asciicast2gif -s 2 -t solarized-dark ../termtosvg/whatever-name-I-choose.cast demo.gif
+
+----
+
+image::/assets/images/2021/08/20/demo.gif[demo]
+
+Nice, isn't it? Launch the command, and then go brew a coffee. Or even better, grab some fresh coffee seeds, sow them, wait a few years, and then look at the result while brewing a coffee with the harvested seeds. The link:https://github.com/asciinema/asciicast2gif#usage[usage] is:
+
+[source,bash]
+----
+asciicast2gif [-t theme] [-s speed] [-S scale] [-w cols] [-h rows] <input-json-path-or-url> <output-gif-path>
+
+----
+
+I chose the `solarized-dark` theme, but I could have gone with several others:
+
+[source,bash]
+----
+-t <theme>        color theme, one of: asciinema, tango, solarized-dark, solarized-light, monokai (default: asciinema)
+-s <speed>        animation speed (default: 1)
+-S <scale>        image scale / pixel density (default: 2)
+-w <columns>      clip terminal to specified number of columns (width)
+-h <rows>         clip terminal to specified number of rows (height)
+
+----
+
+
+
+== TL;DR
+
+[source,bash]
+----
+sudo apt install -y gifsicle imagemagick nodejs npm openjdk-11-jre
+wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein && sudo mv lein /usr/local/bin/
+cd && wget https://github.com/fg2it/phantomjs-on-raspberry/releases/download/v2.1.1-jessie-stretch-arm64/phantomjs_2.1.1_arm64.tgz && tar -xvzf phantomjs_2.1.1_arm64.tgz && sudo mv phantomjs /usr/local/bin/ && rm phantomjs_2.1.1_arm64.tgz
+cd && git clone --recursive https://github.com/asciinema/asciicast2gif.git && cd asciicast2gif/
+npm install && lein cljsbuild once main && lein cljsbuild once page
+
+----
+
+Then edit `sudo vi /etc/ImageMagick-6/policy.xml` and replace  `<policy domain="resource" name="disk" value="1GiB"/>` with 
+`<policy domain="resource" name="disk" value="8GiB"/>`.
+
+Then grow the `tmp`partition `sudo mount -o remount,size=8G,noexec,nosuid,nodev,noatime /tmp` and you're ready to go :
+
+[source,bash]
+----
+./asciicast2gif -s 2 -t solarized-dark ../termtosvg/whatever-name-I-choose.cast demo.gif
+
+----
+
+image::/assets/images/2021/08/20/obama-finger-guns.gif[obama-finger-guns]

@@ -1,0 +1,58 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- GCC
+- OrangePi
+description: How to compile and install gcc 9.X on the OrangePi RK3399 ?
+draft: true
+featured: true
+hidden: false
+image: assets/images/gcc.cast.gif
+tags:
+- RK3399
+- GCC
+- OrangePi
+title: Compile GCC 9.X on the RK3399
+---
+
+Using https://solarianprogrammer.com/2016/10/07/building-gcc-ubuntu-linux/
+
+[source,bash]
+----
+wget http://deb.debian.org/debian/pool/main/g/gcc-9/gcc-9_9.2.1.orig.tar.gz
+cp gcc-9_9.2.1.orig.tar.gz /tmp
+tar -xvzf gcc-9_9.2.1.orig.tar.gz
+cd gcc-9-9.2.1/
+wget http://deb.debian.org/debian/pool/main/g/gcc-9/gcc-9_9.2.1-17.debian.tar.xz
+xz -d gcc-9_9.2.1-17.debian.tar.xz && tar -xvf gcc-9_9.2.1-17.debian.tar && rm gcc-9_9.2.1-17.debian.tar
+sudo apt install patchutils quilt expect bison
+sudo -E dpkg-buildpackage -us -uc -d
+configure: error: Building GCC requires GMP 4.2+, MPFR 2.4.0+ and MPC 0.8.0+.
+wget ftp://gcc.gnu.org/pub/gcc/infrastructure/gmp%2D6%2E1%2E0%2Etar%2Ebz2
+wget ftp://gcc.gnu.org/pub/gcc/infrastructure/mpfr%2D3%2E1%2E4%2Etar%2Ebz2
+wget ftp://gcc.gnu.org/pub/gcc/infrastructure/mpc%2D1%2E0%2E3%2Etar%2Egz
+tar -xf mpfr-3.1.4.tar.bz2 && mv mpfr-3.1.4 mpfr && rm mpfr-3.1.4.tar.bz2
+tar -xf gmp-6.1.0.tar.bz2 && mv -v gmp-6.1.0 gmp && rm gmp-6.1.0.tar.bz2
+tar -xf mpc-1.0.3.tar.gz && mv -v mpc-1.0.3 mpc && rm mpc-1.0.3.tar.gz
+sudo -E dpkg-buildpackage -us -uc -d
+dpkg-source: info: you can integrate the local changes with dpkg-source --commit
+dpkg-source: error: aborting due to unexpected upstream changes, see /tmp/gcc-9_9.2.1-17.diff.aWAt0_
+dpkg-source --commit
+Enter the desired patch name: no_idea
+dpkg-source: info: local changes have been recorded in a new patch: gcc-9-9.2.1/debian/patches/no_idea
+
+----
+
+Never worked... So, let's compile a non debian version
+
+[source,bash]
+----
+wget https://gra.mirror.cyberbits.eu/gnu/gcc/gcc-9.2.0/gcc-9.2.0.tar.gz
+tar -xvzf gcc-9.2.0.tar.gz
+mkdir build && cd build
+../gcc-9.2.0/configure --enable-languages=c,ada,c++,java,go,d,fortran,objc,obj-c++ --prefix=/usr --program-suffix=-6 --program-prefix=arm-linux-gnueabihf- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --with-sysroot=/ --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libitm --disable-libquadmath --enable-plugin --enable-default-pie --with-system-zlib --disable-browser-plugin --enable-java-awt=gtk --enable-gtk-cairo --with-java-home=/usr/lib/jvm/java-1.5.0-gcj-6-armhf/jre --enable-java-home --with-jvm-root-dir=/usr/lib/jvm/java-1.5.0-gcj-6-armhf --with-jvm-jar-dir=/usr/lib/jvm-exports/java-1.5.0-gcj-6-armhf --with-arch-directory=arm --with-ecj-jar=/usr/share/java/eclipse-ecj.jar --with-target-system-zlib --enable-objc-gc=auto --enable-multiarch --disable-sjlj-exceptions --with-arch=armv7-a --with-fpu=vfpv3-d16 --with-float=hard --with-mode=thumb --enable-checking=release --build=arm-linux-gnueabihf --host=arm-linux-gnueabihf --target=arm-linux-gnueabihf
+ 1075  ../gcc-9.2.0/configure --enable-languages=c,c++,go,d,fortran,objc,obj-c++ --prefix=/usr --program-suffix=-6 --program-prefix=arm-linux-gnueabihf- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --with-sysroot=/ --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libitm --disable-libquadmath --enable-plugin --enable-default-pie --with-system-zlib --disable-browser-plugin --enable-java-awt=gtk --enable-gtk-cairo --with-java-home=/usr/lib/jvm/java-1.5.0-gcj-6-armhf/jre --enable-java-home --with-jvm-root-dir=/usr/lib/jvm/java-1.5.0-gcj-6-armhf --with-jvm-jar-dir=/usr/lib/jvm-exports/java-1.5.0-gcj-6-armhf --with-arch-directory=arm --with-ecj-jar=/usr/share/java/eclipse-ecj.jar --with-target-system-zlib --enable-objc-gc=auto --enable-multiarch --disable-sjlj-exceptions --with-arch=armv7-a --with-fpu=vfpv3-d16 --with-float=hard --with-mode=thumb --enable-checking=release --build=arm-linux-gnueabihf --host=arm-linux-gnueabihf --target=arm-linux-gnueabihf
+sudo apt remove patchutils quilt expect bison
+
+----

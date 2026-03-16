@@ -1,0 +1,632 @@
+---
+author: Poddingue
+categories:
+- Node.js
+- RISC-V
+- Build Systems
+- Native Compilation
+- DevOps
+description: A detailed technical walkthrough of implementing native RISC-V 64-bit
+  build support for Node.js, from forking the repository to publishing the first release
+  after 8 critical bug fixes and 15.5 hours of compilation
+featured: true
+hidden: false
+image: assets/images/2025/11/07/riscv-header.jpg
+tags:
+- nodejs
+- riscv64
+- native-build
+- ssh
+- automation
+- debugging
+- bananapi-f3
+- unofficial-builds
+- build-systems
+title: 'Building Node.js Natively on RISC-V: A 15-Hour Journey from Fork to Release'
+---
+
+When I set out to add native RISC-V 64-bit build support to the Node.js unofficial builds project, I thought it would be straightforward: fork the repo, write some SSH orchestration scripts, and let the build run. What I got instead was an intense debugging marathon involving 8 critical fixes, a 15.5-hour build session that finally succeeded, and valuable lessons about SSH keepalives, path contexts, and the patience required for experimental hardware. Here's the complete story of how I went from initial fork to publishing v24.11.0.
+
+image::/assets/images/2025/11/07/riscv-header.jpg[Abstract circuit board architecture representing RISC-V native builds]
+
+_Photo by link:https://unsplash.com/@loganvoss[Logan Voss] on link:https://unsplash.com/photos/a-blue-and-black-abstract-background-with-lines-AaVMipmSOY8[Unsplash]_
+
+== The Motivation: Why Native Builds Matter
+
+The Node.js unofficial builds project produces binaries for platforms that the official Node.js project doesn't support. RISC-V 64-bit has been in that category, traditionally built through cross-compilation on x86-64 machines. Cross-compilation works, but it has limitations:
+
+* _No real hardware validation_: You're trusting your cross-compiler toolchain completely
+* _Potential compatibility issues_: Subtle differences between cross-compiled and native binaries
+* _Harder debugging_: When something breaks, is it the code or the toolchain?
+* _Missing platform-specific optimizations_: Native compilers know their hardware better
+
+I had access to a Banana Pi F3 running Debian 13 thanks to the RISC-V DevBoard program and Armbian on genuine RISC-V hardware (8 cores, 15GB RAM, gcc 14.2.0). Why not use it to build Node.js natively? The binaries would be validated on actual hardware during compilation, ensuring better compatibility and giving us confidence that what we ship actually works on the platform.
+
+The trade-off? Native RISC-V builds are slower than cross-compilation on powerful x86-64 servers. But for an experimental platform, I'd rather have slower builds that work than fast builds that might have subtle issues.
+
+== The Starting Point: Forking and Planning
+
+I forked the `nodejs/unofficial-builds` repository on November 5, 2025, at 11:18 PM and immediately dove into implementation. The initial commit with basic architecture was pushed before midnight. The next two days would be spent debugging SSH issues and path handling, culminating in the PR merge on November 7.
+
+The project already had a sophisticated Docker-based build system for cross-compilation recipes. Each "recipe" lives in `recipes/<platform-name>/` with:
+
+* `Dockerfile` - Container with cross-compiler toolchain
+* `run.sh` - Script that extracts source and runs `make binary`
+* `should-build.sh` - Optional filter for Node.js versions
+* `README.md` - Documentation
+
+The existing `recipes/riscv64/` used cross-compilation. I needed to create `recipes/riscv64-native/` that would:
+
+. Run on the build server (x86-64/WSL2)
+. Transfer Node.js source to the remote RISC-V machine via SSH
+. Trigger native compilation on the remote machine
+. Retrieve the built binaries
+. Handle the fact that RISC-V builds take 12+ hours
+
+That last point was the kicker. SSH connections don't like being open for 12 hours. I needed resilience.
+
+== The Architecture: SSH Orchestration with Detached Builds
+
+I designed a hybrid approach:
+
+_Build Server (my x86-64 WSL2 environment):_
+* Downloads Node.js source
+* Orchestrates the build process
+* Transfers files via `rsync`
+* Monitors remote build status
+
+_Remote Machine (Banana Pi F3 at 192.168.1.185):_
+* Receives source tarball
+* Extracts and compiles natively
+* Runs build under `nohup` for SSH resilience
+* Uses `ccache` for faster subsequent builds
+
+I created three key scripts:
+
+_1. `recipes/riscv64-native/build-native.sh` (235 lines)_
+
+The core orchestration script. It:
+* Tests SSH connectivity upfront
+* Transfers source tarball via `rsync`
+* Generates a remote build script on-the-fly
+* Launches build in detached mode with `nohup`
+* Monitors build progress via status files
+* Retrieves built binaries when complete
+
+_2. `bin/test_native_build.sh` (130 lines)_
+
+A standalone testing script that doesn't require Docker. Perfect for quick iteration during development:
+
+[source,bash]
+----
+export RISCV64_REMOTE_HOST="192.168.1.185"
+export RISCV64_REMOTE_USER="poddingue"
+export RISCV64_REMOTE_BUILD_DIR="nodejs-builds"
+
+bin/test_native_build.sh -v v24.11.0
+
+----
+
+_3. `recipes/riscv64-native/run.sh` (87 lines)_
+
+Docker integration wrapper for production builds. Calls `build-native.sh` with proper parameters.
+
+The configuration went into `bin/_config.sh`:
+
+[source,bash]
+----
+recipes=(
+  "headers"
+  "x86"
+  "musl"
+  "armv6l"
+  "x64-glibc-217"
+  "x64-pointer-compression"
+  "x64-usdt"
+  "riscv64-native"  # <-- My new recipe
+  "loong64"
+  "x64-debug"
+)
+
+export RISCV64_REMOTE_HOST="${RISCV64_REMOTE_HOST:-192.168.1.185}"
+export RISCV64_REMOTE_USER="${RISCV64_REMOTE_USER:-poddingue}"
+export RISCV64_REMOTE_BUILD_DIR="${RISCV64_REMOTE_BUILD_DIR:-nodejs-builds}"
+
+----
+
+== The Debug Marathon: 8 Critical Fixes
+
+Here's where things got interesting. My first build attempt launched at 14:15 on November 6. I watched it start compiling, felt good about the progress, went to grab dinner, and came back to find... nothing. The SSH connection had dropped, and the build was gone. Time to debug.
+
+=== Fix #1: SSH Keepalive for 12+ Hour Builds
+
+_Commit:_ `810f8af` - "fix(riscv64): add SSH resilience for 12+ hour builds"
+
+_Problem:_ SSH connections timeout after hours of inactivity, killing the remote process.
+
+_Root Cause:_ No keepalive settings, default SSH client timeout behavior.
+
+_Solution:_ Added aggressive keepalive settings and detached execution:
+
+[source,bash]
+----
+SSH_OPTS="-o ServerAliveInterval=60 -o ServerAliveCountMax=30"
+== Send keepalive every 60 seconds, try 30 times before giving up
+== That's 30 minutes of tolerance for network issues
+
+== Launch build with nohup for complete detachment
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
+  "nohup bash staging/build.sh ... > ${LOG_FILE} 2>&1 &"
+
+----
+
+This was the foundation. Without it, nothing else mattered.
+
+=== Fix #2: Log File Path Confusion
+
+_Commit:_ `acef2d7` - "fix(riscv64): correct log file paths for detached builds"
+
+_Problem:_ Error message: `bash: line 1: logs/build-v24.11.0.pid: No such file or directory`
+
+_Root Cause:_ I was using relative paths in the wrong context. The `nohup` command's redirect operators are processed by the _local_ shell before the SSH command executes remotely.
+
+_Solution:_ Separated concerns:
+* Use relative paths for `cd` commands (remote shell processes these)
+* Use absolute paths for file retrieval (local scripts need these)
+
+[source,bash]
+----
+== For cd command (remote context)
+REMOTE_LOG="logs/build-${fullversion}.log"
+
+== For retrieval (local needs absolute)
+REMOTE_LOG_ABS="~/${REMOTE_BUILD_DIR}/${REMOTE_LOG}"
+
+----
+
+=== Fix #3: Ensure Logs Directory Exists
+
+_Commit:_ `5ee1673` - "fix(riscv64): ensure logs directory exists before nohup redirect"
+
+_Problem:_ The logs directory didn't exist when `nohup` tried to redirect output to it.
+
+_Solution:_ Explicitly create it:
+
+[source,bash]
+----
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
+  "mkdir -p ${REMOTE_BUILD_DIR}/staging ${REMOTE_BUILD_DIR}/ccache ${REMOTE_BUILD_DIR}/logs"
+
+----
+
+Simple fix, but essential. Race conditions are fun.
+
+=== Fix #4: Variable Expansion in Redirects
+
+_Commit:_ `bbcfb68` - "fix(riscv64): remove quotes from redirect paths to allow variable expansion"
+
+_Problem:_ Variables in redirect operators weren't expanding properly.
+
+_Root Cause:_ Quoting the redirect target prevented shell expansion.
+
+_Solution:_ Remove quotes from redirect operators:
+
+[source,bash]
+----
+== Wrong:
+nohup bash build.sh > "${REMOTE_LOG}" 2>&1 &
+
+== Right:
+nohup bash build.sh > ${REMOTE_LOG} 2>&1 &
+
+----
+
+Shell quoting rules are subtle. Redirect operators need unquoted variables for expansion.
+
+=== Fix #5: Absolute Paths for Redirects
+
+_Commit:_ `4e011c9` - "fix(riscv64): use absolute paths for nohup redirects"
+
+_Problem:_ Redirect operators are processed _before_ the `cd` command executes.
+
+This was a subtle one. When you run:
+[source,bash]
+----
+ssh host "cd /some/dir && nohup cmd > logs/file.log 2>&1 &"
+
+----
+
+The shell processes the redirect `> logs/file.log` _before_ executing `cd /some/dir`. So the path is resolved from wherever the SSH session starts (usually home directory).
+
+_Solution:_ Use absolute paths in redirects:
+
+[source,bash]
+----
+REMOTE_LOG_ABS="~/${REMOTE_BUILD_DIR}/logs/build-${fullversion}.log"
+
+ssh host "cd ${REMOTE_BUILD_DIR} && nohup cmd > ${REMOTE_LOG_ABS} 2>&1 &"
+
+----
+
+=== Fix #6: Tilde Expansion for True Absolute Paths
+
+_Commit:_ `396e4b7` - "fix(riscv64): use tilde expansion for true absolute paths"
+
+_Problem:_ `REMOTE_BUILD_DIR` is relative (`nodejs-builds`), so concatenating it created relative paths.
+
+_Solution:_ Use tilde expansion properly:
+
+[source,bash]
+----
+== REMOTE_BUILD_DIR is "nodejs-builds" (relative)
+== This creates: nodejs-builds/logs/... (still relative!)
+REMOTE_LOG_ABS="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.log"
+
+== This creates: ~/nodejs-builds/logs/... (truly absolute via tilde)
+REMOTE_LOG_ABS="~/${REMOTE_BUILD_DIR}/logs/build-${fullversion}.log"
+
+----
+
+Tilde expansion is your friend for home-relative paths.
+
+=== Fix #7: Absolute Paths in Remote Script
+
+_Commit:_ `f360a1f` - "fix(riscv64): use absolute paths in remote build script"
+
+_Problem:_ The remote build script running under `nohup` doesn't start from the home directory.
+
+When `nohup` detaches a process, it doesn't preserve the current working directory in the same way an interactive session does.
+
+_Solution:_ All paths in the remote script use `$HOME` prefix:
+
+[source,bash]
+----
+== In the generated remote build script:
+cd "$HOME/${BUILD_DIR}/staging"
+export CCACHE_DIR="$HOME/${BUILD_DIR}/ccache"
+echo "SUCCESS" > "$HOME/${BUILD_DIR}/logs/build-${FULLVERSION}.status"
+
+----
+
+=== Fix #8: Properly Detach SSH Session
+
+_Commit:_ `bc560eb` - "fix(riscv64): properly detach SSH session from nohup build"
+
+_Problem:_ SSH command not returning, waiting for remote process to complete despite `nohup`.
+
+_Root Cause:_ SSH keeps the connection open if stdin isn't redirected, even with `nohup` and backgrounding (`&`).
+
+_Solution:_ Redirect stdin from `/dev/null`:
+
+[source,bash]
+----
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
+  "cd ${REMOTE_BUILD_DIR} && nohup bash staging/build.sh ... </dev/null > ${LOG} 2>&1 &"
+  #                                                         ^^^^^^^^^^^^
+  #                                                         This is the key!
+
+== Also send a confirmation message so we know SSH returned
+echo "Build launched successfully in detached mode"
+
+----
+
+Without `</dev/null`, SSH thinks the remote process might read from stdin and keeps the connection open. With it, SSH knows the process is fully detached and returns immediately.
+
+=== Debugging Methodology: A Pattern Emerges
+
+Looking back at these 8 fixes, a clear debugging pattern emerged:
+
+. _Reproduce_: Try to trigger the failure manually with small test cases
+. _Isolate_: SSH to remote machine, run commands interactively to see what happens
+. _Context Check_: Where does this command execute? Local shell or remote shell?
+. _Path Resolution_: Use `echo` to see how paths and variables actually expand
+. _Fix_: Apply the fix with understanding, not guesswork
+. _Verify_: Test end-to-end with actual build (or at least a 5-minute mini-build)
+
+Most issues traced back to _execution context confusion_—not understanding whether the local shell or remote shell was processing a particular string, path, or redirect operator. When in doubt, I'd SSH interactively and try the command manually to see what the remote shell actually receives.
+
+This systematic approach turned "mysterious failures" into "oh, the redirect happens before cd" insights.
+
+== The Breakthrough: 15.5 Hours Later
+
+After fixing all 8 issues, I launched the build again at 14:15 on November 6, 2025. This time, I:
+
+. Started the build
+. Saw the confirmation message immediately (SSH returned)
+. Checked the remote PID to confirm it was running
+. Went back to normal life
+
+When I woke up the next morning at 05:41 on November 7, I checked the logs:
+
+[source,bash]
+----
+$ ssh poddingue@192.168.1.185 "cat ~/nodejs-builds/logs/build-v24.11.0.status"
+SUCCESS
+
+$ ssh poddingue@192.168.1.185 "ls -lh ~/nodejs-builds/staging/node-v24.11.0/"
+-rw-r--r-- 1 poddingue poddingue 57M Nov  7 05:37 node-v24.11.0-linux-riscv64.tar.gz
+-rw-r--r-- 1 poddingue poddingue 32M Nov  7 05:41 node-v24.11.0-linux-riscv64.tar.xz
+
+----
+
+It worked! The build log showed 12,853 lines of compilation output. The `ccache` directory had grown to 203 MB, ready to accelerate future builds by 2-3x.
+
+_Build Statistics:_
+* Node.js Version: v24.11.0
+* Start Time: 14:15 (Nov 6, 2025)
+* End Time: 05:41 (Nov 7, 2025)
+* Duration: 15 hours and 26 minutes
+* Output Size: 57 MB (.tar.gz), 32 MB (.tar.xz)
+* Hardware: Banana Pi F3, 8 cores, 15GB RAM, gcc 14.2.0
+
+=== Validation and Testing
+
+With the binaries built, validation was straightforward:
+
+[source,bash]
+----
+== Extract and test
+tar -xJf node-v24.11.0-linux-riscv64.tar.xz
+cd node-v24.11.0-linux-riscv64
+
+== Verify versions
+./bin/node --version  # v24.11.0
+./bin/npm --version   # 10.9.0
+
+== Test JavaScript execution
+./bin/node -e "console.log('Native RISC-V Node.js works!')"
+
+== Run basic smoke test with crypto
+./bin/node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"
+
+----
+
+All tests passed, confirming the native build produces fully functional binaries. This validation step is crucial—after 15+ hours of compilation, you want to know immediately if something broke.
+
+== Code Review: Working with AI Reviewers
+
+I opened PR #1 on November 5, and three AI code review bots provided feedback: gemini-code-assist, coderabbitai, and GitHub Copilot. This turned into an interesting study in what automated reviewers do well—and where they struggle.
+
+=== What Bots Caught Well
+
+The reviewers found several legitimate issues:
+
+* _Unused parameters_ (`source_url`, `source_urlbase`) - I documented these as kept for interface compatibility
+* _Missing PID validation_ - Fixed in commit `1c702da` to prevent crashes on invalid PIDs
+* _CCACHE_DIR path inconsistency_ - Fixed in commit `700450b` to use `$HOME` prefix
+* _SSH key naming inconsistency_ - Clarified documentation to show both options
+
+These are exactly the kinds of issues AI reviewers excel at: pattern matching, consistency checking, and catching overlooked edge cases.
+
+=== Where Context Matters: The Tilde Expansion Confusion
+
+However, bots repeatedly flagged tilde expansion as broken when it was actually working correctly:
+
+[source,bash]
+----
+ssh user@host "cd ~/some/path && do_something"
+
+----
+
+The reviewers saw "relative path" and raised concerns, not understanding that the tilde expands on the _remote_ machine (because it's inside the SSH command string). This is correct behavior, but the bots lack multi-environment context awareness.
+
+=== The Lesson
+
+AI code reviewers are excellent at finding:
+* Unused variables and dead code
+* Security anti-patterns
+* Consistency issues across files
+* Common mistake patterns
+
+They struggle with:
+* Multi-environment context (local vs remote shells)
+* Project-specific trade-offs (security vs usability for experimental hardware)
+* Understanding why "unconventional" approaches are chosen
+* Distributed systems where execution happens across machines
+
+Use them as first-pass reviewers, but human judgment remains essential for context-dependent code.
+
+== Release: Publishing v24.11.0
+
+With the build successful and code reviews addressed, I merged PR #1 on November 7, 2025, at 09:09:18 UTC. Twelve commits, 11 files changed, 1,310 additions.
+
+Then came the release. The unofficial builds project follows a versioning strategy that matches Node.js versions rather than infrastructure versions. So even though this was the first native RISC-V build, the release is named after the Node.js version it contains: v24.11.0.
+
+I published the release at 09:14:56 UTC with both tarball formats and SHA256 checksums:
+
+----
+node-v24.11.0-linux-riscv64.tar.gz
+node-v24.11.0-linux-riscv64.tar.xz
+
+----
+
+The release notes explained:
+
+[quote]
+____
+First native RISC-V 64-bit build using actual hardware (Banana Pi F3)
+Built on Debian 13 with gcc 14.2.0
+Build time: 15.5 hours
+____
+
+== Lessons Learned: Technical Insights
+
+After this marathon implementation, here are the key insights I'd share with anyone doing similar work:
+
+=== 1. SSH Keepalive Is Critical for Long Builds
+
+If your remote build takes more than 30 minutes, you _need_ keepalive settings. Without them, SSH will timeout and kill your process:
+
+[source,bash]
+----
+SSH_OPTS="-o ServerAliveInterval=60 -o ServerAliveCountMax=30"
+
+----
+
+Send a keepalive packet every 60 seconds, tolerate 30 failed attempts (30 minutes of network issues).
+
+=== 2. Path Context Matters Deeply
+
+Different contexts resolve paths differently:
+
+* _Local shell_: Processes local variables and paths
+* _Remote shell (interactive)_: Expands tilde relative to remote home
+* _Remote shell (non-interactive)_: May have different working directory
+* _Redirect operators_: Processed _before_ commands like `cd`
+* _nohup/detached processes_: Don't preserve working directory
+
+When in doubt, use absolute paths with `$HOME` or `~` prefix.
+
+=== 3. Detached Execution Requires stdin Redirection
+
+To truly detach a remote process via SSH:
+
+[source,bash]
+----
+ssh user@host "nohup command </dev/null > log 2>&1 &"
+== ^^^^^^^^^^^
+== Essential for SSH to return
+
+----
+
+Without `</dev/null`, SSH thinks the process might read from stdin and keeps the connection open.
+
+=== 4. Bot Reviews Can Confuse Contexts
+
+AI code reviewers are excellent at:
+* Finding unused variables
+* Spotting security anti-patterns
+* Checking consistency
+* Identifying common mistakes
+
+They struggle with:
+* Multi-environment context (local vs remote shells)
+* Project-specific trade-offs (security vs usability)
+* Understanding why "non-standard" approaches are chosen
+* Distributed systems complexity
+
+Use them as first-pass reviewers, but don't blindly follow their suggestions without understanding context.
+
+=== 5. Native Build Trade-offs Are Worth Considering
+
+Native builds on slower hardware (15.5 hours) vs cross-compilation on fast hardware (30-45 minutes) seems like an obvious choice. But native builds give you:
+
+* _Real hardware validation_: If it compiles, it works on the platform
+* _Better compatibility_: No cross-compiler quirks
+* _Easier debugging_: Test directly on target hardware
+* _Future-proof_: As hardware improves, builds get faster automatically
+
+For experimental platforms like RISC-V, I'd choose native builds despite the time cost.
+
+=== 6. ccache Is Your Friend
+
+After the first build populates `ccache` (203 MB), subsequent builds are estimated to be 2-3x faster. For a platform where builds take 15+ hours, this matters:
+
+[source,bash]
+----
+export CCACHE_DIR="$HOME/nodejs-builds/ccache"
+export CCACHE_MAXSIZE="5G"
+export CC="ccache gcc"
+export CXX="ccache g++"
+
+----
+
+First build: 15.5 hours
+Second build (with ccache): ~5-7 hours (estimated)
+
+[quote]
+____
+_Note:_ The 2-3x speedup estimate is based on typical ccache performance with C++ projects. Actual measured performance for a second Node.js build on this hardware hasn't been captured yet, but ccache statistics show 203 MB of cached compilation artifacts ready to accelerate future builds.
+____
+
+=== 7. Status Files Beat Log Parsing
+
+Instead of parsing build logs to determine success/failure, use simple status files:
+
+[source,bash]
+----
+== At end of build script:
+echo "SUCCESS" > "$HOME/build-dir/logs/build-${VERSION}.status"
+
+== In orchestration script:
+if ssh user@host "cat ~/build-dir/logs/build-${VERSION}.status" | grep -q SUCCESS; then
+  echo "Build succeeded!"
+fi
+
+----
+
+Parsing is fragile. Status files are explicit.
+
+=== 8. Test Without Docker First
+
+When developing build orchestration, test without Docker first:
+
+[source,bash]
+----
+bin/test_native_build.sh -v v24.11.0
+
+----
+
+Docker adds layers of indirection (volume mounts, network settings, SSH key access). Get the core logic working in pure bash first, _then_ add Docker integration.
+
+== What's Next: Future Work
+
+With native RISC-V builds working, the next steps are:
+
+. _Build More Versions_: Queue up other Node.js versions (v22.x, v20.x LTS)
+. _Monitor Long-term Stability_: Ensure the SSH resilience holds up over months of automated builds
+. _Optimize Build Times_: Explore `ccache` tuning, maybe add `distcc` for distributed compilation
+. _Production Integration_: Deploy to the official unofficial-builds server
+. _Documentation_: Write user-facing docs for consumers of these binaries
+. _Hardware Upgrades_: As better RISC-V hardware becomes available, migration path
+. _Other Architectures_: Apply this pattern to other platforms needing native builds
+
+The infrastructure is solid now. Time to let it run and build the backlog of Node.js versions for RISC-V users.
+
+== Conclusion: The Value of Persistence
+
+This project took 3 days from initial fork to first release. Most of that time was debugging SSH issues, path contexts, and shell quoting rules. It was frustrating at times—watching builds fail after hours because of a missing `</dev/null>` redirect.
+
+But the result is a robust build system that produces native RISC-V binaries validated on real hardware. The 1,310 lines of code and documentation will serve the community for years. And I learned more about SSH, shell scripting, and detached process management than any tutorial could teach.
+
+The next time Node.js releases a new version, the build system will automatically:
+. Detect the release
+. Queue a riscv64-native build
+. Transfer source to the Banana Pi
+. Compile for 12-15 hours (or 5-7 with ccache)
+. Publish binaries to unofficial-builds.nodejs.org
+
+No manual intervention required. That's the magic of good automation—you pay the debugging cost once, then reap the benefits forever.
+
+If you're working on similar remote build orchestration, I hope these lessons save you some debugging time. And if you need native RISC-V Node.js binaries, they're waiting for you at link:https://unofficial-builds.nodejs.org/[https://unofficial-builds.nodejs.org/].
+
+Now excuse me while I queue up v22.11.0 and v20.18.0. Time to put that `ccache` to work.
+
+== Resources and References
+
+* _Project Repository_: link:https://github.com/gounthar/unofficial-builds[https://github.com/gounthar/unofficial-builds]
+* _Upstream Project_: link:https://github.com/nodejs/unofficial-builds[https://github.com/nodejs/unofficial-builds]
+* _Binary Downloads_: link:https://unofficial-builds.nodejs.org/[https://unofficial-builds.nodejs.org/]
+* _PR #1_: feat: add native riscv64 build support using remote hardware
+* _Release v24.11.0_: First native RISC-V build
+* _Hardware_: Banana Pi F3, Debian 13 (trixie), Armbian 25.8.2
+
+_Key Files:_
+* `recipes/riscv64-native/build-native.sh` - Core orchestration (235 lines)
+* `bin/test_native_build.sh` - Standalone testing (130 lines)
+* `recipes/riscv64-native/README.md` - Recipe documentation (270 lines)
+* `docs/native-riscv64-build-setup.md` - Setup guide (232 lines)
+
+_The 8 Critical Commits:_
+. `810f8af` - SSH resilience for 12+ hour builds
+. `acef2d7` - Correct log file paths for detached builds
+. `5ee1673` - Ensure logs directory exists before nohup
+. `bbcfb68` - Remove quotes from redirect paths
+. `4e011c9` - Use absolute paths for nohup redirects
+. `396e4b7` - Use tilde expansion for true absolute paths
+. `f360a1f` - Use absolute paths in remote build script
+. `bc560eb` - Properly detach SSH session from nohup build
+
+---
+
+_About the Author_: I contribute to Jenkins and to open source build systems, and occasionally convince RISC-V hardware to compile Node.js for 15 hours straight. You can find more of my technical adventures at my blog (when I remember to write them up).

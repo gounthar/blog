@@ -1,0 +1,16 @@
+---
+author: Brah
+categories:
+- HomeAutomation
+description: using google assistant, apple homekit to automate the most of my house
+draft: true
+featured: true
+hidden: true
+image: assets/images/2019-07-22-1.png
+tags:
+- automation
+- assistant
+title: My first contacts with home automation
+---
+
+== General scheme

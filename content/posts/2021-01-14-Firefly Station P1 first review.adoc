@@ -1,0 +1,135 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- Firefly
+- Kodi
+- Android
+description: Firefly Station P1 first review
+featured: true
+hidden: false
+image: assets/images/2021/01/14/Station P1.jpg
+tags:
+- RK3399
+- Firefly
+- Kodi
+- Android
+title: Firefly Station P1 first review
+---
+
+Full disclosure: I was one of the link:https://www.stationpc.com/thread-84-1-1.html[winner of a free Station P1] and they asked to provide a feedback.
+
+I'm a RockChip RK3399 SoC family fanboy. That's the way it is. I can't help it. I know it's a quite an old SoC, but it's very capable, and has wonderful features, at least on the paper. Each time I see another device sporting it, I'm drooling.
+I have several of them (OrangePi 4B, OrangePi RK3399, Renegade Elite), and I use them regularly.
+The problem is, most of the RK3399 devices are quite expensive, so I can't get them all.
+This time, there was a giveaway from Firefly, so I entered my information, in the hope I would win... and I won.
+This small beast is sold at $link:Full disclosure: I was one of the [winner of a free Station P1](https://www.stationpc.com/thread-84-1-1.html[120] and they ask to provide a few postings about it.), so that's a fricking nice gift.
+
+That's a normal price for a finished device hosting a RK3399. I bought a Renegade Elite a few years ago (with a 123GB eMMC) for about $200.
+
+This device is sold as a TVBox, a retrogaming center, but also a "geek" device, allowing us to install several OSes.
+If it was for a TVBox, you could find one that does most of what you would like to do with a TVBox for cheaper, even much much cheaper, but most of the time:
+
+* manufacturers just don't care about heat dissipation, so that you will get a device that overheats most of the time, and that will self-distruct after some time
+* the power management unit is most of the time a joke, so if your device does not die of overheating, it will just fry one of these days
+* you're stuck with a version of Android that will never see any update, and with a closed App store
+
+With the Station P1, as it is open, chances are we will see some more recent versions of Android appearing on it, lots of tutorials to add the Google Play Store to it, and alternative OSes. Time will tell.
+
+== Unboxing and first impressions
+
+I got a nicely packed box, with tons of bubble wrap. Once I got rid of all the protection, I discovered a very rugged device, the heavier SBC I ever hold in my hands.
+Even my beloved Renegade Elite looks like a fragile little think next to this Panzer.
+I'm very much into small devices, small current consumption, big calculation per W and so on, but also I'm totally partial to passively cooled devices. I hate having fans blowing dust and making noise in every corner of the house.
+It looks like this one won't be able to overheat, as it's heatsink is the whole - HEAVY - case. The RK3399 is very well known for its heating habits...
+I use my Renegade Elite for link:https://www.mininodes.com/how-to-run-rosettahome-on-arm-powered-devices/[Rosetta@Home], and I can't touch it after a few minutes. We'll see for this one if the heat dissipation is better (I think it should be). 
+Anyway. Once you've put this tank aside, you will find a USB Type A to USB Type C data cable (to push a new firmware to the device), a 3db WiFi antenna, the 12V power supply (with US type connector, so if you want one, order an link:https://fr.aliexpress.com/item/33061319721.html?spm=a2g0o.productlist.0.0.3a0a66e5p2toef&algo_pvid=972f43b3-4502-47b1-87ce-301eb140bd24&algo_expid=972f43b3-4502-47b1-87ce-301eb140bd24-1&btsid=0b0a182b16106375515987730edb00&ws_ab_test=searchweb0_0,searchweb201602_,searchweb201603_[adapter]). It supports up to 240V, so that's ok for Europe too. I see more and more USB Type C power supplies for RK3399 boards, but this time, it's a simple 12V one. You will also get a 12 keys infrared remote control,  a 30cm-ish HDMI cable, four silicone feet, and a 2mm Allen wrench.
+My first impression is that this device is rugged, very well built. The machined case is beautiful but sober, and could visually disappear next to your TV.
+I'm really happy that it is delivered with integrated WiFi, because, depending on the location of your device at home, you may not have an Ethernet plug next to it, and adding a USB WiFi dongle will take up one USB port. My Renegade Elite for example does not have integrated WiFi (you could get it during the Kickstarter with a mezzanine too, but, boy, that was expensive).
+
+image::https://youtu.be/XgYJWKGLWCY[]
+<!--INSERT HERE THE UNBOXING VIDEO-->
+
+== First start
+
+I had read that the Station P1 was supplied with Android. That's true, you can see my first boot there:
+
+It's a 7.1 version of Android, Firmware version 1.2.2, but it looks like there already is an link:https://www.stationpc.com/thread-131-1-1.html[Android 10] version in the making. I don't know how official it is, but it's a nice plus to know that we can have access to a more up to date version.
+By the way, the Android version that is supplied with the P1 is not Android TV (to me at least), it looks more like an Android Tablet version (even if that does not make sense, as Android for tablet and phone is the same, or isn't it?). The Android 10 version linked just above is Android TV, with tons of added features compared to the stock Android 7.1.
+I was asked a few questions about localization, timezone, got a few slides about how the device UI is supposed to work, and then got access to the standard UI.
+It looks pretty easy to use, but I had some troubles with the remote control, not able to react as fast as I'd like. There are already a few video files on the devices so that you can try it (like the Mulan trailer). All seems to work more or less correctly.
+Of course, most of the apps and contents are in Chinese, which does not help getting a clear idea of what the device is capable of, but it looks cool nonetheless.
+There does not seems to be a store of some sort, but I haven't searched yet for a way to add one.
+
+image::https://youtu.be/MnXZxfhhjqo[]
+<!--INSERT HERE THE FIRST START VIDEO-->
+
+== Playing media
+
+So the device is sold as a "One size fits all" device, so it could be used as a media server, media player, or desktop.
+Once booted, it appeared on my Windows 7 machine as a media supplier, under several names (MediaCenter-axxxx and CIBN酷喵).
+
+image::/assets/images/2021/01/14/image-20210114170657469.png[image-20210114170657469]
+
+It works the same way the other way around. The other machines on my network that provide videos and audio files can be read on the Station P1.
+There are several applications able to read local and remote files. The File Manager of course, which can handle local and remote files, but also Kodi of course.
+I tried several 4K videos on my 1080p, and the Station P1 did not seem to suffer.
+
+image::https://youtu.be/I33KPsBikTk[]
+<!-- INSERT HERE THE 4K VIDEO -->
+
+image::https://youtu.be/uNAMA4x5yWY[]
+<!--INSERT HERE THE FILEMANAGER VIDEO-->
+
+I'm not good at all those thingies, you know, Kodi, media servers and players, media discovery and so on.
+My own TVBox, supplied by my ISP, is an Android machine, full of bugs, and that rarely works with my Android phone for casting or streaming, so I'm not fond of these cast/share on my home network.
+
+image::https://youtu.be/sewi4QQrleM[]
+<!-- INSERT HERE THE NOT A TVBOX USER VIDEO -->
+
+Nevertheless, I had a quick look at Kodi and managed to do things pretty easily. No doubt why it's so popular.
+I easily added my ISP TVBox  content, so that I could play my TV recordings anywhere.
+I even found a plugin that allows to watch most of the TV channels my ISP provides. I don't think I will ever watch live TV in my lab, but that's nice to have.
+I have to note that I saw no lag whatsoever, except with one of the 4K downloaded files. I guess Kodi has been compiled with all the right options, the right versions of the player binaries, and with the right kernel modules on this device.
+
+image::https://youtu.be/TOqdGs7trBI[]
+<!--INSERT HERE THE KODI VIDEO-->
+
+I even downloaded the mandatory link:https://peach.blender.org/download/[Big Bucks Bunny], and it played really smoothly, without even heating. That's definitely a nice machine with a very polished version of the video player.
+
+image::https://youtu.be/cb-5gGgBriA[]
+<!-- INSERT HERE THE BUNNY VIDEO -->
+
+Well donne Firefly!
+
+== Controlling
+
+The remote controls seems to be an infrared one, so you have to aim at the side where the WiFi antenna lies (at least, that's what works for me). Most of my remote controls now are Bluetooth ones, so that feels kind of retro to have to aim at the box.
+After watching closely the footage, I realized I was totally wrong. There is a small window for the IR on the opposite side of the box, where we have the audio mini Jack. That's why the remote control was not that reactive. My bad!
+For me, it looks like sometimes you need the mouse to select things on screen on top of the remote control. I could be wrong though, as the remote may be able to do that too. I guess that one Bluetooth mini keyboard with an integrated trackpad could also do the trick.
+I added my gamepad, but it never showed up. I launched the gaming part, installed a few roms, but my gamepad never was in the list of the handled gamepads.
+I'm sure there is a workaround somehow, but did not take time to investigate.
+
+While I was there, I clicked seven time on the Build number in the settings and instantaneously became a developer (I thought it took 5 years). By the way, we have a 4.4.126 kernel on this device, which is what we find these days on RK3399 boards with binary proprietary blobs (which make that we get fast video playing and so on)... Nevertheless, we will get better performances with FOSS mainline kernels in the following months with all RK3399 devices. Hope is a good thing to have.
+
+image::https://youtu.be/5uh64p1rVBc[]
+<!--INSERT HERE THE DEVELOPER VIDEO-->
+
+As I am now a developer, I installed link:https://www.vysor.io/[Vysor] to get access to the Station P1. It went flawlessly. Of course, as I am using the free version of Vysor, the image is kind of blurry, but it proved being really useful, as the mini Bluetooth keyboard I was referring to is ... dead.
+So I now have access remotely to the device, and using my french keyboard and nice mouse instead of my Amazon cheap mouse and virtual keyboard.
+
+image::https://youtu.be/eiVIEqZauc8[]
+<!-- Vysor video -->
+
+I was looking to install a "Shutdown" app, but a long press on the "Power" button on the remote lets us choose whether we would like to reboot or put the machine to sleep.
+
+image::https://youtu.be/ttGgEZf4Plo[]
+
+== Gaming
+
+<img src="/assets/images/2021/01/14/51bF0uq3A7L._AC_SL1200_.jpg" alt="GameSir G3w Manette PC avec Fil Gamepad de Jeu Filaire pour Windows PC /  PS3 / Steam (sans Support de téléphone): Amazon.fr: High-tech" style="zoom:25%;" />I know nothing about retrogaming, nor gaming. I rapidly tried a few emulators, installed a few games, but I was unable to play, partly because my gamepad was not recognized. I didn't try super hard, so your mileage may vary.
+
+== Conclusion
+
+I am impressed by this device. I have quite a bunch of other RK3399 based devices, but this one seems to be the one that really took into account the heat problem of this SoC, and that looks like a real product for real people, not just for a bunch of DIY enthusiasts.
+The next steps will be to open it up (sorry, can't help it), try a few Linux distros, and maybe the Android 10 version.

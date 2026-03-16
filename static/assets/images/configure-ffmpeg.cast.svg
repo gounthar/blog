@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="terminal" baseProfile="full" viewBox="0 0 880 1022" width="880" version="1.1">
+    <defs>
+        <termtosvg:template_settings xmlns:termtosvg="https://github.com/nbedos/termtosvg">
+            <termtosvg:screen_geometry columns="110" rows="60"/>
+            <termtosvg:animation type="css"/>
+        </termtosvg:template_settings>
+        <style type="text/css" id="generated-style"><![CDATA[#screen {
+                font-family: 'DejaVu Sans Mono', monospace;
+                font-style: normal;
+                font-size: 14px;
+            }
+
+        text {
+            dominant-baseline: text-before-edge;
+            white-space: pre;
+        }
+    
+            :root {
+                --animation-duration: 32936ms;
+            }
+
+            @keyframes roll {
+                0.000%{transform:translateY(0px)}
+2.529%{transform:translateY(-1054px)}
+2.532%{transform:translateY(-2108px)}
+4.451%{transform:translateY(-3162px)}
+84.069%{transform:translateY(-4216px)}
+84.078%{transform:translateY(-5270px)}
+84.084%{transform:translateY(-6324px)}
+84.118%{transform:translateY(-7378px)}
+96.964%{transform:translateY(-8432px)}
+100.000%{transform:translateY(-8432px)}
+            }
+
+            #screen_view {
+                animation-duration: 32936ms;
+                animation-iteration-count:infinite;
+                animation-name:roll;
+                animation-timing-function: steps(1,end);
+                animation-fill-mode: forwards;
+            }
+        ]]></style>
+        <style type="text/css" id="user-style">
+            /* gjm8 color theme (source: https://terminal.sexy/) */
+            .foreground {fill: #c5c5c5;}
+            .background {fill: #1c1c1c;}
+            .color0 {fill: #1c1c1c;}
+            .color1 {fill: #ff005b;}
+            .color2 {fill: #cee318;}
+            .color3 {fill: #ffe755;}
+            .color4 {fill: #048ac7;}
+            .color5 {fill: #833c9f;}
+            .color6 {fill: #0ac1cd;}
+            .color7 {fill: #e5e5e5;}
+            .color8 {fill: #1c1c1c;}
+            .color9 {fill: #ff005b;}
+            .color10 {fill: #cee318;}
+            .color11 {fill: #ffe755;}
+            .color12 {fill: #048ac7;}
+            .color13 {fill: #833c9f;}
+            .color14 {fill: #0ac1cd;}
+            .color15 {fill: #e5e5e5;}
+        </style>
+    </defs>
+    <svg id="screen" width="880" height="1020" viewBox="0 0 880 1020" preserveAspectRatio="xMidYMin slice">
+        <rect class="background" height="100%" width="100%" x="0" y="0"/><defs><g id="g15"><text class="foreground" textLength="536" x="0">bfdk-aac --enable-libbluray --extra-libs='-lnettle -lhogweed -lgmp'</text></g><g id="g22"><text class="foreground" textLength="144" x="0">solve the problem.</text></g><g id="g1"><text class="color10" font-weight="bold" textLength="296" x="0">linaro@captation-techforum-rk3399-4GB</text><text class="foreground" textLength="8" x="296">:</text><text class="color12" font-weight="bold" textLength="184" x="304">~/ffmpeg_sources/FFmpeg</text><text class="foreground" textLength="16" x="488">$ </text><text class="background" textLength="8" x="504"> </text></g><g id="g19"><text class="foreground" textLength="584" x="0">version from Git.  If the latest version fails, report the problem to the</text></g><g id="g14"><text class="foreground" textLength="536" x="0">bfdk-aac --enable-libbluray --extra-libs='-lnettle -lhogweed -lgmp'</text><text class="background" textLength="8" x="536"> </text></g><g id="g9"><text class="foreground" textLength="880" x="0">--enable-libspeex  --enable-libssh --enable-libtesseract --enable-libtheora  --enable-libtwolame --enable-libv</text></g><g id="g17"><text class="color9" font-weight="bold" textLength="368" x="0">ERROR: aom &gt;= 1.0.0 not found using pkg-config</text></g><g id="g6"><text class="foreground" textLength="880" x="0">--enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amr</text></g><g id="g5"><text class="foreground" textLength="880" x="0">le-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm </text></g><g id="g2"><text class="color10" font-weight="bold" textLength="296" x="0">linaro@captation-techforum-rk3399-4GB</text><text class="foreground" textLength="8" x="296">:</text><text class="color12" font-weight="bold" textLength="184" x="304">~/ffmpeg_sources/FFmpeg</text><text class="foreground" textLength="392" x="488">$ ./configure --enable-gpl --enable-version3 --di</text></g><g id="g21"><text class="foreground" textLength="648" x="0">Include the log file "ffbuild/config.log" produced by configure as this will help</text></g><g id="g20"><text class="foreground" textLength="568" x="0">ffmpeg-user@ffmpeg.org mailing list or IRC #ffmpeg on irc.freenode.net.</text></g><g id="g13"><text class="foreground" textLength="880" x="0">nable-libmysofa  --enable-openal --enable-opencl --enable-opengl --enable-libdrm  --enable-nonfree --enable-li</text></g><g id="g4"><text class="foreground" textLength="880" x="0">gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enab</text></g><g id="g23"><text class="color10" font-weight="bold" textLength="296" x="0">linaro@captation-techforum-rk3399-4GB</text><text class="foreground" textLength="8" x="296">:</text><text class="color12" font-weight="bold" textLength="184" x="304">~/ffmpeg_sources/FFmpeg</text><text class="foreground" textLength="48" x="488">$ exit</text></g><g id="g10"><text class="foreground" textLength="880" x="0">4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable</text></g><g id="g8"><text class="foreground" textLength="880" x="0">enable-librsvg --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr </text></g><g id="g3"><text class="foreground" textLength="880" x="0">sable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-</text></g><g id="g7"><text class="foreground" textLength="880" x="0">wb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse  --</text></g><g id="g12"><text class="foreground" textLength="880" x="0">-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --e</text></g><g id="g11"><text class="foreground" textLength="632" x="0">-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --</text><text class="background" textLength="8" x="632"> </text></g><g id="g18"><text class="foreground" textLength="584" x="0">If you think configure made a mistake, make sure you are using the latest</text></g><g id="g16"><text class="background" textLength="8" x="0"> </text></g></defs><g id="screen_view"><g><rect class="foreground" height="17" width="8" x="504" y="0"/><use y="0" xlink:href="#g1"/></g><g><use y="1054" xlink:href="#g2"/><use y="1071" xlink:href="#g3"/><use y="1088" xlink:href="#g4"/><use y="1105" xlink:href="#g5"/><use y="1122" xlink:href="#g6"/><use y="1139" xlink:href="#g7"/><use y="1156" xlink:href="#g8"/><use y="1173" xlink:href="#g9"/><use y="1190" xlink:href="#g10"/><rect class="foreground" height="17" width="8" x="632" y="1207"/><use y="1207" xlink:href="#g11"/></g><g><use y="2108" xlink:href="#g2"/><use y="2125" xlink:href="#g3"/><use y="2142" xlink:href="#g4"/><use y="2159" xlink:href="#g5"/><use y="2176" xlink:href="#g6"/><use y="2193" xlink:href="#g7"/><use y="2210" xlink:href="#g8"/><use y="2227" xlink:href="#g9"/><use y="2244" xlink:href="#g10"/><use y="2261" xlink:href="#g12"/><use y="2278" xlink:href="#g13"/><rect class="foreground" height="17" width="8" x="536" y="2295"/><use y="2295" xlink:href="#g14"/></g><g><use y="3162" xlink:href="#g2"/><use y="3179" xlink:href="#g3"/><use y="3196" xlink:href="#g4"/><use y="3213" xlink:href="#g5"/><use y="3230" xlink:href="#g6"/><use y="3247" xlink:href="#g7"/><use y="3264" xlink:href="#g8"/><use y="3281" xlink:href="#g9"/><use y="3298" xlink:href="#g10"/><use y="3315" xlink:href="#g12"/><use y="3332" xlink:href="#g13"/><use y="3349" xlink:href="#g15"/><rect class="foreground" height="17" width="8" x="0" y="3366"/><use y="3366" xlink:href="#g16"/></g><g><use y="4216" xlink:href="#g2"/><use y="4233" xlink:href="#g3"/><use y="4250" xlink:href="#g4"/><use y="4267" xlink:href="#g5"/><use y="4284" xlink:href="#g6"/><use y="4301" xlink:href="#g7"/><use y="4318" xlink:href="#g8"/><use y="4335" xlink:href="#g9"/><use y="4352" xlink:href="#g10"/><use y="4369" xlink:href="#g12"/><use y="4386" xlink:href="#g13"/><use y="4403" xlink:href="#g15"/><use y="4420" xlink:href="#g17"/><rect class="foreground" height="17" width="8" x="0" y="4437"/><use y="4437" xlink:href="#g16"/></g><g><use y="5270" xlink:href="#g2"/><use y="5287" xlink:href="#g3"/><use y="5304" xlink:href="#g4"/><use y="5321" xlink:href="#g5"/><use y="5338" xlink:href="#g6"/><use y="5355" xlink:href="#g7"/><use y="5372" xlink:href="#g8"/><use y="5389" xlink:href="#g9"/><use y="5406" xlink:href="#g10"/><use y="5423" xlink:href="#g12"/><use y="5440" xlink:href="#g13"/><use y="5457" xlink:href="#g15"/><use y="5474" xlink:href="#g17"/><use y="5508" xlink:href="#g18"/><use y="5525" xlink:href="#g19"/><use y="5542" xlink:href="#g20"/><rect class="foreground" height="17" width="8" x="0" y="5559"/><use y="5559" xlink:href="#g16"/></g><g><use y="6324" xlink:href="#g2"/><use y="6341" xlink:href="#g3"/><use y="6358" xlink:href="#g4"/><use y="6375" xlink:href="#g5"/><use y="6392" xlink:href="#g6"/><use y="6409" xlink:href="#g7"/><use y="6426" xlink:href="#g8"/><use y="6443" xlink:href="#g9"/><use y="6460" xlink:href="#g10"/><use y="6477" xlink:href="#g12"/><use y="6494" xlink:href="#g13"/><use y="6511" xlink:href="#g15"/><use y="6528" xlink:href="#g17"/><use y="6562" xlink:href="#g18"/><use y="6579" xlink:href="#g19"/><use y="6596" xlink:href="#g20"/><use y="6613" xlink:href="#g21"/><use y="6630" xlink:href="#g22"/><rect class="foreground" height="17" width="8" x="0" y="6647"/><use y="6647" xlink:href="#g16"/></g><g><use y="7378" xlink:href="#g2"/><use y="7395" xlink:href="#g3"/><use y="7412" xlink:href="#g4"/><use y="7429" xlink:href="#g5"/><use y="7446" xlink:href="#g6"/><use y="7463" xlink:href="#g7"/><use y="7480" xlink:href="#g8"/><use y="7497" xlink:href="#g9"/><use y="7514" xlink:href="#g10"/><use y="7531" xlink:href="#g12"/><use y="7548" xlink:href="#g13"/><use y="7565" xlink:href="#g15"/><use y="7582" xlink:href="#g17"/><use y="7616" xlink:href="#g18"/><use y="7633" xlink:href="#g19"/><use y="7650" xlink:href="#g20"/><use y="7667" xlink:href="#g21"/><use y="7684" xlink:href="#g22"/><rect class="foreground" height="17" width="8" x="504" y="7701"/><use y="7701" xlink:href="#g1"/></g><g><use y="8432" xlink:href="#g2"/><use y="8449" xlink:href="#g3"/><use y="8466" xlink:href="#g4"/><use y="8483" xlink:href="#g5"/><use y="8500" xlink:href="#g6"/><use y="8517" xlink:href="#g7"/><use y="8534" xlink:href="#g8"/><use y="8551" xlink:href="#g9"/><use y="8568" xlink:href="#g10"/><use y="8585" xlink:href="#g12"/><use y="8602" xlink:href="#g13"/><use y="8619" xlink:href="#g15"/><use y="8636" xlink:href="#g17"/><use y="8670" xlink:href="#g18"/><use y="8687" xlink:href="#g19"/><use y="8704" xlink:href="#g20"/><use y="8721" xlink:href="#g21"/><use y="8738" xlink:href="#g22"/><use y="8755" xlink:href="#g23"/><rect class="foreground" height="17" width="8" x="0" y="8772"/><use y="8772" xlink:href="#g16"/></g></g></svg>
+</svg>

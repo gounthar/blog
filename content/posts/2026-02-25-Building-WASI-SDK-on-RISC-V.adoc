@@ -1,0 +1,347 @@
+---
+author: Bruno Verachten
+categories:
+- WebAssembly
+- RISC-V
+- Embedded
+date: 2026-02-25 12:00:00 +0100
+description: Building the entire LLVM/Clang WASI SDK toolchain from source on a RISC-V
+  single-board computer for self-hosted WebAssembly development.
+excerpt: 'In my previous article, I ran WebAssembly containers on RISC-V and had to
+  cross-compile on x86. This time, I asked: why not build the WASI SDK from source
+  on the RISC-V board itself? So I did what any reasonable person would do: I tried
+  to build the entire LLVM/Clang toolchain overnight on an 8-core SBC.'
+featured: true
+hidden: false
+image: assets/images/2026/02/25/header-foundry-sparks.jpg
+tags:
+- wasm
+- riscv
+- wasi-sdk
+- llvm
+- clang
+- banana-pi
+- embedded
+- iot
+title: 'Building WASI SDK on RISC-V: Self-Hosted WebAssembly Development on a Banana
+  Pi F3'
+---
+
+_Photo by link:https://www.pexels.com/@quang-vuong-724225078/[Quang Vuong] on link:https://www.pexels.com/photo/industrial-metalworkers-in-milwaukee-foundry-29442953/[Pexels]_
+
+In my link:/blog/2026-02-24-WebAssembly-on-RISC-V-Banana-Pi-F3[previous article], I ran WebAssembly containers on a RISC-V board and hit a wall: WASI SDK, the standard C-to-WebAssembly compiler, doesn't ship binaries for RISC-V. I worked around it by cross-compiling on x86 and copying the `.wasm` over. I even wrote "this isn't a blocker" and moved on.
+
+That bothered me. If WebAssembly is supposed to free you from architecture-specific toolchains, why am I still tethered to x86 for one step? So I did what any reasonable person would do: I tried to build the entire LLVM/Clang toolchain from source on a single-board computer.
+
+== Why bother?
+
+WASI SDK is LLVM plus Clang plus LLD, configured to output WebAssembly instead of native code. It's what turns your C files into `.wasm` binaries. The project ships pre-built downloads for six host platforms: x86_64 and arm64 on Linux, macOS, and Windows.
+
+Not RISC-V. No issue requesting it in the repository. No documentation suggesting anyone has tried.
+
+Building LLVM from source is not casual. On a fast x86 workstation with 32 cores, it takes 15-20 minutes. On an 8-core RISC-V SBC, I estimated 6-12 hours. The board has 16 GB of RAM and 30 GB of free disk. Tight, but I've worked with less.
+
+If it worked, I could write C, compile to `.wasm`, and run it with iwasm -- all on the same board. No x86 machine anywhere in the loop.
+
+== The hardware
+
+Same Banana Pi F3 from the previous article:
+
+* _CPU_: SpacemiT K1, rv64gc (8 cores)
+* _RAM_: 16 GB
+* _Storage_: 128 GB eMMC (30 GB free at start)
+* _OS_: Armbian 25.11.2 (Debian Trixie)
+* _Compiler_: GCC 14.2
+* _Build tools_: cmake 3.31.6, ninja
+
+I SSH into the board from my desk. All commands run in a tmux session so the build survives disconnections. The build script logs everything to `~/wasi-sdk-build.log`.
+
+== The build script
+
+WASI SDK builds in two stages:
+
+_Stage 1_ builds the toolchain: LLVM, Clang, and LLD. This is the heavy part. Hours of C++ compilation, linking steps that need 7-15 GB of RAM each, and a lot of waiting.
+
+_Stage 2_ uses the freshly built Clang to cross-compile `wasi-libc` (the C standard library for WebAssembly) and the compiler runtime. This is much faster -- maybe 20 minutes.
+
+Getting the flags right was the whole game. Here's what matters on a memory-constrained board:
+
+[source,cmake]
+----
+-DLLVM_TARGETS_TO_BUILD=WebAssembly    # Only WebAssembly backend, skip ARM/X86/etc.
+-DLLVM_PARALLEL_LINK_JOBS=1            # One link at a time (each needs 7-15 GB)
+-DLLVM_PARALLEL_COMPILE_JOBS=6         # 6 of 8 cores for compilation
+-DCMAKE_BUILD_TYPE=MinSizeRel          # Smallest build output
+-DLLVM_OPTIMIZED_TABLEGEN=ON           # Speeds up the build itself
+
+----
+
+`LLVM_TARGETS_TO_BUILD=WebAssembly` matters most. By default, LLVM builds backends for ARM, X86, RISC-V, AArch64, and a dozen other targets. We only need the WebAssembly backend. Skipping the rest cuts 60-70% of the build time and disk usage.
+
+`LLVM_PARALLEL_LINK_JOBS=1` is non-negotiable on a 16 GB machine. The final link step for `libLLVM` or `clang` can consume 15 GB by itself. Two parallel links would trigger the OOM killer.
+
+I also added an 8 GB swap file as a safety margin. The script checks available swap and creates one if needed.
+
+== Stage 1: the overnight build
+
+I started the build on a Friday evening and went to bed.
+
+[source,bash]
+----
+tmux new -s wasi-build
+./build-wasi-sdk-riscv.sh
+
+----
+
+Checking in at `[412/4115]` (10%), the LLVMSupport library was compiling. I noticed something unexpected in htop: `rustc` processes running alongside the C++ compilation.
+
+WASI SDK includes `wasm-component-ld`, a small Rust binary needed for the WASIP2 linker. Ninja figured out it was independent from the LLVM C++ build and started compiling it in parallel. On a multi-core board, this is free -- the Rust compilation fills cores that would otherwise be idle during LLVM's sequential bottlenecks. On a slower board with less RAM, you could cross-compile the Rust binary on x86 using link:https://github.com/cross-rs/cross[cross-rs] and skip it entirely.
+
+At `[1612/4115]` (39%), GCC 14 started printing warnings about dangling references in `RegionInfoImpl.h`. These are harmless -- GCC is stricter than Clang about certain reference lifetime patterns, and these warnings appear on all platforms. I went to sleep.
+
+The next morning at 05:32 CET, Stage 1 was done. I SSH'd in expecting a crash or an OOM kill. Instead: a clean build, 4115/4115 targets, no errors. Eight hours. Not bad for an SBC.
+
+The build directory was only 2.2 GB thanks to `MinSizeRel`.
+
+The script cleaned up the Stage 1 intermediates automatically. I needed the disk space for Stage 2.
+
+== Stage 2: four failures, four fixes
+
+Stage 2 should take 15-20 minutes. It took me four attempts to get the cmake invocation right. Every failure came down to "nobody has done this on riscv64 before."
+
+=== Attempt 1: cmake picks the wrong compiler
+
+----
+CMake Error at CMakeLists.txt:9:
+  C compiler /usr/bin/cc is not Clang, it is GNU
+
+----
+
+Of course. My build script didn't tell Stage 2 where to find the Clang we just spent eight hours building. cmake fell back to system GCC, which the wasi-libc build rightfully rejected. Two cmake flags to point it at the right compiler:
+
+[source,cmake]
+----
+-DCMAKE_C_COMPILER="$INSTALL_DIR/bin/clang"
+-DCMAKE_CXX_COMPILER="$INSTALL_DIR/bin/clang++"
+
+----
+
+=== Attempt 2: cmake doesn't trust our Clang
+
+----
+-- Check for working C compiler: .../clang - broken
+-- wasm-ld: error: cannot open crt1.o
+
+----
+
+Right. Our Clang was built with `LLVM_TARGETS_TO_BUILD=WebAssembly` -- it can only target wasm32. cmake's standard compiler test tries to link a native RISC-V binary, which naturally fails. There's no RISC-V backend in this Clang at all.
+
+But Stage 2 only cross-compiles to wasm32. It never needs to produce native binaries. The test is irrelevant. Two more cmake flags to tell it to stop worrying:
+
+[source,cmake]
+----
+-DCMAKE_C_COMPILER_WORKS=ON
+-DCMAKE_CXX_COMPILER_WORKS=ON
+
+----
+
+A side note: these cmake commands were getting long, and pasting over SSH kept mangling them with terminal escape codes. If you try this build, write your commands to a script file instead of pasting. Trust me.
+
+=== Attempt 3: the WASIP2 ecosystem doesn't exist for riscv64
+
+The build ran for a while -- `[75/1977]` targets -- before dying:
+
+----
+wasi-libc-wasm32-wasip2-build FAILED
+
+----
+
+This one stung -- 75 targets in, it felt like it was working. The WASIP2 target needs three tools at build time: `wit-bindgen`, `wasm-tools`, and `wkg`. These are all Rust binaries distributed as pre-built downloads. None of them ship riscv64 binaries. The build tried to download them, got a 404, and gave up.
+
+The default target list in WASI SDK is five entries: `wasm32-wasi`, `wasm32-wasip1`, `wasm32-wasip2`, `wasm32-wasip1-threads`, and `wasm32-wasi-threads`. Three of those depend on tools that don't exist for riscv64.
+
+Everything I'm building for (Atym, Ocre, standard WASI applications) uses WASIP1. WASIP2 is the newer component-model version, and its tooling ecosystem hasn't caught up to riscv64 yet. So I dropped the targets I didn't need:
+
+[source,cmake]
+----
+-DWASI_SDK_TARGETS="wasm32-wasi;wasm32-wasip1"
+
+----
+
+=== Attempt 4
+
+cmake configured cleanly. A few warnings about unsupported architecture for wit-bindgen, wasm-tools, and wkg -- expected, since we're not building the targets that need them.
+
+84 targets. wasi-libc compiled with the freshly-built Clang 21.1.4, using llvm-nm, llvm-ar, and llvm-ranlib from Stage 1.
+
+----
+[84/84] Built target wasi-libc-wasm32-wasip1
+
+----
+
+Done. Sysroot installed. About 15 minutes. After four rounds of cmake roulette, I'll take it.
+
+== The verification: one more fix
+
+Did it actually work, though? Compile a C program to `.wasm` using the RISC-V-native WASI SDK:
+
+[source,bash]
+----
+$ ~/wasi-sdk-riscv64/bin/clang -o /tmp/hello.wasm /tmp/hello-wasi.c
+
+----
+
+----
+wasm-ld: error: cannot open /home/poddingue/wasi-sdk-riscv64/lib/clang/21/lib/wasm32-unknown-wasi/libclang_rt.builtins.a
+
+----
+
+So close. Clang looks for the compiler runtime library in `lib/clang/21/lib/`, but Stage 2 installed it in `clang-resource-dir/lib/`. A path mismatch between how Stage 1 configured Clang and where Stage 2 put the files. One symlink:
+
+[source,bash]
+----
+ln -s ~/wasi-sdk-riscv64/clang-resource-dir/lib ~/wasi-sdk-riscv64/lib/clang/21/lib
+
+----
+
+== The full loop
+
+[source,bash]
+----
+$ cat /tmp/hello-wasi.c
+#include <stdio.h>
+int main(void) {
+    printf("Hello from WASI SDK built natively on RISC-V!\n");
+    return 0;
+}
+
+$ ~/wasi-sdk-riscv64/bin/clang -o /tmp/hello-riscv-native.wasm /tmp/hello-wasi.c
+
+$ file /tmp/hello-riscv-native.wasm
+/tmp/hello-riscv-native.wasm: WebAssembly (wasm) binary module version 0x1 (MVP)
+
+$ ~/wasm-micro-runtime/product-mini/platforms/linux/build/iwasm /tmp/hello-riscv-native.wasm
+Hello from WASI SDK built natively on RISC-V!
+
+----
+
+C source, compiled to `.wasm` by a Clang that runs on RISC-V, executed by an iwasm that runs on RISC-V. No x86 anywhere.
+
+Getting Docker to build and run on RISC-V took me weeks -- QEMU user emulation, cross-compiled base images, glibc version mismatches. This took one overnight build and four cmake flags.
+
+== The numbers
+
+[cols="1,1", options="header"]
+|===
+| Metric
+| Value
+
+| Stage 1 (LLVM+Clang+LLD)
+| ~8-10 hours (overnight)
+
+| Stage 2 (wasi-libc sysroot)
+| ~15-20 minutes
+
+| Stage 2 fix iterations
+| 4 (wrong compiler, compiler test, WASIP2, resource dir)
+
+| Installed SDK size
+| 244 MB
+
+| hello-world.wasm
+| 105 KB
+
+| Source code patches
+| 0
+
+| WASI SDK version
+| 30.2g1033443e5c36
+
+| Clang version
+| 21.1.4-wasi-sdk
+
+| Default target
+| wasm32-unknown-wasi
+
+| Disk after build
+| 84G used / 24G free (113G total)
+
+|===
+
+== What do the four fixes tell us?
+
+None of the fixes touched source code. They were all build system configuration: cmake flags and one symlink. WASI SDK's codebase is already RISC-V compatible. The gaps are in the build system assumptions and the WASIP2 tool distribution.
+
+Here's what each one looked like:
+
+[cols="1,1,1", options="header"]
+|===
+| Fix
+| Problem
+| Solution
+
+| 1
+| Stage 2 uses system GCC instead of Stage 1 Clang
+| `-DCMAKE_C_COMPILER="$INSTALL_DIR/bin/clang"`
+
+| 2
+| cmake compiler test fails (Clang only targets wasm32)
+| `-DCMAKE_C_COMPILER_WORKS=ON`
+
+| 3
+| WASIP2 tools (wit-bindgen, wasm-tools, wkg) have no riscv64 binaries
+| `-DWASI_SDK_TARGETS="wasm32-wasi;wasm32-wasip1"`
+
+| 4
+| Clang resource dir path mismatch
+| `ln -s clang-resource-dir/lib lib/clang/21/lib`
+
+|===
+
+Fixes 1, 2, and 4 could be addressed in the WASI SDK build system itself. Fix 3 depends on the wider Rust/WebAssembly tooling ecosystem shipping riscv64 binaries -- something that will happen as RISC-V adoption grows, but isn't there yet.
+
+== Upstream plans
+
+I've forked WASI SDK to link:https://github.com/gounthar/wasi-sdk[gounthar/wasi-sdk] and plan to:
+
+* File an issue documenting the riscv64 build with these four fixes as evidence
+* Propose cmake changes that would handle fixes 1, 2, and 4 automatically
+* Include the build script and this article as reference
+
+The Ocre runtime also needs a small cmake fix to build on RISC-V -- it unconditionally tries to cross-compile sample `.wasm` files using WASI SDK, which fails when WASI SDK isn't installed. I've forked that repository too (link:https://github.com/gounthar/ocre-runtime[gounthar/ocre-runtime]) and will submit a PR adding a cmake option to skip the sample builds.
+
+== What this changes for me
+
+For my own work, this settles something. Three articles in, the entire WebAssembly development stack -- compiler, runtime, container engine -- runs on RISC-V. No source code changes needed for any of it.
+
+The full self-hosted loop on my Banana Pi F3:
+
+. Write C code
+. Compile to `.wasm` with the native WASI SDK (Clang 21.1.4)
+. Run with iwasm (WAMR 2.4.3)
+. Or run through the Ocre container runtime (v0.7.0)
+
+No cross-compilation. No emulation. No x86.
+
+I've spent years wrangling Docker on architectures it wasn't designed for. WebAssembly doesn't need wrangling. The toolchain is smaller, the runtime is simpler, and the output doesn't care which CPU produced it. An overnight build versus months of figuring out an ecosystem.
+
+If you're running RISC-V boards and want WebAssembly development, the build script is in link:https://github.com/gounthar/wasi-sdk[my fork]. Clone it, start it before bed, and you'll have a working WASI SDK in the morning. If you'd rather cross-compile on x86, that works too -- the `.wasm` output is identical either way.
+
+---
+
+_Bruno Verachten is a Docker Captain, Jenkins contributor, and Arm Ambassador who has spent twelve years running containers on devices most people wouldn't try. He teaches at Université d'Artois and maintains 37 Docker images across ARM, x86, and RISC-V architectures._
+
+<!--
+Converted from AsciiDoc to Jekyll markdown
+Original file: /mnt/c/support/users/dev/atym/blog-post-wasi-sdk-draft.adoc
+Conversion date: 2026-02-25
+Conversion notes:
+* AsciiDoc document structure (=, ==, ===) converted to Markdown (#, ##, ###)
+* Source code blocks converted to fenced code blocks with language identifiers
+* AsciiDoc tables converted to Markdown pipe tables
+* AsciiDoc lists converted to Markdown bullet and numbered lists
+* Link to previous article converted to Jekyll relative URL
+* All links converted from AsciiDoc link:url[text] format to Markdown link:url[text] format
+* Inline formatting: _bold_ converted to _bold_, GitHub fork links preserved
+* No content loss, full semantic preservation
+-->

@@ -1,0 +1,298 @@
+---
+author: Bruno Verachten
+categories:
+- Docker
+- DevOps
+- AI
+date: 2026-01-15 10:00:00 +0100
+description: A Docker Captain's story about running local LLMs on unsupported AMD
+  hardware thanks to community Docker images.
+excerpt: I became a Docker Captain in January 2026 after a decade of using Docker.
+  Then my GPU vendor dropped support for my hardware. Docker saved the day—and taught
+  me something fundamental about how containers enable community-driven solutions.
+featured: false
+hidden: false
+image: assets/images/2026/01/15/docker-gpu-header.jpg
+tags:
+- docker
+- amd
+- rocm
+- llm
+- gpu
+- gfx906
+- containers
+- docker-captain
+title: How Docker Gave My 'Unsupported' GPU a Second Life
+toc: true
+---
+
+image::/assets/images/2026/01/15/docker-gpu-header.jpg[Man walking beside blue cargo containers]
+_Photo by link:https://unsplash.com/@lilcloud[Vanessa Frosali] on link:https://unsplash.com/photos/79PDB8hZ7rM[Unsplash]_
+
+I became a Docker Captain in January 2026. After more than a decade of using Docker, 37 images on Docker Hub, and over 2.1 million downloads, I thought I knew most of what containers could do for me.
+
+Then my GPU vendor dropped support for my hardware. Docker saved the day.
+
+== The Vendor Giveth, The Vendor Taketh Away
+
+I run local LLMs on an older AMD Radeon GPU from the gfx906 family (Radeon VII). For years, this card has been my workhorse for inference workloads. It has enough VRAM to run a 32-billion parameter model, and it does the job well.
+
+Then AMD released ROCm 6.3. My GPU was not on the support list.
+
+[quote]
+____
+_Note:_ The official documentation was clear: gfx906 support ended with ROCm 6.2.4. No more updates. No new optimizations. No bug fixes.
+____
+
+I could keep running the old version, but I would miss out on performance improvements and new features in the llama.cpp ecosystem.
+
+I was stuck. Or so I thought.
+
+== A Reddit Thread Changes Everything
+
+I was browsing Reddit one evening, looking for alternatives. Someone mentioned a community-maintained Docker image that packaged ROCm 7.1 with llama.cpp compiled specifically for the gfx906 architecture.
+
+The image existed because someone else had the same problem. They had done the work of patching, compiling, and packaging everything into a container. All I had to do was pull it.
+
+[quote]
+____
+_Tip:_ The image I found was link:https://hub.docker.com/r/mixa3607/llama.cpp-gfx906[mixa3607/llama.cpp-gfx906]. Search Docker Hub for your specific GPU architecture—someone may have already solved your problem.
+____
+
+I ran the image. _It worked._
+
+No driver conflicts. No library mismatches. No hours spent compiling from source with custom flags. Just `docker pull` and `docker run`.
+
+== What Docker Actually Solved
+
+The problem with "unsupported" hardware is not that it stops working. The silicon in my GPU did not change when AMD released their support matrix. What changed was the compatibility layer: drivers, libraries, and the delicate dance between them.
+
+On bare metal, this compatibility layer is a single point of failure:
+
+* If the host driver does not match the library version, nothing works.
+* If the library was not compiled with your architecture flag, nothing works.
+* If some dependency has a version conflict, nothing works.
+
+Docker abstracts all of this away. The container bundles the exact driver version, the exact library version, and the exact compiled binary that works together. The host only needs to pass through the GPU device. Everything else lives inside the container, frozen in a working state.
+
+[quote]
+____
+_Host vs Container:_ My host runs a standard Linux distribution with whatever ROCm version ships in the repositories. Inside the container, a completely different software stack runs, compiled by someone who cared enough to support older hardware.
+____
+
+== Building a Full AI Stack
+
+Once I had inference working, I wanted more. RAG (Retrieval-Augmented Generation) requires additional components: an embedding service to convert text into vectors, a vector database to store and search those vectors, and a web frontend to tie everything together.
+
+Each component came from a different source:
+
+* _llama.cpp:_ Community-maintained image
+* _Ollama:_ Official image (embeddings)
+* _Qdrant:_ Official image (vector database)
+* _Open WebUI:_ Official image (frontend)
+
+With docker-compose, I defined the entire stack in one file. The containers talk to each other over a private network. They share GPU resources when needed. They restart automatically if something crashes.
+
+The whole thing deploys with a single command. I wrapped the deployment in Ansible for repeatability, but docker-compose does the heavy lifting.
+
+_Simplified compose file (the real one has more configuration):_
+
+[source,yaml]
+----
+services:
+  llama-server:
+    image: mixa3607/llama.cpp-gfx906:full-b7091-rocm-7.1.0
+    devices:
+      * /dev/kfd:/dev/kfd
+      * /dev/dri:/dev/dri
+    group_add:
+      * "44"   # video
+      * "992"  # render
+    volumes:
+      * /data/models:/models:ro
+
+  ollama:
+    image: ollama/ollama:rocm
+    # Embeddings for RAG
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    # Vector database
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      * "3000:8080"
+    depends_on:
+      * llama-server
+      * ollama
+      * qdrant
+
+----
+
+_Four containers. One compose file. A complete private AI stack running on hardware that the vendor says should not work._
+
+== War Stories From the Deployment
+
+The compose file looks clean. The architecture diagram makes sense. But getting there involved some head-scratching moments.
+
+=== The Invisible Group
+
+My first attempt at GPU passthrough failed with a cryptic error:
+
+----
+Unable to find group render
+
+----
+
+The container could not find the Linux group that controls GPU access.
+
+The problem was obvious once I understood it: containers do not share the host's `/etc/group` file. The group name "render" meant nothing inside the container.
+
+_The fix:_
+
+[source,yaml]
+----
+group_add:
+  * "44"   # video
+  * "992"  # render
+
+----
+
+Numbers work everywhere. Names are just convenience.
+
+=== The Healthcheck That Couldn't
+
+Docker Compose healthchecks kept reporting failures. The containers were running fine, but the healthcheck commands returned errors.
+
+I had written standard healthchecks using `curl` or `wget`. Neither tool existed in the containers. These were minimal images, stripped down for production use.
+
+The solution was to use what each container already had:
+
+_Creative healthchecks:_
+
+[source,yaml]
+----
+== For Ollama - use native CLI
+healthcheck:
+  test: ["CMD", "ollama", "list"]
+
+== For Qdrant - bash TCP check, no curl needed
+healthcheck:
+  test: ["CMD-SHELL", "bash -c 'cat < /dev/tcp/localhost/6333'"]
+
+----
+
+[quote]
+____
+_Tip:_ Sometimes the best solution is the one that does not require installing anything.
+____
+
+=== The GPU Disappearing Act
+
+After a RAM upgrade, my GPU vanished from the system. `rocm-smi` showed nothing. The PCIe slot was empty as far as Linux was concerned.
+
+A reboot fixed it. A BIOS setting needed adjustment after the hardware change. But here is what I appreciated: the Docker stack came back up automatically. Restart policies meant I did not have to manually start each container. Docker remembered the desired state and restored it.
+
+[quote]
+____
+_Important:_ These stories reinforce something: Docker handles the orchestration, but you still need to understand what is happening under the hood.
+____
+
+== The Community Makes It Possible
+
+I did not build that gfx906 image. Someone in the community did, then published it for others to use. I just pulled it.
+
+This is the part of Docker that still amazes me. Docker Hub is not just a registry; it is a _library of solved problems_. Someone had my exact problem, solved it, and shared the solution as a container image.
+
+When I publish my own images (those 37 on Docker Hub), I am doing the same thing. Someone will have a problem I already solved. They will find my image, pull it, and move on with their day.
+
+The standardization matters. Because Docker images follow the same conventions, I could combine that community ROCm image with official images from Ollama, Qdrant, and Open WebUI. They all speak the same language. They all use the same networking model. They all mount volumes the same way.
+
+== Teaching Docker With Real Examples
+
+I teach Docker to M2 students at Université d'Artois. When I explain why containers matter, I used to rely on the standard examples: consistent environments, reproducible builds, isolation.
+
+Now I have a better story. I tell them about my GPU, the vendor dropping support, and the Reddit thread that saved my setup. I show them the compose file. I show them the stack running. I tell them about the invisible group and the healthcheck that couldn't.
+
+Their eyes light up when they realize what containers actually enable:
+
+* It is not just about packaging applications.
+* It is about routing around obstacles.
+* It is about community solutions to individual problems.
+* It is about giving hardware new life when vendors have moved on.
+
+== What This Means For You
+
+_Have older hardware?_
+Check if someone has containerized a working software stack for it. Odds are, someone has.
+
+_Figured out how to make something work?_
+Consider packaging it as a Docker image. Someone else will have the same problem next month.
+
+_Choosing between bare metal and containers?_
+Consider the long-term maintenance burden. The container version might save you when the next major update breaks compatibility.
+
+---
+
+My GPU is running models it was never "supposed" to run. The silicon does not care about support matrices. It just needs the right instructions. Docker delivers those instructions reliably, every time.
+
+_This is my first article as a Docker Captain. I wanted to start with a story from the trenches, something real that happened to me. Docker is not just a tool I use. It is the reason my personal AI stack exists at all._
+
+== Resources
+
+Here are the tools and communities that made this possible:
+
+[cols="1,1", options="header"]
+|===
+| Resource
+| Link
+
+| llama.cpp gfx906 image
+| link:https://hub.docker.com/r/mixa3607/llama.cpp-gfx906[mixa3607/llama.cpp-gfx906]
+
+| Ollama (embeddings)
+| link:https://hub.docker.com/r/ollama/ollama[ollama/ollama]
+
+| Qdrant (vector database)
+| link:https://hub.docker.com/r/qdrant/qdrant[qdrant/qdrant]
+
+| Open WebUI (frontend)
+| link:https://github.com/open-webui/open-webui[open-webui/open-webui]
+
+| Docker GPU documentation
+| link:https://docs.docker.com/config/containers/resource_constraints/#gpu[Docker GPU support]
+
+| ROCm container documentation
+| link:https://rocm.docs.amd.com/projects/install-on-linux/en/latest/how-to/docker.html[AMD ROCm Docker]
+
+| Community
+| link:https://www.reddit.com/r/LocalLLaMA/[r/LocalLLaMA on Reddit]
+
+|===
+
+== About the Author
+
+_Bruno Verachten_ is a Docker Captain, Senior Developer Relations for the Jenkins project, and teaches Docker to graduate students at Université d'Artois. His Docker Hub profile hosts 37 images with over 2.1 million downloads.
+
+link:https://hub.docker.com/u/gounthar[Docker Hub] | link:https://www.linkedin.com/in/poddingue/[LinkedIn] | link:https://github.com/gounthar[GitHub]
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll converter
+Original file: /mnt/c/support/users/dev/ai/ia-perso/journal/docker-captain-article-draft.adoc
+Conversion date: 2026-01-25
+Notes:
+* Converted header image reference and photo credit to markdown
+* Converted all AsciiDoc headers (=, ==, ===) to markdown headers (#, ##, ###)
+* Converted inline formatting (_bold_ to _bold_)
+* Converted admonitions (NOTE, TIP, IMPORTANT) to blockquotes with prefixes
+* Converted links from AsciiDoc link:url[text] syntax to markdown link:url[text] format
+* Converted AsciiDoc tables to markdown pipe tables
+* Converted code blocks from [source,language] delimiters to fenced code blocks
+* Converted definition list to markdown list format
+* Sidebar converted to blockquote
+* Q&A section simplified to question/answer format
+* Author bio box converted to plain text section
+* Maintained all semantic meaning and structure from original
+* Added proper Jekyll frontmatter with categories and tags
+-->

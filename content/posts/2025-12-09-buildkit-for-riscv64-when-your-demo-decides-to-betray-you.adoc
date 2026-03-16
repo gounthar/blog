@@ -1,0 +1,439 @@
+---
+author: Bruno Verachten
+categories:
+- DevOps
+- RISC-V
+date: 2025-12-09 10:00:00 +0100
+description: Building and packaging BuildKit 0.26.2 for RISC-V64, from initial failure
+  to working Debian and RPM packages with lessons on Go binary packaging quirks
+excerpt: 'Picture this: I''m preparing a tech demo, feeling pretty confident about
+  showing Docker on RISC-V64. Everything''s going great until Step 5, where I need
+  Docker Buildx multi-platform builds. Which needs BuildKit. Which doesn''t exist
+  for RISC-V64.'
+featured: false
+hidden: false
+image: assets/images/2025/12/09/buildkit-riscv64-header.jpg
+tags:
+- buildkit
+- riscv64
+- docker
+- buildx
+- debian
+- rpm
+- packaging
+- dwz
+- ci-cd
+- golang
+- build-automation
+- docker-engine
+- containerization
+- multi-platform-builds
+- package-management
+- github-actions
+- moby-buildkit
+- static-binaries
+- debian-packaging
+- rpm-packaging
+- go-binaries
+title: 'BuildKit for RISC-V64: When Your Demo Decides to Betray You'
+toc: true
+---
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: /mnt/c/support/users/dev/riscv/docker/docker-dev/journal/session_2025-12-09_buildkit_riscv64_styled.adoc
+Conversion date: 2025-12-09
+Notes: Converted emoji headers, code blocks, admonitions (NOTE blocks), and tables. Image attribution preserved at bottom.
+-->
+
+Picture this: I'm preparing a tech demo, feeling pretty confident about showing Docker on RISC-V64. Everything's going great until Step 5, where I need Docker Buildx multi-platform builds. Which needs BuildKit. Which doesn't exist for RISC-V64.
+
+You know that special kind of panic when you realize your demo has a massive hole in it? That's where I was. I could've just skipped that section, mumbled something about "future work," and moved on. But where's the fun in that? Instead, I spent the next four hours going down a rabbit hole of build automation, packaging quirks, and version detection bugs. Spoiler: I won.
+
+== The Problem: No BuildKit, No Demo
+
+Let's talk about Docker Buildx for a second. It's that CLI plugin everyone uses for multi-platform builds—the `docker buildx build` command you've probably typed a hundred times. But here's the thing: Buildx itself doesn't actually do the work. It's more like a friendly interface that talks to the real workhorse.
+
+That workhorse? BuildKit.
+
+BuildKit (from `moby/buildkit`) is the actual build engine. It runs as a daemon called `buildkitd` and handles all the heavy lifting—parallel builds, caching, cross-platform compilation, the works. When you run `docker buildx create`, Docker spins up a BuildKit container behind the scenes to do its magic.
+
+On RISC-V64, that "magic" looked more like a disaster:
+
+[source,bash]
+----
+$ docker buildx create --name mybuilder --use
+$ docker buildx inspect --bootstrap
+exec /sbin/docker-init: no such file or directory
+
+----
+
+Ouch.
+
+The official `moby/buildkit:buildx-stable-1` image? Doesn't support RISC-V64. Without a working BuildKit daemon, Buildx is just a pretty CLI that does nothing. My carefully planned demo was officially stuck.
+
+---
+
+== Analysis: What Does BuildKit Actually Need?
+
+Now, before I went all cowboy and started writing code, I did what any reasonable person would do; I investigated. What would it actually take to get BuildKit running on RISC-V64?
+
+Here's where things got interesting.
+
+=== Native RISC-V64 Support Already Exists
+
+Unlike Docker Engine, BuildKit has native RISC-V64 support baked right in. Check out their `docker-bake.hcl`:
+
+[source,hcl]
+----
+target "binaries-cross" {
+  platforms = [
+    "darwin/amd64",
+    "darwin/arm64",
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64",  # <-- Look at that!
+    "windows/amd64",
+    "windows/arm64"
+  ]
+}
+
+----
+
+RISC-V64 is sitting right there in their cross-compilation targets. The machinery exists. The build system knows what to do. Nobody had just bothered to actually build and package it for distribution.
+
+=== Pure Go, No CGO Nightmares
+
+Even better news: BuildKit's core components are pure Go. Let me show you what I mean:
+
+[source,dockerfile]
+----
+== From BuildKit's Dockerfile
+ARG CGO_ENABLED=0  # buildkitd
+ENV CGO_ENABLED=0  # buildctl
+
+----
+
+You know what this means? No wrestling with C libraries. No cross-compilation toolchain nightmares. No hunting down RISC-V64 versions of random dependencies. Just pure, beautiful Go that compiles to a single static binary.
+
+My BananaPi F3 runner with Go 1.25.3? Totally sufficient.
+
+=== The Build Command
+
+The actual build command turned out to be almost embarrassingly simple:
+
+[source,bash]
+----
+cd buildkit
+GOOS=linux GOARCH=riscv64 CGO_ENABLED=0 make binaries
+
+----
+
+That's it. This produces statically linked `buildkitd` and `buildctl` binaries with zero runtime dependencies. If it's too easy, it's no fun, right?
+
+Wrong. I was about to discover that packaging these innocent-looking binaries would be where the real adventure began.
+
+---
+
+== Phase 1: Building the Binaries
+
+I created `buildkit-weekly-build.yml` following the patterns I'd already established for Docker Engine, CLI, and Compose in this repository. The workflow's pretty straightforward:
+
+. Clone the BuildKit submodule
+. Run `make binaries` with the RISC-V64 target
+. Create a GitHub release with the binaries
+. Tag releases as `buildkit-vX.Y.Z-riscv64` for official versions
+
+The first build succeeded on the first try. (I know, I was suspicious too.)
+
+Let's verify what we actually got:
+
+[source,bash]
+----
+$ file buildkitd
+buildkitd: ELF 64-bit LSB executable, UCB RISC-V, version 1 (SYSV), statically linked
+
+$ ldd buildkitd
+not a dynamic executable
+
+$ ./buildkitd --version
+buildkitd github.com/moby/buildkit v0.26.2
+
+----
+
+Clean RISC-V64 binaries, statically linked, working version detection. Phase 1 complete. Time to package these bad boys.
+
+---
+
+== Phase 2: RPM Packaging - The Suspiciously Easy One
+
+I created `build-buildkit-rpm.yml` with a spec file in `rpm-buildkit/`. The workflow downloads the binaries from the release, packages them up, and uploads the RPM.
+
+First attempt:
+
+----
+buildkit-0.26.2-1.riscv64.rpm
+
+----
+
+It... just worked?
+
+RPM tooling on Fedora had absolutely no complaints about Go binaries. Clean build. No warnings. No errors. Perfect.
+
+This set completely unrealistic expectations for what came next.
+
+---
+
+== Phase 3: Debian Packaging - The dh_dwz Saga
+
+Debian packaging started the same way. I created `build-buildkit-package.yml` with packaging files in `debian-buildkit/`. Download binaries, run `dpkg-buildpackage`, upload the .deb.
+
+Here's where things got tricky:
+
+----
+dh_dwz
+dwz: buildkitd (section .debug_info): '.debug_info' section not present
+dh_dwz: error: dwz -q -- buildkitd buildctl returned exit code 1
+
+----
+
+Great. Just great.
+
+=== What Even Is dwz?
+
+So, `dwz` is a DWARF optimizer. It compresses debug information in ELF binaries to reduce package size. Debian's build system runs it by default because Debian cares deeply about making packages smaller.
+
+Here's the problem: Go binaries don't use traditional DWARF debug sections. Go has its own debug format that's completely different. When `dwz` tries to parse Go binaries, it gets confused and fails spectacularly.
+
+=== The Fix (That I Should've Remembered)
+
+The solution? Tell Debian's build system to skip `dwz` entirely. I added an override to `debian-buildkit/rules`:
+
+[source,makefile]
+----
+override_dh_dwz:
+	# Skip DWARF compression - Go binaries don't have compatible debug info
+	@echo "Skipping dwz - not applicable to Go binaries"
+
+----
+
+Now here's the embarrassing part: this pattern already existed in the repository for other Go packages (docker-cli, docker-compose). I'd dealt with this exact problem before. I just... forgot to copy it when creating the BuildKit packaging.
+
+(Windows with WSL2, because apparently I enjoy making my life unnecessarily complicated, and now I'm forgetting my own workarounds.)
+
+PR #222 added this fix, and I moved on feeling slightly sheepish.
+
+---
+
+== Phase 4: The Version Detection Crisis
+
+With `dh_dwz` fixed, I confidently triggered another build. Surely this would work now, right?
+
+New error:
+
+----
+dch: error: new version '0.0.20251209' is less than the current version '0.17.3'
+
+----
+
+Wait, what?
+
+The workflow was trying to package a dev build instead of the official release. But why?
+
+=== The Dev Build Problem
+
+Let me explain how my weekly build workflow creates releases. There are two types:
+
+* _Official releases_: `buildkit-v0.26.2-riscv64` (tracks upstream versions)
+* _Dev builds_: `buildkit-v20251209-dev` (weekly snapshots from main branch)
+
+Dev builds get a synthetic version number using the format `0.0.YYYYMMDD`. This makes them easy to identify as development snapshots, but it also makes them _lower_ than any real semver version like `0.17.3`.
+
+The packaging workflow was auto-detecting the most recent release and finding a dev build first. It tried to update the changelog from `0.17.3` to `0.0.20251209`, which Debian rightfully rejected as a downgrade.
+
+Here's the thing: Debian doesn't let you go backward in version numbers. That would break the entire package management system. So my "clever" versioning scheme for dev builds was actually creating a mess.
+
+=== Fix 1: Only Match Official Releases
+
+I changed the awk pattern in both packaging workflows. Before, it looked like this:
+
+[source,bash]
+----
+== Before: matches any buildkit-v* tag
+awk -F'\t' '$3 ~ /^buildkit-v/ {print $3; exit}'
+
+----
+
+This matched everything—official releases and dev builds. I needed it to be more specific:
+
+[source,bash]
+----
+== After: only matches semver format
+awk -F'\t' '$3 ~ /^buildkit-v[0-9]+\.[0-9]+\.[0-9]+/ {print $3; exit}'
+
+----
+
+Now `buildkit-v0.26.2-riscv64` matches perfectly. `buildkit-v20251209-dev` doesn't match at all.
+
+PR #224 implemented this fix.
+
+=== Fix 2: Auto-Detection Should Default to Nothing
+
+The workflow_dispatch input had a hardcoded default that was causing problems:
+
+[source,yaml]
+----
+== Before
+workflow_dispatch:
+  inputs:
+    release_tag:
+      default: 'buildkit-v20251209-dev'  # Hardcoded to dev build
+
+----
+
+This meant every manual trigger defaulted to a dev build unless you explicitly changed it. Not great.
+
+Changed to:
+
+[source,yaml]
+----
+== After
+workflow_dispatch:
+  inputs:
+    release_tag:
+      description: 'BuildKit release tag (leave empty to auto-detect latest official)'
+      required: false
+      default: ''
+
+----
+
+When the input is empty, the workflow auto-detects the latest official release using the semver awk pattern. No more accidental dev build packaging.
+
+PR #225 completed this fix.
+
+---
+
+== Phase 5: Success (Finally!)
+
+After merging all three PRs (#222, #224, #225), I triggered the Debian workflow manually with `buildkit-v0.26.2-riscv64`.
+
+The build completed without errors. The release now has everything we need:
+
+[cols="1,1", options="header"]
+|===
+| File
+| Size
+
+| `buildkitd` (binary)
+| ~45 MB
+
+| `buildctl` (binary)
+| ~18 MB
+
+| `buildkit-0.26.2-1.riscv64.rpm`
+| ~58 MB
+
+| `buildkit_0.26.2-riscv64-1_riscv64.deb`
+| ~58 MB
+
+| `buildkit-dbgsym_0.26.2-riscv64-1_riscv64.deb`
+| ~300 KB
+
+|===
+
+My demo's Step 5? No longer blocked.
+
+---
+
+== Installation: Actually Using This Thing
+
+So you want to try this yourself? Here's how.
+
+=== Debian/Ubuntu
+
+[source,bash]
+----
+== Download and install
+wget https://github.com/gounthar/docker-for-riscv64/releases/download/buildkit-v0.26.2-riscv64/buildkit_0.26.2-riscv64-1_riscv64.deb
+sudo dpkg -i buildkit_0.26.2-riscv64-1_riscv64.deb
+
+== Verify it actually works
+buildkitd --version
+buildctl --version
+
+----
+
+=== Fedora/RHEL
+
+[source,bash]
+----
+== Download and install
+wget https://github.com/gounthar/docker-for-riscv64/releases/download/buildkit-v0.26.2-riscv64/buildkit-0.26.2-1.riscv64.rpm
+sudo dnf install ./buildkit-0.26.2-1.riscv64.rpm
+
+== Verify it actually works
+buildkitd --version
+buildctl --version
+
+----
+
+---
+
+== What This Actually Enables
+
+With BuildKit properly packaged, Docker users on RISC-V64 can now:
+
+. _Run buildkitd as a system service_ for persistent build caching (no more rebuilding everything every time)
+. _Use Buildx for multi-platform builds_ targeting riscv64 alongside amd64, arm64, and other architectures
+. _Build container images locally_ without relying on remote builders or QEMU emulation
+
+My demo's Step 5 works now. More importantly, anyone else trying to use Docker Buildx on RISC-V64 won't hit the same wall I did.
+
+---
+
+== Key Learnings (So You Don't Have to Learn Them the Hard Way)
+
+[quote]
+____
+_Note:_ Go binaries need `override_dh_dwz` in Debian packaging. The dwz optimizer cannot handle Go's debug format and will fail the build. Just skip it entirely—Go binaries are already pretty well optimized.
+____
+
+[quote]
+____
+_Note:_ When supporting both official releases and dev builds, use semver regex patterns to distinguish them. `v[0-9]+\.[0-9]+\.[0-9]+` matches real versions. `vYYYYMMDD-dev` does not. This prevents accidental downgrades in package version numbers.
+____
+
+[quote]
+____
+_Note:_ Unlike Docker Engine (which required multiple patches and workarounds), BuildKit requires zero RISC-V64 patches. It builds directly from upstream with `CGO_ENABLED=0`. Sometimes things are actually easier than you expect.
+____
+
+---
+
+== References & Links
+
+* BuildKit repository: link:https://github.com/moby/buildkit[https://github.com/moby/buildkit]
+* Docker Buildx: link:https://github.com/docker/buildx[https://github.com/docker/buildx]
+* Release with packages: link:https://github.com/gounthar/docker-for-riscv64/releases/tag/buildkit-v0.26.2-riscv64[https://github.com/gounthar/docker-for-riscv64/releases/tag/buildkit-v0.26.2-riscv64]
+* Build analysis: BUILDKIT-RISCV64-ANALYSIS.md
+
+---
+
+== Takeaways & Tips
+
+* _Always check upstream build configs first_ - BuildKit already supported RISC-V64, I just needed to actually build it
+* _Go binaries need special handling in Debian_ - Add `override_dh_dwz` to your rules file or the build will fail
+* _Version schemes matter for packaging_ - Dev builds with `0.0.YYYYMMDD` versions will confuse package managers expecting semver
+* _Use regex patterns to filter releases_ - Distinguish official releases from dev builds automatically with semver patterns
+* _RPM packaging is often easier than .deb_ - No dwz issues, cleaner workflows, fewer surprises
+
+Total time from blocked demo to working packages: approximately 4 hours. Not bad for gaining multi-platform build support on an entire architecture.
+
+If you're running Docker on RISC-V64 and want to try Buildx, give it a whirl; the packages are ready and waiting.
+
+---
+
+_Header image: Photo by link:https://unsplash.com/@diegogonzalez[Diego González] on link:https://unsplash.com/photos/qVv32VbZfac[Unsplash]_

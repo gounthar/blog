@@ -1,0 +1,396 @@
+---
+author: Poddingue
+categories:
+- H3
+- Armbian
+- FFmpeg
+description: Stream thanks to FFmpeg under Armbian behind a corporate proxy
+draft: true
+featured: true
+hidden: true
+image: assets/images/closed-coming-soon-door-4291-1210x423_1_.jpg
+tags:
+- Armbian
+- proxy
+- FFmpeg
+title: Stream thanks to FFmpeg under Armbian behind a corporate proxy
+---
+
+== Redsocks Configuration
+
+   1  htop
+    2  lscpu
+    3  htop
+    4  wget http://distribution.bbb3d.renderfarming.net/video/mp4/bbb_sunflower_1080p_30fps_normal.mp4
+    5  sudo ./remove-redsocks.sh
+    6  sudo ./redsocks.sh
+    7  ip a
+    8  sudo vi /etc/redsocks.conf
+    9  sudo reboot
+   10  htop
+   11  sudo armbian-config
+   12  htop
+   13  cat /etc/apt/apt.conf.d/10proxy
+   14  htop
+   15  history
+
+
+[insert gif first-armbian-login]
+
+[insert gif setup-apt-proxy]
+ refaire, car j'ai la vraie IP dedans.
+
+[source,bash]
+----
+sudo vi /etc/apt/apt.conf.d/10proxy
+
+----
+
+[source,yaml]
+----
+Acquire::http::Proxy "http://proxy-ip:proxy-port";
+
+----
+
+[source,bash]
+----
+sudo date -s "30 DEC 2019 17:21:00"
+export http_proxy=http://my.http.proxy.ip:3128
+export https_proxy=http://my.http.proxy.ip:3128
+
+----
+
+[insert gif apt-update]
+
+[source,bash]
+----
+sudo apt update
+sudo apt dist-upgrade
+
+----
+
+[insert gif redsocks]
+
+on centos 7 https://crosp.net/blog/administration/install-configure-redsocks-proxy-centos-linux/ 
+
+yum install http://repo.okay.com.mx/centos/7/x86_64/release/okay-release-1-1.noarch.rpm
+  551  [2020-08-14 14:18:17] yum remove libevent libev-libevent-devel.x86_64
+  552  [2020-08-14 14:18:36] yum update
+  553  [2020-08-14 14:18:57] yum install libevent2
+  554  [2020-08-14 14:19:02] make
+  555  [2020-08-14 14:19:05] make clean
+  556  [2020-08-14 14:19:06] make
+  557  [2020-08-14 14:19:16] yum install libevent2-devel
+  558  [2020-08-14 14:19:25] yum search libevent2
+  559  [2020-08-14 14:19:35] yum install libevent-devel.x86_64
+
+
+
+
+
+https://github.com/darkk/redsocks/issues/152
+
+
+
+----
+sudo apt install redsocks
+sudo vi /etc/redsocks.conf
+
+----
+
+In the redsocks section, change the ip and port part so that it reflects your own proxy server configuration
+
+In the redsocks section, change the ip and port part so that it reflects your own proxy server configuration
+
+        ip = my.http.proxy.ip;
+        port = 3128;
+
+[insert gif configure-redsocks]
+
+Then list the ports that you're interested in transferring to the proxy:
+
+[source,bash]
+----
+sudo iptables -t nat -N REDSOCKS
+
+sudo iptables -t nat -A REDSOCKS -d 0.0.0.0/8 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 10.0.0.0/8 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 127.0.0.0/8 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 169.254.0.0/16 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 172.16.0.0/12 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 192.168.1.0/24 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 192.168.31.0/24 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 224.0.0.0/4 -j RETURN
+sudo iptables -t nat -A REDSOCKS -d 240.0.0.0/4 -j RETURN
+
+sudo iptables -t nat -A REDSOCKS -p tcp -j REDIRECT --to-ports 12345
+
+sudo iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDSOCKS
+sudo iptables -t nat -A OUTPUT -p tcp --dport 1935 -j REDSOCKS
+sudo iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDSOCKS
+sudo iptables -t nat -A OUTPUT -p tcp --dport 21 -j REDSOCKS
+
+sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDSOCKS
+sudo iptables -t nat -A PREROUTING -p tcp --dport 1935 -j REDSOCKS
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDSOCKS
+sudo iptables -t nat -A PREROUTING -p tcp --dport 21 -j REDSOCKS
+
+----
+
+
+
+[source,yaml]
+----
+redsocks {
+        /* `local_ip' defaults to 127.0.0.1 for security reasons,
+         * use 0.0.0.0 if you want to listen on every interface.
+         _ `local__' are used as port to redirect to.
+         */
+        local_ip = 127.0.0.1;
+        local_port = 12345;
+...
+}
+
+----
+
+[source,bash]
+----
+update-alternatives --set iptables /usr/sbin/iptables-legacy
+update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+update-alternatives --set arptables /usr/sbin/arptables-legacy
+update-alternatives --set ebtables /usr/sbin/ebtables-legacy
+
+----
+
+Comme a ne fonctionne pas bien, je suis cette link:https://wiki.debian.org/iptables[doc].
+
+[source,bash]
+----
+iptables-save > save.txt
+iptables-restore-translate -f save.txt
+iptables-restore-translate -f save.txt > ruleset.nft
+apt install nftables
+nft -f ruleset.nft
+update-alternatives --set iptables /usr/sbin/iptables-nft
+update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+update-alternatives: using /usr/sbin/ip6tables-nft to provide /usr/sbin/ip6tables (ip6tables) in manual mode
+update-alternatives --set arptables /usr/sbin/arptables-nft
+update-alternatives --set ebtables /usr/sbin/ebtables-nft
+
+----
+
+Ça ne fonctionne toujours pas. Ce link:https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=913904[bug] est sans doute à lire/suivre.
+
+== FFmpeg compilation
+
+== Get the source
+
+[source,bash]
+----
+echo "heartbeat" > /sys/class/leds/orangepi\:red\:status/trigger
+echo "mmc0" > /sys/class/leds/orangepi\:green\:pwr/trigger
+cd ~/ffmpeg_sources
+wget https://github.com/xbmc/FFmpeg/archive/4.0.4-Leia-18.4.tar.gz
+wget https://raw.githubusercontent.com/LibreELEC/LibreELEC.tv/master/packages/multimedia/ffmpeg/patches/ffmpeg-99.1001-Call-get_format-to-fix-an-issue-with-MMAL-ren.patch
+sudo apt-get install -y libtool libdrm-dev libudev-dev libvorbis-dev
+
+----
+
+== Give air to the card
+
+instructions found there: https://forum.armbian.com/topic/12228-not-enough-memory-to-compile-on-orangepi-zero/?do=findComment&comment=89609
+
+[source,bash]
+----
+sudo fallocate -l 8G /swapfile                Allocate 8GB for swapfile
+sudo chmod 600 /swapfile                      Give the correct rights for the swapfile
+sudo mkswap /swapfile                         Make it a swapfile
+sudo swapon /swapfile                         Turn on the swapfile
+sudo nano /etc/fstab                          Open fstab and add the line ...
+
+----
+
+[source,fsharp]
+----
+/swapfile swap swap defaults 0 0
+
+----
+
+== Install dependencies
+
+armbianmonitor -m
+
+=== Install DebHelper
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/d/debhelper/debhelper_12.7.1.tar.xz
+xz -d debhelper_12.7.1.tar.xz && tar -xvf debhelper_12.7.1.tar && rm debhelper_12.7.1.tar
+cd debhelper/
+sudo apt install -y po4a
+sudo -E dpkg-buildpackage -us -uc
+sudo apt --fix-broken install
+sudo dpkg -i ../libdebhelper-perl_12.7.1_all.deb && sudo apt install dwz && sudo dpkg -i ../debhelper_12.7.1_all.deb
+
+----
+
+
+
+=== Install fdk-aac
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget -O fdk-aac.tar.gz https://github.com/mstorsjo/fdk-aac/tarball/master
+tar xzvf fdk-aac.tar.gz
+cd mstorsjo-fdk-aac*
+autoreconf -fiv
+./configure --prefix="$HOME/bin" --disable-shared
+make -j1
+make -j1 install
+make -j1 distclean
+
+----
+
+
+
+=== Install libvpx
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone https://chromium.googlesource.com/webm/libvpx
+cd libvpx
+./configure
+make -j1
+sudo make install
+
+----
+
+
+
+=== Install libmysofa
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0.orig.tar.xz
+xz -d libmysofa_0.8~dfsg0.orig.tar.xz && tar -xvf libmysofa_0.8~dfsg0.orig.tar && rm libmysofa_0.8~dfsg0.orig.tar
+cd libmysofa-0.8/ && wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0-1.debian.tar.xz
+xz -d libmysofa_0.8~dfsg0-1.debian.tar.xz && tar -xvf libmysofa_0.8~dfsg0-1.debian.tar && rm libmysofa_0.8~dfsg0-1.debian.tar
+sudo apt install -y dh-exec cmake libcunit1-dev zlib1g-dev libz-dev
+wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0.orig.tar.xz && mv libmysofa_0.8~dfsg0.orig.tar.xz ..
+sudo apt install -y debhelper-compat dh-exec cmake libcunit1-dev
+
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libmysofa-utils_0.8~dfsg0-1_armhf.deb ../libmysofa-dev_0.8~dfsg0-1_armhf.deb ../libmysofa0_0.8~dfsg0-1_armhf.deb
+
+----
+
+=== Install Libvidstab
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/libv/libvidstab/libvidstab_1.1.0.orig.tar.gz
+tar -xvzf libvidstab_1.1.0.orig.tar.gz
+cd vid.stab-1.1.0/ && wget http://deb.debian.org/debian/pool/main/libv/libvidstab/libvidstab_1.1.0-2.debian.tar.xz
+xz -d libvidstab_1.1.0-2.debian.tar.xz && tar -xvf libvidstab_1.1.0-2.debian.tar && rm libvidstab_1.1.0-2.debian.tar
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libvidstab1.1_1.1.0-2_armhf.deb ../libvidstab-dev_1.1.0-2_armhf.deb
+
+----
+
+
+
+=== Install nasm
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://www.nasm.us/pub/nasm/releasebuilds/2.14rc0/nasm-2.14rc0.tar.gz
+tar xzvf nasm-2.14rc0.tar.gz
+cd nasm-2.14rc0
+./configure --prefix="$HOME/bin" --bindir="$HOME/bin"
+make -j2 VERBOSE=1
+make -j2 install
+make -j$(nproc) distclean
+
+----
+
+I had a problem with nasm ./include/nasmlib.h:195:1: error: 'pure' attribute on function returning 'void' [-Werror=attributes] because of gcc's 8.2 version.
+https://bugzilla.nasm.us/show_bug.cgi?id=3392461
+=> rebuild gcc?
+
+=== Install x264
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone http://git.videolan.org/git/x264.git -b stable
+cd x264/
+export CFLAGS="-mfpu=neon"
+PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-pic --enable-static --disable-cli --disable-asm --host=arm-linux --disable-opencl
+PATH="$HOME/bin:$PATH" make -j2 VERBOSE=1
+make -j2 install VERBOSE=1
+make -j$(nproc) distclean
+
+----
+
+
+
+=== Install x265
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+sudo apt install -y python3-sphinx
+wget http://deb.debian.org/debian/pool/main/x/x265/x265_3.2.orig.tar.gz
+tar -xvzf x265_3.2.orig.tar.gz
+cd x265_3.2/
+wget http://deb.debian.org/debian/pool/main/x/x265/x265_3.2-2.debian.tar.xz
+xz -d x265_3.2-2.debian.tar.xz && tar -xvf x265_3.2-2.debian.tar && rm x265_3.2-2.debian.tar
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libx265-dev_3.2-2_armhf.deb ../libx265-179-dbgsym_3.2-2_armhf.deb ../libx265-179_3.2-2_armhf.deb ../libx265-doc_3.2-2_all.deb
+
+----
+
+
+
+=== Compile the specific version of FFmpeg
+
+[source,bash]
+----
+cd ~/ffmpeg_sources/FFmpeg-4.0.4-Leia-18.4/
+sudo apt install -y libgl1-mesa-dev
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --pkg-config-flags="--static" --prefix="$HOME/bin" --extra-cflags="-I$HOME/bin/include" --extra-ldflags="-L$HOME/bin/lib" --extra-cflags="-I/usr/local/include" --extra-ldflags="-L/usr/local/lib" --bindir="$HOME/bin" --enable-debug=3 --enable-vaapi --enable-libvorbis --enable-libvpx --disable-debug --enable-gpl   --cpu=native --enable-opengl --enable-libfdk-aac --enable-libx264 --enable-libx265 --extra-libs=-lpthread --enable-nonfree --arch=arm
+
+ERROR: vaapi requested but not found
+sudo apt install -y libva-dev libdrm-dev
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --pkg-config-flags="--static" --prefix="$HOME/bin" --extra-cflags="-I$HOME/bin/include" --extra-ldflags="-L$HOME/bin/lib" --extra-cflags="-I/usr/local/include" --extra-ldflags="-L/usr/local/lib" --bindir="$HOME/bin" --enable-debug=3 --enable-vaapi --enable-libvorbis --enable-libvpx --disable-debug --enable-gpl   --cpu=native --enable-opengl --enable-libfdk-aac --enable-libx264 --enable-libx265 --extra-libs=-lpthread --enable-nonfree --arch=arm
+
+----
+
+
+now works
+
+make made it to the end. Hurray!
+
+Now, let's apply the patches found there: https://github.com/LibreELEC/LibreELEC.tv/tree/master/packages/multimedia/ffmpeg/patches
+
+
+once done, find the linux kernel patches there: https://github.com/LibreELEC/LibreELEC.tv/tree/master/projects/Allwinner/patches/linux after reading https://forum.armbian.com/topic/11551-4kp30-video-on-orange-pi-lite-and-mainline-hardware-acceleration/?do=findComment&comment=88617
+
+cat >patche
+patch -p1 < patche
+
+
+cd /usr/src/linux-source-5.3.9-current-sunxi64
+mv ../linux-source-5.3.9-sunxi64.tar.xz .
+sudo -E xz -d linux-source-5.3.9-sunxi64.tar.xz && sudo tar -xf linux-source-5.3.9-sunxi64.tar && sudo rm linux-source-5.3.9-sunxi64.tar
+https://www.cyberciti.biz/linux-news/linux-kernel-5-3-released-and-here-is-how-to-install-it/
+sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev
+
+

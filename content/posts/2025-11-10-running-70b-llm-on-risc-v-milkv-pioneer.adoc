@@ -1,0 +1,946 @@
+---
+author: Poddingue
+categories:
+- RISC-V
+- LLM
+- Machine Learning
+description: Successfully deploying llama.cpp and Ollama on a 64-core RISC-V workstation
+  to run a 70-billion parameter language model without GPU acceleration - a complete
+  technical walkthrough with lessons learned
+featured: true
+hidden: false
+image: assets/images/2025/11/10/riscv-llm-header.jpg
+tags:
+- riscv
+- llm
+- llama.cpp
+- ollama
+- milkv-pioneer
+- cpu-inference
+- deepseek-r1
+- machine-learning
+- open-source
+title: 'Running a 70B LLM on Pure RISC-V: The MilkV Pioneer Deployment Journey'
+---
+
+When the 40GB download completed and the model loaded into memory, I wondered: would a 70-billion parameter language model actually run on a RISC-V CPU? No GPU. No CUDA. Just 64 cores and a lot of RAM. Spoiler: it worked. Here's the complete technical journey of deploying llama.cpp and Ollama on the MilkV Pioneer, including build challenges, architectural insights, and practical lessons for running state-of-the-art LLMs on CPU-only RISC-V hardware.
+
+== Why This Matters: LLMs Meet RISC-V
+
+RISC-V is the underdog processor architecture. While x86 and ARM dominate the computing landscape with decades of software optimization and hardware acceleration, RISC-V is the open-source upstart. It's the architecture you've probably never heard of unless you follow hardware closely. And running modern AI workloads on RISC-V? That's even more niche.
+
+But here's the thing: RISC-V represents something important. It's an open ISA (Instruction Set Architecture) that anyone can implement without licensing fees. It's the Linux of processor architectures. And as AI becomes increasingly central to computing, the question isn't just "Can we run LLMs on RISC-V?" but rather "How do we democratize AI hardware?"
+
+I got my hands on a MilkV Pioneer - a 64-core RISC-V workstation - and decided to find out if it could run serious language models. Not 7B parameter toy models, but the big ones. The 70-billion parameter models that typically require expensive NVIDIA GPUs.
+
+The equation seemed impossible at first: a 70B parameter model in FP16 precision requires roughly 140GB of memory. Our system has 125GB of RAM. Yet with quantization and smart memory management, it worked. This article documents the entire journey: the hardware choices, build challenges, surprising insights, and step-by-step instructions for anyone wanting to replicate this.
+
+[quote]
+____
+⚠️ _Important_: _Scope and Limitations_: This article documents deployment feasibility and build processes for running LLMs on RISC-V hardware. Quantitative performance benchmarks (tokens per second, latency, throughput) were not collected during this deployment. Performance estimates mentioned in this article (such as "1-5 tokens/sec") are theoretical extrapolations based on hardware characteristics, not measured data.
+
+Readers planning production deployments should conduct their own benchmarking with `llama-bench` or similar tools to measure actual performance on their specific hardware and workloads.
+____
+
+== Hardware Foundation: The MilkV Pioneer
+
+Before diving into software, let's talk about the hardware that made this possible. The MilkV Pioneer isn't your typical development board. It's a serious workstation-class machine designed around RISC-V processors.
+
+=== System Specifications
+
+Here's what we're working with:
+
+[cols="1,1", options="header"]
+|===
+| Component
+| Specification
+
+| _CPU_
+| 64-core RISC-V processor (vendor ID: 0x5b7)
+
+| _ISA_
+| rv64imafdcv
+
+| _Memory_
+| 125GB RAM + 8GB swap (122GB available after OS overhead)
+
+| _Storage_
+| 939GB NVMe SSD (119GB used, 820GB available)
+
+| _OS_
+| Fedora Linux 38 Workstation (riscv64)
+
+| _GPU_
+| None - pure CPU inference only
+
+|===
+
+Let me unpack that ISA specification because it's crucial to understanding why this deployment worked.
+
+=== Decoding rv64imafdcv: The Secret Sauce
+
+The ISA string `rv64imafdcv` is more than just alphabet soup. Each letter represents a set of processor capabilities:
+
+[cols="1,1,1", options="header"]
+|===
+| Extension
+| Full Name
+| Significance for LLM Inference
+
+| _rv64_
+| 64-bit base integer ISA
+| Enables addressing the full 125GB memory space for large models
+
+| _i_
+| Integer operations
+| Base integer arithmetic operations
+
+| _m_
+| Multiply/Divide
+| Critical for matrix operations in transformer architectures
+
+| _a_
+| Atomic instructions
+| Thread synchronization for parallel inference across 64 cores
+
+| _f_
+| Single-precision floating-point
+| FP32 operations for model weights and computations
+
+| _d_
+| Double-precision floating-point
+| FP64 for high-precision accumulation where needed
+
+| _c_
+| Compressed instructions
+| 16-bit instruction encoding (reduces code size)
+
+| _v_
+| _Vector extensions_
+| _CRITICAL_: SIMD operations for tensor mathematics
+
+|===
+
+The _v_ extension is the game-changer here. Vector extensions provide SIMD (Single Instruction, Multiple Data) capabilities similar to x86 AVX or ARM NEON. Without these vector extensions, CPU-only inference would be 5-10x slower. With them, we can efficiently parallelize the matrix multiplications that dominate transformer model inference.
+
+This is why llama.cpp's `GGML_CPU_AARCH64=ON` configuration works on RISC-V: the vector extensions are architecturally similar enough to ARM NEON that the same optimized code paths function correctly. Cross-architecture code reuse for the win.
+
+=== The Strategic Hardware Choice: Memory First
+
+You might notice something unusual about this system: 125GB of RAM is massive for a workstation. Why so much?
+
+The answer reveals our core strategy: _strategic compensation_. When you don't have GPU acceleration, you compensate with other resources:
+
+* _No GPU memory?_ → Use abundant system RAM instead
+* _Slower per-core inference?_ → Throw 64 cores at the problem
+* _Limited software ecosystem?_ → Choose portable, well-designed software
+
+This memory-first approach enables loading entire large models into RAM without swapping to disk. A 70B parameter model quantized to Q4_0 format requires roughly 40GB of memory. With 125GB available, we have comfortable headroom for:
+
+* The model itself (~40GB)
+* Operating system and services (~3GB)
+* Inference state and KV cache (~10-20GB)
+* Multiple concurrent sessions if needed
+
+The result: no disk swapping, no memory pressure, and the ability to load models that would choke smaller systems.
+
+== Journey Part 1: Building llama.cpp
+
+With hardware in place, the real challenge began: getting cutting-edge LLM software to build on an architecture it was never explicitly designed for.
+
+=== Toolchain Exploration: Finding Solid Ground
+
+My first instinct was to use the latest compiler. GCC 14.2.0 source build? Sure, bleeding-edge features sound great. I also explored the XUANTIE RISC-V GNU Toolchain from T-Head (Alibaba's RISC-V division), thinking vendor-specific optimizations might help.
+
+But sometimes newer isn't better, especially on emerging architectures. After experimentation, I settled on the system-provided GCC 13.2.1 from Red Hat. Why?
+
+. _Proven stability_: Red Hat's testing means fewer surprises
+. _Ecosystem integration_: Works seamlessly with Fedora's packages
+. _ccache support_: Dramatically speeds incremental builds
+. _Good enough_: Compiler optimization differences rarely matter as much as architecture-specific code paths
+
+The lesson: on cutting-edge hardware, conservative toolchain choices often win.
+
+=== The Build: Surprisingly Straightforward
+
+llama.cpp is designed for portability, and it shows. The build process was refreshingly simple:
+
+[source,bash]
+----
+== Clone the repository
+cd ~/
+git clone https://github.com/ggerganov/llama.cpp.git
+cd llama.cpp
+
+== Configure with CMake
+cmake -B build
+
+== Build with all 64 cores
+cmake --build build --config Release -j 64
+
+----
+
+That's it. No special patches, no RISC-V-specific forks, no fighting with dependencies. Just standard CMake commands.
+
+The build took advantage of all 64 cores (hence `-j 64`) and ccache reduced rebuild times significantly. Within minutes, we had 30+ executables in `build/bin/`:
+
+[source,bash]
+----
+$ ls -lh build/bin/ | grep llama
+-rwxr-xr-x. 1 user user 1.4M Jan 28 10:23 llama-cli
+-rwxr-xr-x. 1 user user 1.5M Jan 28 10:23 llama-server
+-rwxr-xr-x. 1 user user 1007K Jan 28 10:23 llama-bench
+-rwxr-xr-x. 1 user user 1.2M Jan 28 10:23 llama-quantize
+-rwxr-xr-x. 1 user user 1.4M Jan 28 10:23 libllama.so
+
+----
+
+=== Configuration Deep-Dive: What Makes It Work
+
+The real magic happens in the CMake configuration. Let's look at the key settings from `build/CMakeCache.txt`:
+
+[source,cmake]
+----
+== CPU backend configuration
+GGML_CPU:BOOL=ON                    # CPU backend enabled
+GGML_CPU_AARCH64:BOOL=ON            # ← The critical setting
+GGML_ACCELERATE:BOOL=ON             # Generic CPU acceleration
+GGML_CCACHE:BOOL=ON                 # Build caching for speed
+
+== Explicitly disabled (hardware constraints)
+GGML_CUDA:BOOL=OFF                  # No NVIDIA GPU
+GGML_AVX:BOOL=OFF                   # x86-specific, not available
+GGML_AVX2:BOOL=OFF                  # x86-specific, not available
+GGML_AVX512:BOOL=OFF                # x86-specific, not available
+
+== Not used (simplicity)
+GGML_BLAS:BOOL=OFF                  # No external BLAS library
+
+== Build configuration
+CMAKE_BUILD_TYPE:STRING=Release     # Optimize for performance
+CMAKE_C_COMPILER=/usr/lib64/ccache/cc  # GCC 13.2.1 with ccache
+
+----
+
+The `GGML_CPU_AARCH64=ON` setting deserves special attention. This tells llama.cpp to use its ARM-optimized code paths on RISC-V. Why does this work?
+
+RISC-V vector extensions (the _v_ in rv64imafdcv) provide SIMD capabilities architecturally similar to ARM NEON. The compiler can map ARM intrinsics to RISC-V vector instructions, allowing code written for aarch64 to function correctly on RISC-V. This is architectural portability at its finest - well-designed abstractions enable cross-platform optimization.
+
+Another interesting choice: `GGML_BLAS=OFF`. We're not using an external BLAS (Basic Linear Algebra Subprograms) library. Why not?
+
+Possible reasons:
+
+. No optimized BLAS library readily available for RISC-V
+. llama.cpp's built-in GGML operations sufficient for performance
+. Reducing dependencies simplifies the build and deployment
+. RISC-V numerical library ecosystem not yet mature
+
+I call this "strategic simplicity" - minimizing moving parts to ensure stability. When blazing new trails on emerging architectures, fewer dependencies mean fewer things that can break.
+
+[quote]
+____
+⚠️ _Warning_: The `GGML_CPU_AARCH64=ON` configuration works on RISC-V processors with vector extensions. If your RISC-V system lacks the _v_ extension, you'll need different settings and should expect significantly slower performance.
+____
+
+=== Validation: Does It Actually Work?
+
+Build success doesn't mean functionality. Let's test:
+
+[source,bash]
+----
+$ ./build/bin/llama-cli --version
+llama-cli version b8595b16
+
+$ ./build/bin/llama-bench --help
+usage: llama-bench [options]
+...
+
+----
+
+It runs. The binaries execute without errors, help text displays correctly, and we can move forward. Small victories matter when working with new architectures.
+
+== Journey Part 2: Deploying Ollama
+
+llama.cpp proved that RISC-V could run LLM inference engines. But llama.cpp is developer-focused - you manage GGUF files manually, pass command-line arguments for every option, and handle model lifecycle yourself.
+
+For actual usability, I wanted Ollama. Ollama wraps llama.cpp in a friendly interface with automatic model downloading, versioning, and an OpenAI-compatible HTTP API. It's the difference between `git` and GitHub Desktop - same power, much better UX.
+
+=== The First Build Attempt: A Lesson in Memory
+
+Ollama is written in Go and wraps llama.cpp for the actual inference. My first build attempt used the same parallelism strategy that worked for llama.cpp:
+
+[source,bash]
+----
+cd ~/
+git clone https://github.com/ollama/ollama.git
+cd ollama
+
+== Try building with all cores
+make -j 64
+
+----
+
+This failed. Not with compiler errors, but with the system grinding to a halt. Memory usage spiked, swap thrashed, and the build eventually died.
+
+_What went wrong?_
+
+The Go compiler has fundamentally different memory characteristics than C/C++ compilers:
+
+[cols="1,1,1", options="header"]
+|===
+| Aspect
+| C/C++ (GCC)
+| Go
+
+| _Compilation model_
+| Per-file, independent
+| Whole-program optimization
+
+| _Memory per job_
+| ~500MB-1GB
+| ~2-4GB
+
+| _64 parallel jobs_
+| ~32-64GB (fits in 125GB)
+| ~128-256GB (exceeds capacity)
+
+|===
+
+The math was simple: Go's compiler maintains large in-memory representations during compilation. With 64 parallel jobs, we'd need 128-256GB of memory. Our system has 125GB. Recipe for disaster.
+
+=== The Solution: Language-Specific Build Strategies
+
+The fix was equally simple:
+
+[source,bash]
+----
+== Reduce parallelism for Go's memory requirements
+make -j 5
+
+----
+
+With only 5 parallel jobs (~10-20GB memory), the build completed successfully:
+
+[source,bash]
+----
+$ ls -lh ollama
+-rwxr-xr-x. 1 user user 27M Jan 28 11:45 ollama
+
+$ ./ollama --version
+ollama version is 0.5.7-6-g2ef3c80
+
+----
+
+_Key lesson_: On high-core-count systems, build parallelism isn't just `$(nproc)`. It depends on the language implementation:
+
+* _C/C++ projects_: `-j $(nproc)` usually works
+* _Go projects_: `-j $(( $(nproc) / 10 ))` or less to limit memory
+* _Rust projects_: Somewhere in between (depends on project size)
+
+This is especially relevant for RISC-V systems, which often have higher core counts to compensate for lower single-threaded performance.
+
+[quote]
+____
+💡 _Tip_: If you're building Go projects on high-core-count machines, start with low parallelism and increase gradually while monitoring memory usage. The fastest build is the one that completes without thrashing.
+____
+
+=== Architecture Comparison: llama.cpp vs Ollama
+
+Now that we have both systems built, let's compare their trade-offs:
+
+[cols="1,1,1", options="header"]
+|===
+| Dimension
+| llama.cpp
+| Ollama
+
+| _Implementation_
+| C/C++ (performance-first)
+| Go (productivity-first) wrapping llama.cpp
+
+| _Distribution_
+| 30+ specialized binaries
+| Single unified binary (27MB)
+
+| _Model management_
+| Manual GGUF file handling
+| Automatic download and versioning
+
+| _API_
+| Low-level C API + CLI tools
+| HTTP API (OpenAI-compatible)
+
+| _Build complexity_
+| CMake, multiple targets
+| Makefile, single target (but higher memory)
+
+| _Best for_
+| Custom integration, embedded systems, maximum control
+| Rapid prototyping, user-friendly deployment, API services
+
+|===
+
+For this deployment, I wanted both: llama.cpp for understanding the low-level mechanics, and Ollama for actually using the models day-to-day.
+
+== The 70B Milestone: Pushing the Limits
+
+With both llama.cpp and Ollama successfully built, it was time to deploy actual models. I started small to validate the setup, then went big to prove the concept.
+
+=== Warmup: llama3.2 Deployment
+
+First, a sanity check with a smaller model:
+
+[source,bash]
+----
+$ ./ollama pull llama3.2
+pulling manifest
+pulling dde5aa3fc5ffc... 100% ▕████████████████▏ 1.9 GB
+pulling 966de95ca8a6... 100% ▕████████████████▏ 1.4 KB
+pulling fcc5a6bec9da... 100% ▕████████████████▏ 7.7 KB
+pulling a70ff7e570d9... 100% ▕████████████████▏ 6.0 KB
+pulling 56bb8bd477a5... 100% ▕████████████████▏  96 B
+pulling 34bb5ab01051... 100% ▕████████████████▏ 561 B
+success
+
+$ ./ollama run llama3.2
+>>> Hello! How are you?
+Hello! I'm doing well, thank you for asking. I'm a large language model,
+so I don't have feelings like humans do, but I'm functioning properly and
+ready to help with any questions or tasks you might have. How can I assist
+you today?
+
+----
+
+Success! A 2GB model downloads, loads, and responds correctly. The system works.
+
+=== The Big One: deepseek-r1:70b
+
+Now for the real test. DeepSeek-R1 is a 70-billion parameter model - one of the largest open-source language models available. The download alone is 40GB:
+
+[source,bash]
+----
+$ ./ollama pull deepseek-r1:70b
+pulling manifest
+pulling 4cd576ddf4bc... 100% ▕████████████████▏ 40 GB   # The model itself
+pulling 31ec11a09e5c... 100% ▕████████████████▏ 1.3 KB  # Template
+pulling 2be0dde01a1e... 100% ▕████████████████▏ 11 KB   # License
+pulling 2434009efafa... 100% ▕████████████████▏ 1.6 KB  # Parameters
+pulling 0f3aa73e5463... 100% ▕████████████████▏  491 B  # Metadata
+success
+
+----
+
+The download completed. Total size: 42.5GB, comfortably within our 820GB available storage. But could it actually run?
+
+[source,bash]
+----
+$ ./ollama run deepseek-r1:70b
+>>> Explain RISC-V vector extensions in technical terms.
+
+<think>
+The user wants a technical explanation of RISC-V vector extensions. I should
+cover the key aspects: SIMD capabilities, variable-length vectors, register
+organization, and how they compare to other architectures...
+</think>
+
+RISC-V vector extensions (RVV) provide scalable SIMD processing capabilities
+through a variable-length vector architecture. Unlike fixed-width SIMD in x86
+(AVX-512) or ARM (NEON), RVV uses the VLEN (vector length) parameter which can
+be implementation-defined from 128 bits to effectively unlimited.
+
+The extension introduces 32 vector registers (v0-v31) with configurable
+effective length through the vtype CSR (control and status register). This
+allows the same code to run efficiently on different hardware implementations...
+
+[continues with detailed technical explanation]
+
+----
+
+_It works._
+
+A 70-billion parameter language model is running on a RISC-V CPU. No GPU. No CUDA. No specialized AI accelerators. Just 64 cores, 125GB of RAM, and well-designed software.
+
+=== Why 70B on CPU-Only ACTUALLY Works
+
+Let's break down the technical reality of running a 70B model on CPU:
+
+_Memory Requirements:_
+
+* 70B parameters in FP16: ~140GB (too large)
+* 70B parameters in Q4_0 quantization: ~40GB (fits comfortably)
+* KV cache for inference context: ~10-20GB
+* OS and services overhead: ~3GB
+* _Total_: ~53-63GB out of 125GB available
+
+_Performance Trade-offs:_
+
+* _GPU inference (A100)_: 70B @ 20-40 tokens/sec (estimated)
+* _This system_: 70B @ 1-5 tokens/sec (estimated based on hardware)
+* _Latency ratio_: 5-10x slower than high-end GPU
+* _Cost ratio_: $0 GPU cost vs $10,000+ for A100
+
+_The Strategic Win:_
+
+For research, development, experimentation, and batch processing, slower inference is acceptable. We're not serving production API requests at scale - we're exploring what's possible, testing prompts, and validating that RISC-V can handle serious AI workloads.
+
+The 125GB RAM strategy eliminates the GPU memory bottleneck entirely. There's no swapping, no OOM kills, no careful memory management. The entire model fits in RAM with room to spare.
+
+[quote]
+____
+⚠️ _Important_: These performance estimates are theoretical based on hardware capabilities. Actual benchmarking with `llama-bench` would provide quantitative validation, which is planned as future work.
+____
+
+== Challenges Deep-Dive: Lessons from the Trenches
+
+Success stories gloss over the messy parts. Let's talk about what made this challenging and what I learned.
+
+=== Challenge 1: Ecosystem Maturity Gaps
+
+RISC-V isn't x86. The software ecosystem is younger, and it shows in unexpected places.
+
+_What's missing:_
+
+* _Pre-built packages_: Many tools require building from source
+* _Optimized libraries_: No mature BLAS/LAPACK implementations
+* _Container infrastructure_: Docker/containerd need source builds
+* _CI/CD tooling_: Jenkins required manual Java installation
+
+I ended up building Docker's entire stack from source: `runc`, `crun`, `containerd`, `dockerd`, plus dependencies like `libseccomp`. This took hours and involved wrangling multiple Go projects.
+
+Similarly, Jenkins needed Temurin JDK 21 manually installed to `/opt` with profile scripts:
+
+[source,bash]
+----
+sudo tar -xzf temurin.tgz -C /opt
+sudo sh -c 'echo "export JAVA_HOME=/opt/jdk-21.0.5+11" >> /etc/profile.d/jdk21.sh'
+sudo sh -c 'echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> /etc/profile.d/jdk21.sh'
+
+----
+
+_The bright side:_
+
+Not everything requires source builds. Core development tools (GCC, Git, CMake, Go) are packaged in Fedora. The ecosystem is improving rapidly.
+
+_Lesson_: RISC-V is transitioning from "pioneering" to "early mainstream." Application development works well, but infrastructure tooling lags. Budget extra time for DevOps setup.
+
+=== Challenge 2: Memory-Centric Performance Thinking
+
+Without GPU acceleration, performance optimization requires different mental models.
+
+_Traditional GPU-based LLM deployment:_
+
+. Load model into GPU VRAM (limited, expensive)
+. Transfer input over PCIe to GPU
+. Compute on GPU (fast)
+. Transfer output over PCIe to CPU
+. _Bottleneck_: PCIe bandwidth and VRAM capacity
+
+_CPU-only RISC-V deployment:_
+
+. Load model into system RAM (abundant, cheap)
+. Compute on CPU cores (slower per-operation)
+. Data stays in RAM (no transfers)
+. _Bottleneck_: CPU compute throughput and memory bandwidth
+
+This shifts optimization strategies:
+
+* _GPU optimization_: Minimize data transfer, maximize VRAM usage, batch aggressively
+* _CPU optimization_: Maximize core utilization, optimize memory access patterns, leverage caching
+
+Opportunities I haven't fully explored:
+
+* _NUMA awareness_: A 64-core system is likely multi-socket. NUMA-aware memory allocation could improve performance
+* _Memory-mapped models_: Lazy-loading model weights from disk instead of full load
+* _Multi-model sharing_: Load model once, serve multiple concurrent sessions
+
+=== Challenge 3: Build Parallelism Is Language-Dependent
+
+I mentioned this earlier, but it's worth emphasizing: the Go compiler memory issue caught me off-guard.
+
+On x86 systems with 8-16 cores, you rarely hit Go's memory limits. But on a 64-core RISC-V system, suddenly compiler memory characteristics matter enormously.
+
+_Rule of thumb for high-core systems:_
+
+[source,bash]
+----
+== C/C++ projects (low memory per job)
+make -j $(nproc)
+
+== Rust projects (medium memory per job)
+make -j $(( $(nproc) / 2 ))
+
+== Go projects (high memory per job)
+make -j $(( $(nproc) / 10 ))
+
+----
+
+Monitor with `htop` during builds to tune parallelism for your specific system and project.
+
+=== Challenge 4: No GPU Means No GPU Assumptions
+
+Many LLM tools assume GPU availability. Examples:
+
+* Default configurations often set `GGML_CUDA=ON`
+* Documentation emphasizes GPU performance
+* Benchmarking tools test GPU backends first
+
+This isn't a showstopper - it just means reading documentation carefully and understanding which settings are hardware-dependent.
+
+The flip side: CPU-only inference is more portable. No driver version mismatches, no CUDA toolkit version conflicts, no GPU memory management headaches. Just CPU and RAM.
+
+== Reproducible Setup Guide: Your Turn
+
+Want to replicate this on your own RISC-V system? Here's the condensed, step-by-step guide.
+
+=== Prerequisites
+
+_Hardware requirements:_
+
+* RISC-V processor with vector extensions (rv64imafdcv or similar)
+* At least 64GB RAM for 13B models, 125GB+ for 70B models
+* 100GB+ free storage for models
+* Multiple cores recommended (parallelism helps CPU inference)
+
+_Verify hardware capabilities:_
+
+[source,bash]
+----
+== Check for RISC-V vector extensions (must contain 'v')
+cat /proc/cpuinfo | grep isa | head -1
+== Expected output: isa: rv64imafdcv (or similar with 'v')
+
+== Check available RAM
+free -h
+== Need 64GB+ for 13B models, 125GB+ for 70B models
+
+== Check available storage
+df -h /
+== Need 100GB+ free for model storage
+
+----
+
+_Software requirements:_
+
+[source,bash]
+----
+== On Fedora RISC-V - Install dependencies
+sudo dnf install -y \
+    gcc gcc-c++ cmake git ccache \
+    golang make \
+    libstdc++-devel \
+    python3 python3-pip
+
+== Verify compiler versions
+gcc --version | grep "gcc"
+== Expected: gcc (GCC) 13.x or newer
+
+cmake --version | grep "version"
+== Expected: cmake version 3.20 or newer
+
+go version
+== Expected: go version go1.22 or newer
+
+----
+
+[quote]
+____
+💡 _Tip_: If any version check fails, you may need to install a newer version from source or enable additional repositories.
+____
+
+=== Building llama.cpp
+
+[source,bash]
+----
+== Clone repository
+cd ~/
+git clone https://github.com/ggerganov/llama.cpp.git
+cd llama.cpp
+
+== Configure for CPU with vector extensions
+cmake -B build \
+  -DGGML_CPU=ON \
+  -DGGML_CPU_AARCH64=ON \
+  -DGGML_ACCELERATE=ON \
+  -DCMAKE_BUILD_TYPE=Release
+
+== Build with all cores
+cmake --build build --config Release -j $(nproc)
+
+== Test
+./build/bin/llama-cli --version
+
+----
+
+_Expected output:_
+
+----
+llama-cli version [commit-hash]
+
+----
+
+==== Troubleshooting Common Build Errors
+
+If the llama.cpp build fails, here are the most common issues and solutions:
+
+_Error: `illegal instruction` or `SIGILL` when running llama-cli:_
+
+----
+./build/bin/llama-cli --version
+Illegal instruction (core dumped)
+
+----
+
+_Cause:_ Your RISC-V processor lacks vector extensions (v) in its ISA.
+
+_Solution:_ Verify your ISA with `cat /proc/cpuinfo | grep isa`. If vector extensions are missing, you cannot run this build. Consider using a system with rv64imafdcv or similar ISA.
+
+---
+
+_Error: `cannot find -lstdc++` during linking:_
+
+----
+/usr/bin/ld: cannot find -lstdc++: No such file or directory
+
+----
+
+_Cause:_ Missing C++ standard library development headers.
+
+_Solution:_
+
+[source,bash]
+----
+sudo dnf install libstdc++-devel
+
+----
+
+---
+
+_Build hangs or system becomes unresponsive:_
+
+_Cause:_ Using too much parallelism (too many `-j` jobs) for available RAM. Each compilation job requires memory, and 64 parallel C++ compilations can exhaust RAM on systems with less memory.
+
+_Solution:_ Reduce parallelism:
+
+[source,bash]
+----
+== Instead of -j $(nproc), use a lower value
+cmake --build build --config Release -j 16
+
+== Or for systems with limited RAM
+cmake --build build --config Release -j 8
+
+----
+
+---
+
+_Error: `ggml.h: No such file or directory`:_
+
+_Cause:_ Build directory not properly initialized or git submodules not updated.
+
+_Solution:_
+
+[source,bash]
+----
+== Clean and reconfigure
+rm -rf build
+git submodule update --init --recursive
+cmake -B build -DGGML_CPU=ON -DGGML_CPU_AARCH64=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j $(nproc)
+
+----
+
+---
+
+_Build succeeds but executables are missing:_
+
+_Cause:_ Build completed but check wrong location.
+
+_Solution:_ Executables are in `build/bin/`, not in the root directory:
+
+[source,bash]
+----
+ls -lh build/bin/llama-cli
+./build/bin/llama-cli --version
+
+----
+
+=== Building Ollama
+
+[source,bash]
+----
+== Clone repository
+cd ~/
+git clone https://github.com/ollama/ollama.git
+cd ollama
+
+== Build with REDUCED parallelism for Go's memory needs
+make -j 5
+
+== Test
+./ollama --version
+
+----
+
+[quote]
+____
+⚠️ _Warning_: Do NOT use `-j $(nproc)` for Ollama builds on high-core-count systems. The Go compiler requires significantly more memory per parallel job than C/C++. Start with `-j 5` and increase cautiously while monitoring memory usage.
+____
+
+_Expected output:_
+
+----
+ollama version is [version]
+
+----
+
+=== Deploying Models
+
+[source,bash]
+----
+== Start with a small model for validation
+./ollama pull llama3.2
+./ollama run llama3.2
+>>> Hello, world!
+
+== For larger models, ensure you have enough RAM and storage
+./ollama pull deepseek-r1:70b  # Downloads ~40GB
+./ollama run deepseek-r1:70b
+>>> Tell me about RISC-V architecture
+
+----
+
+=== Troubleshooting
+
+_Build fails with "illegal instruction":_
+
+Check if your RISC-V processor has vector extensions:
+
+[source,bash]
+----
+cat /proc/cpuinfo | grep isa
+
+----
+
+Look for the `v` extension in the ISA string.
+
+_Out of memory during Ollama build:_
+
+Reduce parallelism further:
+
+[source,bash]
+----
+make -j 2  # Or even -j 1 for very constrained systems
+
+----
+
+_Model fails to load:_
+
+Check available memory:
+
+[source,bash]
+----
+free -h
+
+----
+
+For 70B models, you need 60GB+ free RAM.
+
+== Lessons Learned & Future Directions
+
+After deploying LLMs on RISC-V, here's what stands out:
+
+=== What Worked Exceptionally Well
+
+_1. Architectural Portability_
+
+llama.cpp's design philosophy paid off: write portable code, use cross-platform abstractions, let compilers handle architecture specifics. The result: RISC-V support without RISC-V-specific patches.
+
+This is a lesson for all software projects. Portable code isn't just about supporting more platforms - it's about being ready when new platforms emerge.
+
+_2. Memory-First Hardware Strategy_
+
+Abundant RAM compensates for lack of GPU acceleration effectively. For non-production workloads (research, development, experimentation), CPU-only inference with generous memory is viable.
+
+_3. RISC-V Ecosystem Maturation_
+
+Core development tools work correctly. GCC, CMake, Go all function as expected. The fundamental toolchain is solid.
+
+=== What Surprised Us
+
+_1. Go Compiler Memory Behavior_
+
+I didn't expect language choice to affect optimal build parallelism so dramatically. This isn't documented in most build guides because it rarely matters on typical systems.
+
+_2. Vector Extension Compatibility_
+
+The fact that ARM NEON code paths work on RISC-V vector extensions speaks to good architectural design on both sides. Cross-ISA optimization portability is underappreciated.
+
+_3. Infrastructure Tooling Gaps_
+
+Applications build easily, but infrastructure (Docker, Jenkins) requires more effort. The ecosystem is maturing unevenly.
+
+=== What's Next
+
+_Near-term improvements:_
+
+* _Quantitative benchmarking_: Run `llama-bench` to measure actual tokens/sec
+* _NUMA optimization_: Investigate multi-socket memory topology
+* _Quantization comparison_: Test Q4_0 vs Q8_0 vs FP16 performance/quality trade-offs
+* _Multi-model serving_: Explore memory sharing between models
+
+_Long-term possibilities:_
+
+* _RISC-V GPU support_: When RISC-V GPUs emerge, combine CPU + GPU inference
+* _Custom accelerators_: RISC-V's extensibility allows domain-specific instructions
+* _Production deployment_: Scale from proof-of-concept to production API services
+* _Community benchmarking_: Establish standard RISC-V LLM benchmarks
+
+=== The Broader Picture
+
+This deployment proves that RISC-V is ready for serious AI workloads today. Not "someday when the ecosystem matures," but right now. You can build state-of-the-art LLM software, deploy multi-billion parameter models, and run meaningful inference workloads.
+
+The trade-offs are real - slower inference, ecosystem gaps, infrastructure complexity - but they're manageable trade-offs, not fundamental blockers.
+
+As AI becomes increasingly central to computing, the open-source nature of RISC-V becomes increasingly valuable. No licensing fees, no vendor lock-in, complete transparency in processor design. That matters for democratizing AI.
+
+== Conclusion: RISC-V Is Ready
+
+When I started this project, I wondered if running a 70B LLM on RISC-V was merely possible or actually practical. The answer: both.
+
+_It's possible_ because the software ecosystem (llama.cpp, Ollama, GGML) is well-designed and portable. Because RISC-V vector extensions provide necessary SIMD capabilities. Because modern compilers abstract architecture differences effectively.
+
+_It's practical_ because build processes are straightforward, documentation exists, and tools work. Because you can replicate this setup in an afternoon. Because the performance, while slower than GPU, is adequate for real work.
+
+The 64-core MilkV Pioneer with 125GB RAM isn't the only way to run LLMs on RISC-V - it's just the way I chose to prove it's viable. Smaller systems can run smaller models. Future systems with GPU acceleration will be faster. But today, with CPU-only hardware, you can deploy and use state-of-the-art language models on open-source processor architecture.
+
+If you're working with RISC-V, experimenting with LLMs, or interested in AI on alternative architectures, this is your roadmap. The hardware exists, the software works, and the ecosystem is improving rapidly.
+
+_Now go build something._
+
+== Further Resources
+
+_Hardware:_
+
+* MilkV Pioneer: link:https://milkv.io/pioneer[https://milkv.io/pioneer]
+* RISC-V International: link:https://riscv.org/[https://riscv.org/]
+
+_Software:_
+
+* llama.cpp: link:https://github.com/ggerganov/llama.cpp[https://github.com/ggerganov/llama.cpp]
+* Ollama: link:https://github.com/ollama/ollama[https://github.com/ollama/ollama]
+* GGML tensor library: link:https://github.com/ggerganov/ggml[https://github.com/ggerganov/ggml]
+
+_Models:_
+
+* Ollama model library: link:https://ollama.com/library[https://ollama.com/library]
+* Hugging Face GGUF models: link:https://huggingface.co/models?library=gguf[https://huggingface.co/models?library=gguf]
+
+_Community:_
+
+* RISC-V Software Forum: link:https://groups.google.com/a/groups.riscv.org/g/sw-dev[https://groups.google.com/a/groups.riscv.org/g/sw-dev]
+* llama.cpp Discussions: link:https://github.com/ggerganov/llama.cpp/discussions[https://github.com/ggerganov/llama.cpp/discussions]
+* Ollama Discord: link:https://discord.gg/ollama[https://discord.gg/ollama]
+
+---
+
+_Questions, feedback, or your own RISC-V LLM deployment stories? I'd love to hear about them. The RISC-V AI ecosystem grows through shared knowledge and experimentation._

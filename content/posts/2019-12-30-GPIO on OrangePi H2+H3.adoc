@@ -1,0 +1,202 @@
+---
+author: Poddingue
+categories:
+- H3
+- GPIO
+- OrangePi
+- Armbian
+description: How to use the GPIO on the OrangePi Zero running Armbian
+draft: true
+featured: true
+hidden: false
+image: assets/images/2019/12/30/Screenshot_2020-01-05_GPIO_and_Armbian_for_OrangePi_Zero_.png
+tags:
+- H3
+- GPIO
+- OrangePi
+- Armbian
+title: How to use the GPIO on the OrangePi Zero running Armbian
+---
+
+== How to see it's still alive (UART)
+
+https://sbc-community.org/OrangePi%20Zero/#serial-console 
+
+
+
+GPIO on OrangePi H2+/H3
+
+http://codelectron.com/how-to-setup-oled-display-with-orange-pi-zero-python-ssd1306/
+
+[source,bash]
+----
+export http_proxy=http://ip:port
+export https_proxy=http://ip:port
+
+git config --global http.proxy http://ip:port
+git clone --depth 1 https://github.com/sgjava/userspaceio.git
+cd userspaceio
+./install.sh
+
+----
+
+gpio:
+
+[source,bash]
+----
+git clone https://github.com/zhaolei/WiringOP.git -b h3
+cd WiringOP/
+sudo bash build
+gpio readall
+
+
+root@orangepizero:~# sudo apt-get install i2c-tools
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+The following additional packages will be installed:
+  libi2c0
+Suggested packages:
+  libi2c-dev python-smbus
+Recommended packages:
+  read-edid
+The following NEW packages will be installed:
+  i2c-tools libi2c0
+0 upgraded, 2 newly installed, 0 to remove and 0 not upgraded.
+Need to get 82.1 kB of archives.
+After this operation, 279 kB of additional disk space will be used.
+Do you want to continue? [Y/n]
+Get:1 http://httpredir.debian.org/debian buster/main armhf libi2c0 armhf 4.1-1 [9,320 B]
+Get:2 http://httpredir.debian.org/debian buster/main armhf i2c-tools armhf 4.1-1 [72.8 kB]
+Fetched 82.1 kB in 0s (463 kB/s)
+Selecting previously unselected package libi2c0:armhf.
+(Reading database ... 60099 files and directories currently installed.)
+Preparing to unpack .../libi2c0_4.1-1_armhf.deb ...
+Unpacking libi2c0:armhf (4.1-1) ...
+Selecting previously unselected package i2c-tools.
+Preparing to unpack .../i2c-tools_4.1-1_armhf.deb ...
+Unpacking i2c-tools (4.1-1) ...
+Setting up libi2c0:armhf (4.1-1) ...
+Setting up i2c-tools (4.1-1) ...
+Processing triggers for man-db (2.8.5-2) ...
+Processing triggers for libc-bin (2.28-10) ...
+root@orangepizero:~# sudo i2cdetect -y 0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- 3c -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- --
+root@orangepizero:~#
+sudo apt-get install -y libfreetype6-dev libjpeg-dev libpng-dev libportmidi-dev libsdl-dev libsdl-image1.2-dev libsdl-mixer1.2-dev libsdl-ttf2.0-dev python3-setuptools virtualenv zlib1g-dev
+virtualenv oledenv
+
+----
+
+[source,bash]
+----
+source oledenv/bin/activate
+pip3 install wheel
+cd
+git clone https://github.com/codelectron/ssd1306/
+cd ssd1306
+python setup.py install
+pip3 install Pillow
+pip3 install smbus2
+pip3 install psutil
+apt-get install -y
+libavformat-dev libavcodec-dev libavdevice-dev
+libavutil-dev libswscale-dev libavresample-dev libavfilter-dev
+pip3 install av
+
+----
+
+pour plus d'exemples:
+
+[source,bash]
+----
+git clone https://github.com/rm-hull/luma.examples.git
+cd ~/luma.examples/
+pip3 install -e .
+cd examples
+python3 3d_box.py --i2c-port 0 --height 32
+
+----
+
+as for the video:
+
+[source,bash]
+----
+sudo apt install libavdevice-dev libavfilter-dev
+pip3 install av
+python3 examples/video.py --i2c-port 0 --height 32
+
+----
+
+for the bitstamp realtime:
+
+[source,bash]
+----
+pip3 install pusherclient
+python3 examples/bitstamp_realtime.py --i2c-port 0 --height 32
+
+----
+
+for the weather
+
+[source,bash]
+----
+pip3 install feedparser
+python3 examples/weather.py --i2c-port 0 --height 32 --rotate 0
+
+----
+
+
+
+== IR
+
+http://linux-sunxi.org/IR_Controller_Register_Guide
+
+http://linux-sunxi.org/LIRC
+
+http://linux-sunxi.org/IR
+
+https://forum.armbian.com/topic/1953-configuring-orange-pi-pc-to-receive-irinfrared/
+
+https://forum.armbian.com/topic/12587-orangepi-zero-and-infrared/
+
+http://www.orangepi.org/orangepibbsen/forum.php?mod=viewthread&tid=1850
+
+
+
+== PWM
+
+
+
+poddingue@orangepizero-ups:~/userspaceio/pwmio/python/src$ while true
+[quote]
+____
+do sudo python3 ledflash.py --device 0 --pwm 0
+done
+____
+
+
+
+== 1-Wire
+
+[source,bash]
+----
+param_w1_pin=PA10
+
+----
+
+dans /boot/armbianEnv.txt.
+Pour le link:https://forum.armbian.com/topic/8095-orangepi-zero-not-working-with-1-wire/?do=findComment&comment=99913[montage], c'est avec une résistance 4.7kOhm.
+
+
+
+sudo armbianmonitor -r
+

@@ -1,0 +1,160 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+description: How to compile and install sphinxbase on the OrangePi 4B running Armbian
+  ?
+featured: true
+hidden: false
+image: assets/images/mintty_7BHuf1Bm0d.png
+tags:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+title: 'Sphinx: Installing sphinxbase on the OrangePi 4B'
+---
+
+This post will be part of a series regarding generating subtitles for videos with the link:http://www.orangepi.org/Orange%20Pi%204B/[OrangePi 4B] running link:https://www.armbian.com/orange-pi-4/[Armbian].
+We're not yet sure of what we'll use to generate those subtitles, so for the time being, we'll use link:https://cmusphinx.github.io/wiki/tutorialadapt/[Sphinx], and in the following months, we'll try to setup something that will take advantage of the link:https://drive.google.com/drive/folders/1QMU5n-7fCx28cQPH_lu2L0wrFWeC3G45[NPU].
+
+Today, we'll install SphinxBase.
+
+[source,bash]
+----
+git clone https://github.com/cmusphinx/sphinxbase.git
+cd sphinxbase/
+./autogen.sh
+
+----
+
+Unfortunately we get:
+
+[source,bash]
+----
+_Error_: You must have `libtool' installed.
+Get ftp://ftp.gnu.org/pub/gnu/libtool/libtool-2.2.6b.tar.gz
+(or a newer version if it is available)
+
+----
+
+Ok, my bad:
+
+[source,bash]
+----
+sudo apt install libtool
+
+----
+
+Let's give it another try:
+
+[source,bash]
+----
+./autogen.sh
+[...]
+configure: error: in `/home/poddingue/sphinxbase':
+configure: error:
+  Could not link test program to Python. Maybe the main Python library has been
+  installed in some non-standard library path. If so, pass it to configure,
+  via the LDFLAGS environment variable.
+  Example: ./configure LDFLAGS="-L/usr/non-standard-path/python/lib"
+  ============================================================================
+   ERROR!
+   You probably have to install the development version of the Python package
+   for your distribution.  The exact name of this package varies among them.
+  ============================================================================
+
+See `config.log' for more details
+
+
+----
+
+I see. I may have forgotten to install Python-dev...
+
+[source,bash]
+----
+sudo apt install python3-dev
+[...]
+./autogen.sh
+[...]
+configure: error: in `/home/poddingue/sphinxbase':
+configure: error:
+  Could not link test program to Python. Maybe the main Python library has been
+  installed in some non-standard library path. If so, pass it to configure,
+  via the LDFLAGS environment variable.
+  Example: ./configure LDFLAGS="-L/usr/non-standard-path/python/lib"
+  ============================================================================
+   ERROR!
+   You probably have to install the development version of the Python package
+   for your distribution.  The exact name of this package varies among them.
+  ============================================================================
+
+
+----
+
+How come? Are you still working with Python 2.x? Naaaah... Ok, you never know, let's try it this way:
+
+[source,bash]
+----
+sudo apt install python-dev
+
+----
+
+Yes, that was it.
+Now, let's tackle this error:
+
+[source,bash]
+----
+checking python extra linking flags... -Xlinker -export-dynamic -Wl,-O1 -Wl,-Bsymbolic-functions
+checking consistency of all components of python development environment... yes
+checking for swig... no
+checking for swig2.0... no
+configure: error: swig not found
+
+----
+
+This should be solved by
+
+[source,bash]
+----
+sudo apt install swig
+./autogen.sh
+[...]
+config.status: executing libtool commands
+Now type `make' to compile the package.
+
+----
+
+Bingo! Time for a good old
+
+[source,bash]
+----
+make -j6
+make check
+[...]
+Testsuite summary for sphinxbase 5prealpha
+============================================================================
+== TOTAL: 10
+== PASS:  10
+== SKIP:  0
+== XFAIL: 0
+== FAIL:  0
+== XPASS: 0
+== ERROR: 0
+============================================================================
+
+----
+
+All went fine.
+Let's install it then:
+
+[source,bash]
+----
+ sudo -E make install
+
+----
+
+Done. Next step, install Pocket Sphinx.

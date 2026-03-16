@@ -1,0 +1,350 @@
+---
+author: Bruno Verachten
+categories:
+- Jenkins
+- Android
+- iOS
+date: 2026-02-09 12:00:00 +0100
+description: 'Can iOS replicate the Termux/Jenkins automation setup from Android?
+  Spoiler: it cannot. An investigation into iSH, UTM, jailbreaking, and why Apple''s
+  locked-down platform loses to a 30-dollar Android phone for server workloads.'
+excerpt: 'I was giving my talk about running Jenkins on old Android phones with Termux
+  when someone asked: ''What about iOS?'' I didn''t have a good answer, so I went
+  down the rabbit hole. Here''s what I found.'
+featured: false
+hidden: false
+image: assets/images/2026/02/09/ios-equivalent-investigation-header.jpg
+tags:
+- jenkins
+- android
+- ios
+- termux
+- ish
+- utm
+- ci-cd
+- mobile-devops
+- apple
+- jailbreaking
+- openjdk
+- sustainable-it
+title: What About iOS? Or, How a 30-Dollar Android Phone Embarrasses a 1000-Dollar
+  iPad
+toc: true
+---
+
+image::{{ site.baseurl }}/assets/images/2026/02/09/ios-equivalent-investigation-header.jpg[Header image]
+
+_Photo by link:https://unsplash.com/@holmo[Holmo] on link:https://unsplash.com/photos/96w-2ZgEzG0[Unsplash]_
+
+I was giving my talk at a conference (the one about running Jenkins on old Android phones with Termux) and the demo had gone well. Jenkins was running, the agent was connected, builds were passing. I was feeling pretty good about the whole thing.
+
+Then someone in the audience raised their hand.
+
+"This is cool, but... what about iOS? Can you do the same thing on an iPhone?"
+
+I paused. I actually didn't know. I mean, I _assumed_ iOS would be harder. Apple locks things down way more than Android. But I'd never actually investigated the question properly. I gave a vague answer about Apple's sandbox restrictions and moved on, but the question kept nagging at me.
+
+So I did what any self-respecting tinkerer would do: I went down the rabbit hole.
+
+== TL;DR
+
+[quote]
+____
+_No, you cannot run Jenkins on iOS._ The closest thing to Termux on iOS is link:https://ish.app[iSH] (Alpine Linux via x86 emulation), but Java is fundamentally broken on it. The only theoretically viable path involves running a full Linux VM on a 1000-dollar iPad Pro, and nobody has ever documented actually doing it. A 30-dollar used Android phone does natively what a 1000-dollar iPad can barely do in a virtual machine.
+
+If you're at a conference and someone asks "What about iOS?", that's your answer.
+____
+
+Now, if you want to know _how_ I arrived at that conclusion, and all the dead ends I explored along the way... read on.
+
+== The Investigation: Let's Start With iSH
+
+First, I needed to find the iOS equivalent of Termux. After some digging, the answer was clear: link:https://apps.apple.com/us/app/ish-shell/id1436902243[iSH Shell].
+
+iSH is an impressive project. 19.2k stars on link:https://github.com/ish-app/ish[GitHub], actively maintained, and it runs Alpine Linux on your iPhone or iPad via usermode x86 emulation. It gives you a real shell, a real package manager (`apk` with 14,000+ packages), and you can install stuff like Git, Python, Node.js, GCC, vim, curl...
+
+Nice! This sounds promising!
+
+Let's check the important boxes for running Jenkins:
+
+* Shell environment? _Yes._ Bash, zsh, the works.
+* Package manager? _Yes._ Alpine's `apk`, fully functional.
+* SSH server? _Yes._ You can accept incoming connections (link:https://github.com/ish-app/ish/wiki/Running-an-SSH-server[wiki]).
+* Git? _Yes._
+* Python? _Yes._
+
+So far so good. Now the big one:
+
+* Java/OpenJDK? ...
+
+Let me check.
+
+== The Java Wall
+
+This is where everything falls apart.
+
+I found link:https://github.com/ish-app/ish/issues/306[issue #306] on the iSH repository. Then link:https://github.com/ish-app/ish/issues/1560[issue #1560], helpfully titled "Java is very broken." Then link:https://github.com/ish-app/ish/issues/2589[issue #2589]. The picture was grim.
+
+Here's what happens when you try to run Java on iSH:
+
+* _JDK 7_: Barely works. You need manual heap flags (`java -mx256m`). Functional but ancient. Jenkins dropped JDK 7 support years ago.
+* _JDK 8+_: Crashes immediately with "Too small initial heap." Can't start.
+* _JDK 11+_: Completely non-functional. Dead on arrival.
+* _JDK 21_ (what Jenkins needs today): Forget about it.
+
+Damn!
+
+The root causes are architectural, not just bugs that'll get fixed someday:
+
+. _Missing SSE instruction support_ in iSH's x86 emulator. Modern JVMs assume SSE instructions exist.
+. _Missing shared futex support_. The JVM's threading model depends on these.
+. _32-bit only_ (i386). iSH emulates an old x86 processor, not x86_64.
+
+And the big one: _Apple's W^X memory policy forbids JIT compilation_. The JVM _needs_ JIT to function at any reasonable performance level. Without it, you're running through an interpreter inside an emulator. Even if it worked, it would be comically slow.
+
+Of course... I should have seen this coming. Jenkins is a Java application. No Java, no Jenkins. Investigation over?
+
+Not quite. Let me check a few more things.
+
+== The JIT Saga: Apple Says No
+
+Here's a detail I found fascinating and infuriating in equal measure.
+
+The iSH developers actually tried to get JIT access through the EU's Digital Markets Act (DMA). In July 2025, they filed an interoperability request with Apple, arguing that JIT compilation is essential for their app to function properly.
+
+Apple denied it in 2025, classifying iSH as ineligible.
+
+There's a link:https://ish.app/blog/ish-jit-and-eu[blog post about it] if you want to read the details. The short version: Apple controls the platform, Apple says no JIT for third-party apps, and the EU regulations weren't enough to change that.
+
+Compare this with Android: Termux runs native ARM64 binaries. No emulation layer. No JIT restrictions. `pkg install openjdk-21` and you're done. The JVM runs at full native speed.
+
+You know what? Let's keep investigating. Maybe there's another way.
+
+== What About a Full VM?
+
+link:https://getutm.app[UTM] is a QEMU-based virtual machine app that can run full Linux distributions on iOS. Two versions exist:
+
+* _UTM SE_ (free, App Store): No JIT. x86 emulation at roughly 2-5% of native speed. Jenkins would be... let's say "meditative." Actually, unusable.
+* _UTM with JIT_ (sideloaded or via EU AltStore): ARM64 Linux VMs running at 80-95% native speed on M-series iPads.
+
+The JIT version is interesting! On a 16GB iPad Pro with an M-series chip, you could theoretically run an ARM64 Ubuntu VM with enough RAM for Jenkins.
+
+Here's the problem:
+
+[cols="1,1,1", options="header"]
+|===
+| iPad Model
+| Total RAM
+| Practical VM Allocation
+
+| iPad Air M1 (8GB)
+| 8 GB
+| 2-3.5 GB
+
+| iPad Pro M1/M2 (16GB)
+| 16 GB
+| 6-10 GB
+
+| iPad Pro M4 (16GB)
+| 16 GB
+| 8-12 GB
+
+|===
+
+Jenkins needs roughly 1.5-2GB minimum (512MB heap plus the OS overhead). So you'd need at least an iPad Pro to even attempt this. And there's a fun detail: hardware-accelerated VMs on UTM have double RAM overhead due to JIT mirror mapping. ¯\\\_(ツ)\_/¯
+
+And the background execution story is rough. iOS aggressively kills background apps. There's some hope with iPadOS 26's `BGContinuedProcessingTask` API (link:https://developer.apple.com/videos/play/wwdc2025/227/[WWDC 2025 session]), and there's an link:https://github.com/utmapp/UTM/issues/7220[open UTM issue tracking this], but as of early 2026, a VM-based Jenkins would die every time you switch to Safari.
+
+_The kicker: nobody has documented actually running Jenkins this way._ Not a blog post, not a forum thread, not even a tweet. Zero evidence of anyone successfully doing it. I looked hard.
+
+So the "best" iOS path to Jenkins requires a 1000-dollar iPad Pro, sideloading or EU DMA provisions for JIT access, a full Linux VM with careful RAM management, and... hope.
+
+== The Dead-End Parade
+
+For completeness, I checked everything else I could find. Let me save you the trouble:
+
+[cols="1,1,1,1,1", options="header"]
+|===
+| Approach
+| Java?
+| SSH Server?
+| Background?
+| Verdict
+
+| link:https://github.com/holzschu/a-shell[a-Shell]
+| No
+| No
+| No
+| Cool WebAssembly environment, but not a server
+
+| link:https://apps.apple.com/us/app/blink-shell-build-code/id1594898306[Blink Shell]
+| No
+| No
+| No
+| SSH _client_. Great for connecting TO Jenkins, not running it
+
+| link:https://github.com/emkey1/AOK-Filesystem-Tools[iSH-AOK] (fork)
+| No
+| Yes
+| No
+| Same x86 emulation engine as iSH. Same Java problems. Dormant since June 2024
+
+| iOS Shortcuts
+| No
+| No
+| No
+| Can trigger Jenkins builds via REST API, but that's about it
+
+| Play.js
+| No
+| No
+| No
+| JavaScript IDE
+
+| Pythonista 3
+| No
+| No
+| No
+| Python IDE
+
+| Docker on iOS
+| No
+| No
+| No
+| Would require Linux kernel features that iOS's XNU kernel doesn't have
+
+|===
+
+Every. Single. One. A dead end for running Jenkins.
+
+== "But What About Jailbreaking?"
+
+Sure, let's go there. Jailbreaking could theoretically give you `launchd` daemon persistence, a real SSH server on port 22, and Linux chroot environments.
+
+But here's the state of jailbreaking in early 2026:
+
+[cols="1,1,1,1", options="header"]
+|===
+| Tool
+| iOS Support
+| Devices
+| Status
+
+| link:https://palera.in/[Palera1n]
+| iOS 15.0-18.7.4
+| A8-A11 only (iPhone 6s through X)
+| Active but ancient hardware only
+
+| Dopamine
+| iOS 15.0-16.6.1
+| A12+
+| Stalled. No iOS 17+
+
+| TrollStore
+| iOS 15.5-17.0
+| All
+| Apple patched the vulnerability in iOS 17.0.1
+
+|===
+
+No jailbreak exists for iPhone 12 or newer on iOS 17.1+. Jailbreaking is effectively dead for modern hardware. And even if you _could_ jailbreak, there's no official OpenJDK package. You'd need to manually compile it.
+
+So that's not a realistic answer either.
+
+Before we wrap up the investigation, there's one more recent development worth mentioning.
+
+== A Glimmer of Hope: OpenJDK Mobile
+
+The link:https://openjdk.org/projects/mobile/[OpenJDK Mobile project] has made progress. link:https://www.infoq.com/news/2025/11/java-on-ios/[InfoQ reported in November 2025] that OpenJDK can build and run on iOS using the Zero interpreter (pure C++, no JIT) enhanced with AOT-compiled methods from Project Leyden. link:https://gluonhq.com/bringing-openjdk-to-mobile-a-community-effort/[Gluon] has built automated build pipelines.
+
+Interesting! But (and this is a big but) it's designed for embedding Java in iOS apps, not running standalone JVM servers. Jenkins is far too dynamic for AOT compilation (hundreds of plugins, dynamic class loading everywhere). This doesn't help us.
+
+== The Comparison That Says It All
+
+So after exploring every possible path (native apps, emulation, VMs, jailbreaking, even emerging OpenJDK efforts), let me lay out the complete picture in one table:
+
+[cols="1,1,1,1", options="header"]
+|===
+| Capability
+| Termux (Android)
+| iSH (iOS)
+| UTM+JIT (iPad Pro)
+
+| _Execution_
+| Native ARM64
+| x86 emulation (5-100x slower)
+| Near-native ARM64 (in VM)
+
+| _Package manager_
+| `pkg` (Debian-based)
+| `apk` (Alpine i386)
+| Guest OS (`apt`/`dnf`)
+
+| _SSH server_
+| Port 8022, background
+| Port 22, foreground only
+| Inside VM
+
+| _Java/OpenJDK 21_
+| Works perfectly
+| Broken
+| Works (inside VM)
+
+| _Background services_
+| termux-services (runit/sv)
+| Unreliable (location hack)
+| Partial (improving)
+
+| _Boot persistence_
+| Termux:Boot
+| Impossible
+| Impossible
+
+| _Jenkins_
+| _Fully working_
+| _Impossible_
+| _Theoretically possible_
+
+| _Cost_
+| Free (any old Android)
+| Free (App Store)
+| 1000-dollar iPad Pro 16GB
+
+|===
+
+Look at that last row. Free versus a thousand dollars, and the free option actually works.
+
+== Why iOS Is Fundamentally Different
+
+This isn't a matter of finding the right app or the right workaround. The gap between Android and iOS for this use case is architectural:
+
+. _No JIT compilation_ (W^X memory policy). Kills JVM performance. Apple denied the EU DMA exemption request.
+. _Aggressive background app killing_. iOS suspends apps after minutes. You can hack around this with link:https://github.com/ish-app/ish/wiki/Running-in-background[location services in the background] (`cat /dev/location > /dev/null &`), but it's unreliable.
+. _No boot-time auto-start_. There is no equivalent to Termux:Boot. You cannot have Jenkins start when the device boots.
+. _App sandbox isolation_. Apps cannot spawn arbitrary processes or access system directories.
+. _No raw syscall access_. Everything must go through Apple's approved APIs.
+
+Android's architecture is simply more open. Termux runs native ARM64 binaries, manages services via runit, and persists across reboots, all without root. That's not a feature gap. It's a philosophy gap.
+
+== The Punchline
+
+So here's what I'll say next time someone asks "What about iOS?" at a conference:
+
+[quote]
+____
+iSH is the closest thing to Termux on iOS. It runs Alpine Linux with a real package manager and even accepts incoming SSH connections. Pretty impressive! But Java is broken on it due to Apple's ban on JIT compilation and missing CPU instruction support in the emulator. The only way to run Jenkins on an iPad would be inside a full Linux VM using UTM on a 16GB iPad Pro, and even that has never been documented working. Meanwhile, a 30-dollar used Android phone does natively what a 1000-dollar iPad can barely do in a VM.
+____
+
+How cool is that? Well, not cool for iOS users. But it definitively validates the Android/Termux approach.
+
+Those old Android phones gathering dust in your drawer? They're not e-waste. They're infrastructure waiting to happen. And no amount of Apple silicon can change the fact that an open platform beats a locked-down one when you need to run actual server workloads.
+
+Suite au prochain episode. I'm already thinking about multi-device clusters and load balancing across a fleet of phones. But that's a story for another day.
+
+---
+
+_The project:_ link:https://github.com/gounthar/termux-jenkins-automation[termux-jenkins-automation on GitHub]
+
+_The research:_ The full technical comparison document with all sources and links is in the repository at `docs/IOS-EQUIVALENT-RESEARCH.md`.
+
+_The talk:_ If you want to see Jenkins running on a phone and ask your own tricky audience questions, come find me at the next conference. I'll have a better answer for the iOS question this time.

@@ -1,0 +1,291 @@
+---
+author: Bruno Verachten
+categories:
+- RISC-V
+- AI
+- Docker
+- DevOps
+date: 2026-03-14 12:00:00 +0100
+description: Getting NanoClaw, an open-source AI agent runtime, running on RISC-V
+  hardware (SpacemiT K1 / Banana Pi F3). Part 1 of a 3-part series covering feasibility,
+  Docker containerization, and the path to upstream support.
+excerpt: Can you run a full AI agent orchestration runtime on a $100 RISC-V board?
+  Yes, you can—and it didn't even require source patches. Just a custom Dockerfile
+  and more patience than I'd normally admit to.
+featured: false
+image: assets/images/2026/03/14/pexels-tomfisk-10506205.jpg
+tags:
+- risc-v
+- riscv64
+- nanoclaw
+- ai-agent
+- docker
+- banana-pi-f3
+- spacemit-k1
+- container
+- engineering
+title: 'NanoClaw on RISC-V: Running an AI Agent Runtime on a Banana Pi F3'
+---
+
+image::/assets/images/2026/03/14/pexels-tomfisk-10506205.jpg[A winding dirt road through green fields at sunset]
+
+_Photo by link:https://www.pexels.com/photo/green-grass-field-near-road-10506205/[Tom Fisk] on link:https://www.pexels.com[Pexels]_
+
+== Can you run a full AI agent orchestration runtime on a $100 RISC-V board?
+
+My money was on "probably not," but I spent a day finding out anyway. Spoiler: yes, you can—and it didn't even require source patches. Just a custom link:https://docs.docker.com/reference/dockerfile/[Dockerfile] and more patience than I'd normally admit to.
+
+== The setup: what's NanoClaw and why should you care?
+
+link:https://github.com/qwibitai/nanoclaw[NanoClaw] is an open-source runtime and link:https://en.wikipedia.org/wiki/Orchestration_(computing[orchestration]) layer for AI agent teams. Think of it as the thing that sits between your agents and the messy real world—managing sessions, sandboxing execution, keeping agents from stepping on each other.
+
+On March 13, 2026, they link:https://nanoclaw.dev/blog/nanoclaw-docker-sandboxes/[announced Docker Sandbox support]—running agents inside link:https://firecracker-microvm.github.io/[microVM]-based Docker Sandboxes for link:https://en.wikipedia.org/wiki/Hypervisor[hypervisor]-level isolation. Pretty slick stuff. macOS with link:https://en.wikipedia.org/wiki/Apple_silicon[Apple Silicon], Windows with x86. That's the official support matrix.
+
+You probably see where this is going.
+
+I've got two link:https://www.spacemit.com/en/[SpacemiT K1] / Banana Pi F3 boards sitting on my desk (riscv64, 8 cores, 16 GB of RAM each—yes, two of them, because apparently I have a problem), running link:https://www.armbian.com/[Armbian] 25.11.2 on link:https://www.debian.org/releases/trixie/[Debian Trixie]. Docker Engine 29.2.1 with buildx and compose. Node.js 20.19.2. And a question that wouldn't leave me alone: can NanoClaw run on RISC-V?
+
+If you've been following this blog, you already know the punchline. I link:https://bruno.verachten.fr/2026/02/25/When-a-Docker-Captain-Puts-an-AI-Tool-in-a-Container-on-RISC-V/[ran OpenClaw on these same boards] back in February—NanoClaw's open-source cousin. That project involved cross-compilation gymnastics, a case-sensitive credential store, and the kind of patience that only link:https://www.qemu.org/[QEMU] can teach you. NanoClaw is a different beast, though. More ambitious architecture, microVM talk, the whole Docker Sandbox story. Time to see if this one cooperates.
+
+---
+
+== The detective work: Docker Sandboxes vs. Docker containers
+
+=== Understanding the architecture
+
+Before burning any CPU cycles on compilation, I needed to understand what NanoClaw actually needs from its environment. The Docker Sandbox announcement had me worried. MicroVMs, hypervisor-level isolation. That sounds like it needs link:https://en.wikipedia.org/wiki/Hardware_virtualization[hardware virtualization] support.
+
+Here's the thing: the Docker Sandbox story is more nuanced than the blog post suggests.
+
+Docker Sandboxes use microVMs under the hood:
+
+* _macOS_: Apple's `virtualization.framework`
+* _Windows_: Hyper-V (experimental)
+* _Linux_: No microVM support yet—only "legacy container-based sandboxes"
+
+They also require link:https://docs.docker.com/desktop/[Docker Desktop], which doesn't exist for RISC-V. And the SpacemiT K1 lacks the RISC-V link:https://docs.riscv.org/reference/isa/priv/hypervisor.html[H (Hypervisor) extension], so there's no link:https://en.wikipedia.org/wiki/Kernel-based_Virtual_Machine[KVM] either.
+
+Sounds like a dead end, right?
+
+=== The plot twist
+
+I dug into NanoClaw's source code. Specifically `container-runtime.ts` and `container-runner.ts`. And here's where the whole picture shifted.
+
+NanoClaw doesn't use Docker Sandboxes internally for agent isolation. Not at all. Its container runtime uses plain `docker run` with link:https://docs.docker.com/engine/storage/bind-mounts/[bind mounts] and a credential proxy. Standard Docker containers. The Docker Sandbox announcement is about running _NanoClaw itself_ inside a Docker Sandbox—it's an outer layer of isolation, not a dependency for agent execution.
+
+So the question wasn't "does RISC-V support microVMs?" (it doesn't, on this hardware). The question was "does RISC-V support `docker run`?" And that's a much easier yes.
+
+---
+
+== The RISC-V virtualization situation (a brief detour)
+
+Since I'd already wasted a good hour on this, let me save you the trip.
+
+* _link:https://www.cloudhypervisor.org/[cloud-hypervisor]_: Has working RISC-V support, but requires the link:https://github.com/riscv/riscv-aia[AIA interrupt controller] and the H-extension. Neither of which the SpacemiT K1 has.
+* _KVM on RISC-V_: Supported in the Linux kernel, but again—you need hardware with the H-extension.
+* _link:https://firecracker-microvm.github.io/[Firecracker]_: No RISC-V support at all.
+* _SpacemiT K1_: Container-only path. No hypervisor, no microVMs.
+
+Bottom line: if you want hypervisor-based isolation on RISC-V, you'll need a different link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC]. For containers, the K1 works fine.
+
+Side note: while I was reading the cloud-hypervisor docs, I noticed they have a full RISC-V getting-started guide with QEMU nested virtualization instructions. If you have hardware with AIA + H-extension, that's a real path to microVM-based sandboxes. Something I want to revisit once boards with the right extensions become available.
+
+---
+
+== Act 1: building NanoClaw on the host (the easy part, supposedly)
+
+=== The npm install experience
+
+I cloned the NanoClaw repo and ran `npm install`. On an 8-core RISC-V board with 16 GB of RAM. I'll confess I initially tried building on the wrong machine (the one where my SSH key wasn't set up—took me longer than I'd like to admit to figure out why the connection kept failing). Classic.
+
+[source,bash]
+----
+git clone https://github.com/qwibitai/nanoclaw.git
+cd nanoclaw
+time npm install
+
+----
+
+The bottleneck? `better-sqlite3`. It compiles native link:https://www.sqlite.org/[SQLite] from source, and on a SpacemiT K1, that means making yourself a coffee. Maybe two.
+
+[cols="1,1,1", options="header"]
+|===
+| Step
+| Wall Time
+| CPU Time
+
+| `npm install` (133 packages)
+| 15m 32s
+| 15m 37s
+
+| `npm run build` (TypeScript)
+| 38s
+| 1m 11s
+
+|===
+
+Fifteen minutes for `npm install`. Not great, not terrible (I'm pretty sure that's what the Chernobyl guy said too). The TypeScript compilation was surprisingly quick though—38 seconds wall time, with decent parallelization across the 8 cores (1m 11s CPU time suggests the build used about two cores effectively).
+
+Zero build failures. 133 packages. On riscv64. From a project that has never officially targeted this architecture. Not a single one broke.
+
+=== What this tells us
+
+The Node.js ecosystem on RISC-V is link:https://bruno.verachten.fr/2025/11/07/building-nodejs-natively-on-riscv/[more mature than people give it credit for]. link:https://nodejs.org/api/addons.html[Native addons] compile. link:https://www.typescriptlang.org/[TypeScript] works. The link:https://www.npmjs.com/[npm registry] doesn't care what architecture you're on. The main cost is time. Things that take seconds on an x86 workstation take minutes here. But they work.
+
+---
+
+== Act 2: containerizing for RISC-V
+
+=== Blocker #1: no node:22 image for riscv64
+
+The upstream NanoClaw Dockerfile uses `node:22-slim` as its base image. Reasonable choice. One small problem: there's no riscv64 manifest for the official Node.js Docker images.
+
+Now, I happen to link:https://bruno.verachten.fr/2026/02/16/Running-Node-js-on-RISC-V-with-Docker/[maintain unofficial Node.js Docker images for riscv64]—`gounthar/node-riscv64` on Docker Hub, with Node 22 and 24 on Debian Trixie. So I could have just swapped `node:22-slim` for `gounthar/node-riscv64:22.22.0-trixie-slim` and called it a day. But for this first pass, I went with the simpler approach: `debian:trixie-slim` as the base with Node.js installed from the Debian repos. No external dependencies, no unofficial images—just what Debian ships.
+
+=== Blocker #2: no Chromium for riscv64
+
+NanoClaw can do link:https://en.wikipedia.org/wiki/Browser_automation[browser automation] via link:https://www.chromium.org/Home/[Chromium]. Can't do that on riscv64—there's no Chromium package in Debian for this architecture (this keeps coming up). Not yet, anyway.
+
+Is this a dealbreaker? For my use case, no. I disabled it and moved on. If you need browser automation, well... that's a whole other article.
+
+=== Blocker #3: Docker Desktop
+
+No Docker Desktop for RISC-V. But as we established earlier—NanoClaw doesn't actually need it. It talks straight to the Docker Engine daemon. No problem.
+
+=== The Dockerfile
+
+So let's be honest: three blockers, none of them fatal. I created a `Dockerfile.riscv64`, a custom adaptation of the upstream one. Here's what changed:
+
+[source,dockerfile]
+----
+== Instead of node:22-slim (no riscv64 image)
+FROM debian:trixie-slim
+
+== Install Node.js from Debian repos
+RUN apt-get update && apt-get install -y \
+    nodejs npm \
+    git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+== ... rest follows upstream structure
+== Skip chromium installation (not available)
+
+----
+
+Build it:
+
+[source,bash]
+----
+time docker build -f Dockerfile.riscv64 -t nanoclaw-agent:riscv64 .
+
+----
+
+_Build time: 8 minutes 48 seconds._ Architecture confirmed as riscv64.
+
+The Debian base pulls in a lot of build tooling the runtime doesn't actually need—1.36 GB total. First pass. There's room to trim.
+
+---
+
+== Act 3: does it actually run?
+
+Building is one thing. Running is another.
+
+=== The functional test
+
+I ran the NanoClaw agent container with a test input and watched the logs.
+
+----
+[agent-runner] Received input for group: test
+[agent-runner] Starting query (session: new, resumeAt: latest)...
+[agent-runner] Session initialized: 084fc987-bb47-494b-abcf-00d46602dc1e
+[agent-runner] Result #1: subtype=success text=Not logged in · Please run /login
+---NANOCLAW_OUTPUT_START---
+{"status":"success","result":"Not logged in · Please run /login",
+ "newSessionId":"084fc987-..."}
+---NANOCLAW_OUTPUT_END---
+
+----
+
+It works. On riscv64. Without touching the source code.
+
+Wait, seriously? I'll be honest, I expected at least one showstopper at this point. The agent link:https://en.wikipedia.org/wiki/Software_development_kit[SDK] initializes, creates a session, processes the input, and returns structured output. The "Not logged in" response is expected—I didn't provide API credentials, so the agent correctly tells me to authenticate first. That's not an error; that's proper behavior.
+
+Stop and think about that for a second. This runtime was built for x86 and Apple Silicon. The only changes I made were in the Dockerfile—infrastructure, not application code. That's it. Zero source patches. I keep checking because I don't quite believe it myself.
+
+---
+
+== The scorecard
+
+[cols="1,1,1", options="header"]
+|===
+| Component
+| Status
+| Notes
+
+| NanoClaw host build (npm install + build)
+| ✅
+| 16 min total, native sqlite3 compilation is the bottleneck
+
+| NanoClaw agent container (Docker)
+| ✅
+| Custom Dockerfile with `debian:trixie-slim` base
+
+| Agent SDK (@anthropic-ai/claude-code)
+| ✅
+| Installs and runs on riscv64
+
+| Container isolation (docker run)
+| ✅
+| Container runs; isolation not independently verified yet
+
+| Browser automation (Chromium)
+| ❌
+| No Chromium package for riscv64 in Debian
+
+| Docker Sandbox (microVM)
+| ❌
+| No Docker Desktop, no H-extension on K1
+
+| Official node:22 Docker image
+| ❌ (⚠️)
+| No official riscv64 manifest, but `gounthar/node-riscv64` exists
+
+|===
+
+Four out of seven, with one partial. The gaps are browser automation (no Chromium for riscv64), microVM support (the K1 doesn't have the H-extension), and no official Node.js Docker image (though our unofficial one exists). None of these block the core use case.
+
+---
+
+== What's next: from "it works on my board" to "it's official"
+
+This article is Part 1 of a three-part series (because I apparently can't stop once something works).
+
+* _Part 1_ (this one): Getting NanoClaw running on RISC-V—feasibility, blockers, and workarounds
+* _Part 2_: Using these same RISC-V machines as link:https://bruno.verachten.fr/2025/11/06/github-runner-riscv64-setup/[GitHub runners] to build official riscv64 releases
+* _Part 3_: Submitting a PR upstream to NanoClaw for native riscv64 support in their CI/CD and Docker images
+
+The gap between "it works on my board" and "it's officially supported" is mostly packaging and CI infrastructure. The code already runs. Now it's about making that reproducible and automated. I link:https://bruno.verachten.fr/2025/11/06/github-runner-riscv64-setup/[set up RISC-V GitHub runners] a few months ago for exactly this kind of thing—it's time to put them to work.
+
+---
+
+== Lessons learned
+
+NanoClaw runs on RISC-V today without source changes. No patches. No forks. A custom Dockerfile using `debian:trixie-slim` instead of the official Node.js image, and that's it. The microVM announcement made it sound like you need virtualization hardware. You don't. Read the source code, not just the blog post.
+
+=== What works
+
+* 133 npm packages, including native addons—zero failures on riscv64
+* Docker container builds and runs natively
+* The agent SDK initializes, creates sessions, returns structured output
+
+=== What doesn't
+
+* Chromium. No package for riscv64 in Debian. This is the real gap, not Docker Desktop, not hypervisors.
+* Official Node.js Docker images. No riscv64 manifest. (We maintain our own at `gounthar/node-riscv64`, but still.)
+* MicroVM isolation. The K1 doesn't have the H-extension. Hardware limitation, not software.
+
+=== What surprised me
+
+Build times are slow but honest. 15 minutes for `npm install`, everything compiles without patches. Time is the only tax. And 133 packages with zero failures? On an architecture nobody at NanoClaw has ever tested? I genuinely didn't expect that.
+
+If you've got RISC-V hardware and want to try this, grab the Dockerfile and run it. I'd be curious to hear how it goes on other boards.

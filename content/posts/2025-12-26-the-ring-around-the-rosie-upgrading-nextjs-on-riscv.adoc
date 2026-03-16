@@ -1,0 +1,382 @@
+---
+author: Poddingue
+categories:
+- Technical
+- RISC-V
+- Next.js
+- Rust
+description: A journey through failed cross-compilation attempts, cryptographic library
+  roadblocks, and the eventual discovery of why --no-default-features stopped working
+  in Next.js 14.x
+excerpt: I had a working Next.js 13.5.6 setup on my Banana Pi F3. Then Dependabot
+  showed up with PRs bumping to 14.2.35, and suddenly my carefully built SWC binary
+  was useless. What followed was a two-hour journey through cross-compilation failures,
+  Cargo dependency rabbit holes, and the eventual realization that the same trick
+  that worked for 13.5.6 was fundamentally broken in 14.x.
+featured: false
+hidden: false
+image: assets/images/2025/12/26/nextjs-14-upgrade-ring-header.jpg
+tags:
+- riscv64
+- nextjs
+- swc
+- rust
+- ring
+- rustls
+- native-tls
+- cross-compilation
+- banana-pi-f3
+title: 'The Ring Around the Rosie: Upgrading Next.js on RISC-V from 13.5.6 to 14.2.35'
+toc: true
+---
+
+I had a working Next.js 13.5.6 setup on my Banana Pi F3. Then Dependabot showed up with PRs bumping to 14.2.35, and suddenly my carefully built SWC binary was useless. What followed was a two-hour journey through cross-compilation failures, Cargo dependency rabbit holes, and the eventual realization that the same trick that worked for 13.5.6 was fundamentally broken in 14.x. Here is how I fixed it.
+
+image::/assets/images/2025/12/26/nextjs-14-upgrade-ring-header.jpg[Abstract blue flowers - header image]
+
+_Photo by link:https://unsplash.com/@kkalerry[Klara Kulikova] on link:https://unsplash.com/photos/JUgm3RZFhko[Unsplash]_
+
+[TOC]
+
+== The Problem: Version Mismatch
+
+I have been running Next.js on RISC-V hardware for a while now. The Banana Pi F3 is my test bed: 8 cores, 15GB of RAM, running Debian 13. Not exactly a speed demon, but it gets the job done.
+
+Back in November, I successfully built `@next/swc` for version 13.5.6 using a simple workaround: the `--no-default-features` flag. This disabled TLS dependencies that pulled in the `ring` cryptographic library, which famously does not support riscv64.
+
+Then Dependabot filed PRs #22 and #23, bumping Next.js to 14.2.35.
+
+The problem? SWC binaries are version-locked. My 13.5.6 binary would not load in 14.2.35. Time to rebuild.
+
+== Failed Attempt 1: Cross-Compilation with cross-rs
+
+Building on the Banana Pi takes hours. The 13.5.6 build ran for about 4 hours. Surely there is a faster way?
+
+Cross-compilation seemed like the obvious answer. I have a perfectly good x86_64 machine running WSL2. Why not build there and copy the binary?
+
+I set up `cross-rs`, the standard Rust cross-compilation tool:
+
+[source,toml]
+----
+== Cross.toml
+[target.riscv64gc-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/riscv64gc-unknown-linux-gnu:main"
+
+----
+
+Then ran:
+
+[source,bash]
+----
+cross build --release --target riscv64gc-unknown-linux-gnu \
+  --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+It failed. Not immediately, but about 200 crates in:
+
+----
+error: failed to run custom build command for `ring v0.16.20`
+
+Caused by:
+  process didn't exit successfully: [...]/build-script-build
+
+  ring build.rs panic: Target architecture not supported
+
+----
+
+The issue is subtle but fundamental. The `ring` crate embeds hand-written assembly for cryptographic operations. Each target architecture needs its own assembly files. When `ring`'s `build.rs` runs, it checks the target architecture and panics if there is no matching assembly.
+
+Cross-compilation does not help here. The build script still runs, still checks for riscv64 assembly, still panics when it finds none.
+
+== Failed Attempt 2: Patching ring/rustls Versions
+
+Maybe I could upgrade `ring`? Version 0.17 added riscv64 support. I tried patching `Cargo.toml`:
+
+[source,toml]
+----
+[patch.crates-io]
+ring = "0.17"
+
+----
+
+Cargo rejected it:
+
+----
+error: failed to select a version for `ring`.
+    ... required by rustls v0.20.9
+    ... which requires ring ^0.16
+
+----
+
+The caret (`^`) in Cargo means "compatible version," and 0.17 is not compatible with 0.16 under semver rules (pre-1.0 versions treat minor bumps as breaking changes).
+
+To use ring 0.17, I would need to upgrade the entire chain: `ring` -> `rustls` -> `hyper-rustls` -> `reqwest` -> `turbo-tasks-fetch`. That is not a quick patch. That is a major dependency overhaul that would diverge significantly from upstream.
+
+== Failed Attempt 3: The Old Workaround
+
+Fine. Forget cross-compilation. I will just build natively like I did for 13.5.6.
+
+I SSH'd into the Banana Pi, cloned Next.js 14.2.35, and ran the exact command that worked before:
+
+[source,bash]
+----
+cargo build --release --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+It compiled 282 crates. Then:
+
+----
+error: failed to run custom build command for `ring v0.16.20`
+
+----
+
+Wait, what? The `--no-default-features` flag was supposed to skip ring entirely. It worked in 13.5.6. Why is it failing now?
+
+== Root Cause: The Cargo Configuration Changed
+
+I dug into the `Cargo.toml` files, comparing 13.5.6 to 14.2.35.
+
+In 13.5.6:
+
+[source,toml]
+----
+[features]
+default = ["rustls-tls"]
+rustls-tls = [...]
+native-tls = [...]
+
+----
+
+TLS was a _default feature_. Passing `--no-default-features` disabled it. No TLS, no ring, build succeeds.
+
+In 14.2.35:
+
+[source,toml]
+----
+== Enable specific tls features per-target.
+[target.'cfg(all(target_os = "windows", target_arch = "aarch64"))'.dependencies]
+next-core = { workspace = true, features = ["native-tls"] }
+
+[target.'cfg(not(any(all(target_os = "windows", target_arch = "aarch64"), target_arch="wasm32")))'.dependencies]
+next-core = { workspace = true, features = ["rustls-tls"] }
+
+----
+
+TLS is now a _target-specific dependency_. The second block says: for everything that is not Windows ARM64 or WASM, use rustls-tls.
+
+riscv64 is not Windows ARM64. riscv64 is not WASM. So riscv64 gets rustls-tls.
+
+The `--no-default-features` flag does nothing here because this is not a feature. It is a conditional dependency based on target platform.
+
+== The Fix: native-tls for riscv64
+
+The solution was staring at me from the first target block. Windows ARM64 uses `native-tls` instead of `rustls-tls`. Why? Probably similar issues with ring on that platform.
+
+`native-tls` uses the system's TLS library, OpenSSL on Linux. OpenSSL supports riscv64. My Debian 13 install has OpenSSL 3.5.4.
+
+I patched `packages/next-swc/crates/napi/Cargo.toml`:
+
+[source,toml]
+----
+== Use native-tls for riscv64 (ring 0.16.20 doesn't support riscv64)
+[target.'cfg(all(target_os = "linux", target_arch = "riscv64"))'.dependencies]
+next-core = { workspace = true, features = ["native-tls"] }
+
+== Exclude riscv64 from rustls-tls targets
+[target.'cfg(not(any(all(target_os = "windows", target_arch = "aarch64"), all(target_os = "linux", target_arch = "riscv64"), target_arch="wasm32")))'.dependencies]
+next-core = { workspace = true, features = ["rustls-tls"] }
+
+----
+
+Two changes:
+
+. Add a riscv64-specific block that uses `native-tls`
+. Modify the fallback block to exclude riscv64
+
+Started the build again:
+
+[source,bash]
+----
+cargo build --release --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+== The Build
+
+130 minutes. About half the time of the 13.5.6 build, though I suspect that is due to better incremental caching rather than any architectural improvement.
+
+----
+Compiling ring v0.17.8
+
+----
+
+Wait, ring? I thought we were avoiding ring?
+
+Turns out `native-tls` on Linux still uses ring for some operations, but version 0.17.8, which supports riscv64. The constraint chain is different: `native-tls` does not pin to `ring ^0.16`.
+
+Binary size: 230MB. About what I expected for a debug-info-included release build.
+
+== Testing
+
+I ran the test suite against both App Router and Pages Router test apps:
+
+[source,bash]
+----
+./scripts/run-tests.sh tests/app-router
+./scripts/run-tests.sh tests/pages-router
+
+----
+
+Results:
+
+[cols="1,1,1", options="header"]
+|===
+| Test App
+| Status
+| Notes
+
+| App Router
+| Pass
+| 9 pages including SSG and SSR
+
+| Pages Router
+| Pass
+| 6 pages including API routes
+
+|===
+
+Both work. Native SWC compilation, no Babel fallback needed.
+
+== Bonus Discovery: No Loader Patch Required
+
+In 13.5.6, I had to patch `node_modules/next/dist/build/swc/index.js` to add riscv64 to the architecture map:
+
+[source,javascript]
+----
+// Had to add this line in 13.5.6
+riscv64: linux.riscv64gc,
+
+----
+
+I checked 14.2.35's loader. It is already there:
+
+[source,javascript]
+----
+linux: {
+    x64: linux.x64.filter((triple)=>triple.abi !== "gnux32"),
+    arm64: linux.arm64,
+    riscv64: linux.riscv64,  // Already present!
+    arm: linux.arm
+},
+
+----
+
+Someone at Vercel added riscv64 support between 13.5.6 and 14.x. The only thing missing is the actual binary, and now we have that too.
+
+== The Dependency Chain Explained
+
+For anyone who wants to understand why this was so painful, here is the dependency chain:
+
+----
+@next/swc
+  -> turbo-tasks-fetch
+    -> reqwest
+      -> hyper-rustls
+        -> rustls 0.20.9
+          -> ring ^0.16  <-- PROBLEM: ring 0.16 has no riscv64 assembly
+
+----
+
+And why `native-tls` works:
+
+----
+@next/swc
+  -> turbo-tasks-fetch
+    -> reqwest (with native-tls feature)
+      -> native-tls
+        -> openssl-sys  <-- Uses system OpenSSL, which supports riscv64
+
+----
+
+The `ring` crate is a pure-Rust cryptographic library that embeds assembly for performance. Each architecture needs hand-written assembly. riscv64 assembly was added in ring 0.17, but rustls 0.20 pins to ring 0.16.
+
+The `native-tls` crate delegates to the operating system's TLS implementation. On Linux, that is OpenSSL. OpenSSL 3.x has full riscv64 support through its own assembly routines and C fallbacks.
+
+== Key Takeaways
+
+_For anyone building Next.js on exotic architectures:_
+
+. _Version matters_: Build flags that work in one version may not work in another. Check the `Cargo.toml` configuration.
+
+. _Cross-compilation will not save you from ring_: The build script runs on the host but checks the target architecture. No assembly for target = build failure.
+
+. _native-tls is your friend_: If rustls fails due to ring, try native-tls. It uses system libraries that typically have broader architecture support.
+
+. _Check upstream first_: Next.js 14.x already has riscv64 in the loader. They are aware of the architecture. The binary is the only missing piece.
+
+_For the Next.js team_ (if anyone is reading): The fix is a three-line patch to `packages/next-swc/crates/napi/Cargo.toml`. Add riscv64 to the native-tls targets. The CI infrastructure is the harder problem, but the code change is minimal.
+
+== What is Next
+
+The patch file is in this repository at `patches/nextjs-14.x-native-tls.patch`. Apply it before building:
+
+[source,bash]
+----
+cd ~/next.js
+git checkout v14.2.35
+patch -p1 < /path/to/patches/nextjs-14.x-native-tls.patch
+cd packages/next-swc
+cargo build --release --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+Build time: about 2 hours on a Banana Pi F3. Faster on better hardware.
+
+I will update the test apps to 14.2.35 once I verify there are no regressions in the Dependabot PRs. The infrastructure is ready.
+
+== Version Comparison
+
+[cols="1,1,1", options="header"]
+|===
+| Aspect
+| 13.5.6
+| 14.2.35
+
+| TLS configuration
+| Default feature
+| Target-specific dependency
+
+| Build workaround
+| `--no-default-features`
+| Cargo.toml patch required
+
+| Loader patch needed
+| Yes
+| No (riscv64 already included)
+
+| Build time (Banana Pi F3)
+| ~4 hours
+| ~130 minutes
+
+| Required Rust nightly
+| 2023-10-06
+| 2024-04-03
+
+|===
+
+The 14.x build is actually faster despite being a more complex codebase. Progress.
+
+== References
+
+* Patch file: `patches/nextjs-14.x-native-tls.patch`
+* Build documentation: `docs/BUILDING-SWC.md`
+* ring crate issue: link:https://github.com/briansmith/ring/issues/1292[github.com/briansmith/ring/issues/1292]
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: /mnt/c/support/users/dev/nextjs-riscv64/journal/session_2025-12-26_nextjs-14-upgrade-journey.adoc
+Conversion date: 2025-12-28
+Notes: All code blocks converted to fenced blocks with language identifiers. Tables converted to markdown pipe format. Admonitions preserved as inline text. Previous session link converted to Jekyll blog post path.
+-->

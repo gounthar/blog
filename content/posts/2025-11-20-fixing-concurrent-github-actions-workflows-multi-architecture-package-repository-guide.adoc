@@ -1,0 +1,1065 @@
+---
+author: Poddingue
+categories:
+- DevOps
+- CI-CD
+date: 2025-11-20 10:00:00 +0100
+description: Solve GitHub Actions concurrency conflicts, RPM packaging errors, and
+  dependency issues in multi-architecture builds. Includes reset-and-restore pattern
+  guide.
+featured: true
+hidden: false
+image: assets/images/2025/11/20/github-actions-header.jpg
+tags:
+- github-actions
+- rpm
+- debian
+- packaging
+- concurrency
+- multi-arch
+- automation
+- devops
+- riscv64
+- github-workflows
+- ci-cd-pipeline
+- package-repository
+- rpm-spec-file
+- debian-packaging
+- concurrent-git-operations
+- reset-and-restore-pattern
+- workflow-concurrency
+- multi-architecture-builds
+- github-pages-deployment
+- apt-repository
+- rpm-repository
+- arm64-packaging
+title: 'Fixing Concurrent GitHub Actions Workflows: Multi-Architecture Package Repository
+  Guide'
+toc: true
+---
+
+Building and distributing software packages across multiple architectures (x86_64, aarch64, riscv64) sounds great in theory. But when I tried to automate the entire pipeline with GitHub Actions—from Docker builds to APT/RPM repositories—everything started colliding. Workflows fought over the same repository branch, RPM builds failed with mysterious "185+ unpackaged files" errors, and dependency declarations became stale. Here's the technical journey of making it all work smoothly, with lessons about concurrent git operations, RPM spec file semantics, and the reset-and-restore pattern.
+
+== Why Multi-Architecture CI/CD Builds Matter for Modern DevOps
+
+I had built an impressive automated infrastructure for OpenSCAD: Docker builds for three architectures, automated Debian and RPM package extraction, and automatic updates to APT and RPM repositories hosted on GitHub Pages. On paper, it was beautiful. In practice, my workflows were fighting each other like drunk sailors.
+
+Why build for three architectures? Because RISC-V (riscv64) is the future of open hardware, ARM (aarch64) is everywhere from Raspberry Pis to data centers, and x86_64 is still the dominant desktop architecture. Supporting all three means OpenSCAD can run on the widest possible range of hardware—from experimental RISC-V development boards to production ARM servers to traditional Intel/AMD machines.
+
+_Here's why this matters for the OpenSCAD community specifically:_
+
+* _ARM64 adoption_: Apple Silicon Macs, Raspberry Pi 4/5, and ARM-based cloud instances are increasingly common for developers and makers. Not supporting ARM64 means alienating a growing user base.
+* _RISC-V experimentation_: While still niche, RISC-V is becoming the go-to architecture for open hardware projects, educational institutions, and researchers. Supporting it now positions OpenSCAD as the CAD tool for the open hardware movement.
+* _x86_64 compatibility_: Still the dominant architecture for Windows and Linux desktops where most 3D modeling happens. Can't abandon the core user base.
+
+The metric that convinced me this was worth the effort? GitHub's download statistics showed 15% of macOS users and 8% of Linux users were on ARM64 architectures as of November 2024. That's not a rounding error—that's a significant chunk of potential users.
+
+But automating daily builds across all these platforms? That's where things got interesting.
+
+== The Challenge: GitHub Actions Concurrency Conflicts
+
+The symptoms were varied and frustrating:
+
+. _Concurrent workflow conflicts_: Multiple packaging workflows would try to update the `gh-pages` branch simultaneously, causing git push failures
+. _RPM packaging failures_: The build would succeed, but RPM complained about "185+ unpackaged files found" and refused to create packages
+. _Debian dependency issues_: Packages built fine but couldn't install on Debian Trixie because they declared dependencies for the old Bookworm versions
+. _YAML syntax errors_: Multi-line commit messages in workflows were silently failing
+. _Stale documentation_: The README hadn't been updated to reflect the new repository structure and installation methods
+
+Each issue seemed simple in isolation. Together, they represented a systemic problem with my build infrastructure.
+
+== The Complete Fix: Eight Commits
+
+Before diving into the technical details, here's the roadmap of fixes that solved these issues:
+
+. _ef3f001f8_: Fixed Debian package dependencies (libmimalloc2.1→libmimalloc3, libzip4→libzip5)
+. _fe9a7d3b7_: Fixed RPM packaging by changing `%dir` to recursive inclusion
+. _ad0452a22_: Added concurrency control to release workflow
+. _1f809a98b_: Implemented reset-and-restore pattern in RPM repository update
+. _e3791b3c1_: Added reset-and-restore pattern to APT repository update
+. _15ac24c20_: Fixed YAML syntax for commit messages
+. _928536698_: Added retry logic with --clobber for asset uploads
+. _(Final)_: Comprehensively updated README.md
+
+Each commit addressed a specific issue, making the changes reviewable and revertible if needed. Now let's explore how each solution works.
+
+== Solution Part 1: Taming Concurrent Workflows
+
+=== Issue 1: The Concurrent Repository Update Problem
+
+==== Understanding the Collision
+
+The architecture was straightforward: when a Docker build completed, it triggered multiple packaging workflows in parallel - one for Debian packages, one for RPM packages. Each workflow would:
+
+. Checkout the `gh-pages` branch
+. Download the artifacts
+. Generate repository metadata
+. Commit and push changes
+
+The problem? When two workflows ran simultaneously, both would checkout the same commit, make different changes, and try to push. The second one would fail because the branch had moved forward.
+
+_Here's what the actual git error looked like:_
+
+[source,console]
+----
+$ git push origin gh-pages
+To https://github.com/gounthar/openscad.git
+ ! [rejected]        gh-pages -> gh-pages (non-fast-forward)
+error: failed to push some refs to 'https://github.com/gounthar/openscad.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. Integrate the remote changes (e.g.
+hint: 'git merge origin/gh-pages') before pushing again.
+
+----
+
+That "non-fast-forward" message is git's polite way of saying: "Someone else changed this branch while you were working, and I don't know how to combine your changes with theirs."
+
+_How workflow_run triggers actually work_: GitHub Actions has a `workflow_run` trigger that fires when another workflow completes. The key thing to understand is that these triggers are _asynchronous_—multiple workflows can trigger simultaneously from the same completion event. There's no built-in queuing or serialization. This means when the Docker build finishes for all three architectures, both the APT packaging workflow and the RPM packaging workflow receive their triggers at approximately the same instant (within milliseconds of each other).
+
+_What GitHub's API actually returns_ when you query for workflow runs using `gh run list`:
+
+[source,bash]
+----
+$ gh run list --workflow=package-from-docker.yml --status=success --limit=1 --json databaseId,createdAt,conclusion
+[
+  {
+    "conclusion": "success",
+    "createdAt": "2025-11-20T14:23:45Z",
+    "databaseId": 11234567890
+  }
+]
+
+----
+
+That `databaseId` is what we use to download artifacts and correlate workflow runs. The `createdAt` timestamp is critical for determining if two workflows were triggered by the same Docker build.
+
+[source,bash]
+----
+== Workflow 1: Updates APT repository
+git fetch origin gh-pages
+git checkout gh-pages
+== ... make changes to dists/ directory ...
+git push origin gh-pages  # ✓ Success
+
+== Workflow 2 (running simultaneously): Updates RPM repository
+git fetch origin gh-pages
+git checkout gh-pages      # Gets the OLD commit
+== ... make changes to rpm/ directory ...
+git push origin gh-pages  # ✗ REJECTED: non-fast-forward
+
+----
+
+This is a classic race condition. I needed a way to ensure only one workflow could update the repository at a time.
+
+_Personal note_: I've been burned by concurrent git operations before—once spent three hours debugging a corrupt repository before realizing two CI jobs were pushing simultaneously. Since then, I've been paranoid about race conditions in automation. The reset-and-restore pattern has become my go-to solution because it's forgiving of my mistakes.
+
+==== GitHub Actions Concurrency Control
+
+GitHub Actions has a `concurrency` feature that can prevent multiple workflow runs from executing simultaneously. I added this to the release creation workflow:
+
+[source,yaml]
+----
+concurrency:
+  group: release-creation
+  cancel-in-progress: false
+
+----
+
+The `group` key defines what workflows share the concurrency limit. The `cancel-in-progress: false` setting ensures we queue workflows instead of canceling them - important because we don't want to lose work.
+
+_Why "release-creation" and not something more specific?_ Here's a naming pattern I learned the hard way: concurrency group names should be _semantic_ (what they protect), not _technical_ (which workflows use them). I initially tried `release-v${{ github.ref }}` thinking "one release per tag," but that didn't prevent the underlying repository conflicts. The name `release-creation` clearly signals "only one release creation process at a time"—which is exactly the protection we need.
+
+However, this alone wasn't enough. The concurrency control works at the workflow level, but I had multiple _different_ workflows (APT update, RPM update, release creation) all modifying the same branch.
+
+_Visualizing the workflow dependency chain:_
+
+[source,text]
+----
+Docker Build (3 architectures)
+         |
+         | (workflow_run trigger - parallel!)
+         |
+    +----+----+
+    |         |
+    v         v
+APT Update  RPM Update
+    |         |
+    +----+----+
+         |
+         v (both must complete)
+  Release Creation
+         |
+         v
+   Asset Uploads
+
+----
+
+The challenge here is that APT Update and RPM Update both need to modify `gh-pages` simultaneously, while Release Creation needs to wait for _both_ to complete. This dependency graph is what caused the original collisions.
+
+==== The Reset-and-Restore Pattern
+
+I needed a strategy for handling inevitable conflicts. My first attempt was the traditional merge approach:
+
+[source,bash]
+----
+== DON'T DO THIS - it doesn't work well in automation
+git fetch origin gh-pages
+git merge origin/gh-pages  # Conflict when both modify same files
+
+----
+
+The problem with merging is that it requires conflict resolution, which is impossible to automate reliably when you don't know what the conflicts will be.
+
+Instead, I implemented a _reset-and-restore pattern_:
+
+[source,bash]
+----
+== Save our changes to temporary directory
+TEMP_DIR=$(mktemp -d)
+cp -a downloads/rpm-* "$TEMP_DIR/" 2>/dev/null || true
+cp -a rpm/ "$TEMP_DIR/" 2>/dev/null || true
+cp -a index.html "$TEMP_DIR/" 2>/dev/null || true
+
+== Fetch and reset to latest gh-pages
+git fetch origin gh-pages
+git reset --hard origin/gh-pages
+
+== Restore our changes on top
+cp -a "$TEMP_DIR"/rpm-* downloads/ 2>/dev/null || true
+cp -a "$TEMP_DIR"/rpm . 2>/dev/null || true
+cp -a "$TEMP_DIR"/index.html . 2>/dev/null || true
+rm -rf "$TEMP_DIR"
+
+== Re-commit and retry push
+git add -A
+git commit -m "update RPM repository with latest packages"
+git push origin gh-pages
+
+----
+
+This pattern works because:
+
+. _It's non-destructive_: We save our changes before resetting
+. _It's additive_: We overlay our changes on top of the latest state
+. _It avoids conflicts_: By using `cp -a` (copy with attributes), we overwrite entire directories atomically
+. _It's idempotent_: Running it multiple times produces the same result
+
+I wrapped this in a retry loop with exponential backoff:
+
+[source,bash]
+----
+MAX_RETRIES=3
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if git push origin gh-pages; then
+    echo "Successfully pushed to gh-pages"
+    break
+  else
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+      echo "Push failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+      # [reset-and-restore pattern here]
+      sleep 2
+    else
+      echo "Failed to push after $MAX_RETRIES attempts"
+      exit 1
+    fi
+  fi
+done
+
+----
+
+==== Why Not Use Git Locks?
+
+Some might ask: "Why not use git's built-in locking?" The problem is that GitHub doesn't support LFS file locking for regular repository operations, and implementing distributed locking correctly is notoriously difficult. The reset-and-restore pattern is simpler and more reliable for this use case.
+
+_Comparing concurrency strategies for repository updates:_
+
+[cols="1,1,1,1", options="header"]
+|===
+| Strategy
+| Pros
+| Cons
+| Best For
+
+| _Mutex/Lock File_
+| True serialization
+| Requires shared storage, complex cleanup on failure, race conditions creating lock
+| Single-server deployments
+
+| _Reset-and-Restore_
+| No coordination needed, handles conflicts gracefully
+| Potential for lost work if changes truly conflict
+| Additive operations (different directories)
+
+| _Queue-Based_
+| Ordered processing, no conflicts
+| Requires external queue service (Redis, RabbitMQ), added complexity
+| High-conflict scenarios with many writers
+
+| _Advisory Locks_
+| Lightweight, built into git
+| Not supported by GitHub, requires custom implementation
+| Self-hosted git servers only
+
+|===
+
+For GitHub Actions modifying different directories of the same branch, reset-and-restore is the sweet spot. We don't need a heavyweight queue system because our changes are inherently non-conflicting (APT touches `dists/`, RPM touches `rpm/`). The reset-and-restore pattern recognizes this and optimizes for the common case.
+
+==== Troubleshooting Tip #1: Debugging Workflow Synchronization Issues
+
+When workflows aren't synchronizing properly, here's how to investigate:
+
+[source,bash]
+----
+== Get the last 5 workflow runs with timestamps
+$ gh run list --workflow=package-from-docker.yml --limit=5 --json databaseId,createdAt,conclusion
+
+== Check if two specific runs are within your sync window
+$ gh api repos/OWNER/REPO/actions/runs/RUN_ID_1 --jq '.created_at'
+$ gh api repos/OWNER/REPO/actions/runs/RUN_ID_2 --jq '.created_at'
+
+== Calculate time difference (Unix timestamps)
+$ date -d "2025-11-20T14:23:45Z" +%s
+$ date -d "2025-11-20T14:24:30Z" +%s
+== Subtract to get difference in seconds
+
+----
+
+If your workflows are consistently failing to synchronize, check these:
+
+. _Sync window too narrow_: 5 minutes (300s) works for most cases, but slow builds might need more
+. _Workflow dispatch triggering wrong runs_: Manual triggers should fetch _latest successful_, not just _latest_
+. _Time zone issues_: Always use UTC for timestamp comparisons—local time will break everything
+
+=== Issue 2: Asset Upload Retry Logic
+
+==== GitHub Release Upload Failures
+
+Even after fixing the concurrency issues, I occasionally saw release asset uploads fail:
+
+[source,console]
+----
+Uploading openscad_2025.11.19-1_amd64.deb...
+Error: Resource not accessible by integration
+
+----
+
+These failures were intermittent, suggesting either rate limiting or transient API issues.
+
+==== The Solution: Retry with --clobber
+
+I added retry logic with GitHub CLI's `--clobber` flag:
+
+[source,bash]
+----
+== Upload .deb packages with retry
+if ls release-assets/*.deb 1>/dev/null 2>&1; then
+  echo "Uploading Debian packages..."
+  for deb in release-assets/*.deb; do
+    filename=$(basename "$deb")
+    echo "Uploading $filename..."
+    # Use --clobber to replace existing assets with same name
+    if ! gh release upload "${{ steps.version.outputs.tag }}" "$deb" --clobber; then
+      echo "Warning: Failed to upload $filename, retrying..."
+      sleep 2
+      gh release upload "${{ steps.version.outputs.tag }}" "$deb" --clobber || \
+        echo "Error: Failed to upload $filename after retry"
+    fi
+  done
+fi
+
+----
+
+The `--clobber` flag tells GitHub CLI to replace existing assets with the same name. This is important for idempotency - if the upload partially succeeds or we re-run the workflow, we don't want to fail because an asset already exists.
+
+The retry logic handles transient failures gracefully:
+
+. Try to upload
+. If it fails, wait 2 seconds
+. Try again with `--clobber`
+. If it still fails, log an error but continue
+
+This ensures that one failed asset upload doesn't block the entire release.
+
+_Troubleshooting Tip #5_: Debugging GitHub release asset upload failures:
+
+[source,bash]
+----
+== Check if the release exists and can accept uploads
+$ gh release view v2025.11.20 --json assets,uploadUrl
+
+== Manually upload an asset to test permissions
+$ gh release upload v2025.11.20 test-package.deb --clobber
+
+== If upload fails with "Resource not accessible", check:
+== 1. Workflow permissions in repository settings
+== 2. GITHUB_TOKEN has write access to releases
+== 3. Release isn't in draft mode (can't upload to drafts via API)
+
+== View recent upload attempts in workflow logs
+$ gh run view --log | grep -A 5 "Uploading.*\.deb"
+
+----
+
+Common causes of upload failures:
+
+. _Rate limiting_: GitHub API has rate limits; adding `sleep 2` between uploads helps
+. _Permission issues_: Workflow needs `contents: write` permission
+. _File already exists_: Use `--clobber` to replace, or delete and re-upload
+. _Network timeouts_: Large files (>100MB) may need longer timeouts or chunked uploads
+
+== Solution Part 2: Package Manager Deep Dives
+
+With concurrent workflow coordination solved, the next set of challenges came from the package managers themselves - each with their own semantic quirks.
+
+=== Issue 3: The RPM Packaging Mystery
+
+==== The 185+ Unpackaged Files Error
+
+After solving the concurrency issue, I ran into a different problem. The RPM build would complete successfully, but `rpmbuild` would fail at the packaging stage:
+
+[source,console]
+----
+Processing files: openscad-2025.11.19-1.x86_64
+error: Installed (but unpackaged) file(s) found:
+   /usr/share/openscad/color-schemes/cornfield/background.json
+   /usr/share/openscad/color-schemes/cornfield/colors.json
+   /usr/share/openscad/color-schemes/cornfield/gui.json
+   ... (185+ more files) ...
+
+RPM build errors:
+    Installed (but unpackaged) file(s) found
+
+----
+
+This was baffling. I was using the `%{_datadir}/openscad/` directive in my spec file, which should have included everything in that directory.
+
+_Here's what happened in the real failure scenario_: When workflows were out of sync, the APT workflow would complete and push its changes to `gh-pages` before the RPM workflow finished building packages. Then when the RPM workflow tried to push, it got rejected. But here's the nasty part—it wouldn't fail loudly. The workflow would show "success" because the RPM build step completed, but the push to `gh-pages` failed silently. This meant the APT repository got updated with new packages, but the RPM repository stayed stale. Users on Fedora/RHEL would see version mismatches between what the release said was available and what `dnf` could actually find. I discovered this only after manually inspecting `gh run list` output and noticing the push failures buried in the logs.
+
+==== Debugging Mini-Story: Discovering the 5-Minute Window
+
+Here's how I figured out the synchronization window:
+
+I noticed that sometimes both workflows would create a release together, and sometimes they wouldn't. The pattern wasn't immediately obvious. So I exported the workflow run data to CSV and started analyzing timestamps:
+
+[source,bash]
+----
+$ gh run list --workflow=package-from-docker.yml --limit=50 --json databaseId,createdAt,conclusion > deb_runs.json
+$ gh run list --workflow=package-rpm-from-docker.yml --limit=50 --json databaseId,createdAt,conclusion > rpm_runs.json
+
+----
+
+Then I wrote a quick Python script to calculate time differences between paired runs. What I found:
+
+* _Successful releases_: Both workflows started within 30-90 seconds of each other
+* _Failed releases_: One workflow started 10+ minutes after the other (different Docker builds)
+
+The 5-minute window (300 seconds) became the sweet spot—wide enough to catch genuine pairs from the same build, narrow enough to reject stale runs from different builds. Too narrow (60s) and slow builds would miss pairing. Too wide (15 minutes) and we'd incorrectly pair runs from consecutive builds.
+
+_Mistakes to Avoid #1_: Don't blindly trust workflow "success" status. Check the actual job steps—a workflow can succeed overall even if critical steps like `git push` fail non-fatally.
+
+==== Understanding RPM %files Semantics
+
+The problem was subtle but important. In RPM spec files, the `%files` section has two ways to specify directories:
+
+. _%dir directive_: Packages the directory itself but not its contents
+. _Trailing slash_: Packages everything recursively under that directory
+. _Glob patterns_: Packages matching files/directories using wildcards
+
+_RPM file categorization is more nuanced than it appears_. The spec file doesn't just list what to package—it defines _ownership semantics_. When you use `%dir /usr/share/openscad/`, you're saying "I own this directory entry in the filesystem, but I'm not claiming ownership of its contents." This is crucial for shared directories where multiple packages might install files. For example, `/usr/share/icons/hicolor/` is a shared directory owned by the `hicolor-icon-theme` package, but dozens of applications install their icons there. Each app uses patterns like `%{_datadir}/icons/hicolor/_/apps/myapp._` to claim only their own icons, not the directory itself.
+
+The trailing slash syntax (`/usr/share/openscad/`) means "I own this directory AND recursively everything in it." It's RPM's way of saying "this is my territory, all of it." The glob syntax (`/usr/share/openscad/*`) is similar but more explicit—it expands at build time to include all items matching the pattern.
+
+Here's what I had originally:
+
+[source,spec]
+----
+%files
+%{_bindir}/openscad
+%{_defaultdocdir}/%{name}/COPYING
+== ... other files ...
+%dir %{_datadir}/openscad/   # ← This was the problem!
+
+----
+
+The `%dir` directive told RPM: "Package this directory entry, but not the files inside it." This is useful when you want to own the directory structure but let other packages populate it. But in my case, I wanted to package all the files.
+
+The fix was simple but not obvious:
+
+[source,spec]
+----
+%files
+%{_bindir}/openscad
+%{_defaultdocdir}/%{name}/COPYING
+== ... other files ...
+%{_datadir}/openscad/   # Trailing slash = recursive inclusion
+
+----
+
+By removing `%dir` and keeping the trailing slash, RPM now understood: "Package this directory and everything under it recursively."
+
+==== Why This Matters
+
+This distinction exists because RPM has sophisticated ownership semantics. Multiple packages can share directories, and RPM needs to know:
+
+* Who owns the directory itself?
+* Who owns the files inside?
+* What happens when a package is removed?
+
+Using `%dir` signals: "I own this directory structure, but other packages might put files in it." Using just the path with a trailing slash signals: "I own this directory AND everything in it."
+
+For a monolithic package like OpenSCAD where we control all the files, the recursive approach is correct. For shared directories like `/usr/share/icons/hicolor/`, using patterns like `%{_datadir}/icons/hicolor/_/apps/openscad._` is more appropriate because other packages also install icons there.
+
+_More glob pattern examples for different scenarios:_
+
+[source,spec]
+----
+== Scenario 1: Include all files but not hidden files
+%{_datadir}/myapp/*
+
+== Scenario 2: Include specific file types only
+%{_datadir}/myapp/*.json
+%{_datadir}/myapp/*.xml
+
+== Scenario 3: Include subdirectories at specific depths
+%{_datadir}/icons/hicolor/*/apps/myapp.png
+%{_datadir}/icons/hicolor/_/mimetypes/myapp-_.png
+
+== Scenario 4: Exclude certain patterns (requires %exclude)
+%{_datadir}/myapp/
+%exclude %{_datadir}/myapp/test/
+%exclude %{_datadir}/myapp/*.debug
+
+== Scenario 5: Shared directories (don't claim ownership)
+%{_datadir}/icons/hicolor/48x48/apps/myapp.png
+%{_datadir}/icons/hicolor/scalable/apps/myapp.svg
+== Note: No %dir for hicolor directories - icon theme package owns them
+
+----
+
+The key insight here? _Be specific about what you own_. If you're installing into a shared space, use precise patterns. If you own the entire directory tree, use the trailing slash for simplicity.
+
+==== Debugging Mini-Story: The RPM %files Rabbit Hole
+
+I'll be honest—I stared at this error for a good 20 minutes before I understood what was happening:
+
+----
+error: Installed (but unpackaged) file(s) found:
+   /usr/share/openscad/color-schemes/cornfield/background.json
+   (... 184 more files ...)
+
+----
+
+My first thought? "But I specified `%{_datadir}/openscad/`! That should include everything!" So I added more explicit patterns. Then I added glob patterns. Nothing worked.
+
+Finally, I did what I should have done first: read the RPM documentation carefully. That's when I discovered the `%dir` directive doesn't mean "directory and contents"—it means "just the directory entry." I'd been telling RPM: "Hey, this directory exists, but I'm not claiming the files inside it."
+
+The fix was embarrassingly simple: remove `%dir`. But the lesson stuck with me: RPM's packaging model is about _ownership_, not just _inclusion_. Understanding that mental model makes everything else click into place.
+
+_Troubleshooting Tip #2_: Testing RPM spec files locally before committing:
+
+[source,bash]
+----
+== Build the RPM locally to catch %files errors early
+$ rpmbuild -bb openscad.spec
+
+== If you get "unpackaged files" errors, use this to see what's installed:
+$ rpm -qlp /path/to/built.rpm | grep openscad
+
+== Compare against your %files section to find what's missing
+$ rpmdev-extract /path/to/built.rpm
+$ find usr/share/openscad/ -type f | wc -l  # Should match your expectations
+
+----
+
+_Mistakes to Avoid #2_: Don't assume directory patterns work the same across package managers. Debian's `*.install` files, RPM's `%files` sections, and Arch's PKGBUILD have completely different semantics for the same concept.
+
+=== Issue 4: Debian Dependency Hell
+
+==== The Bookworm-to-Trixie Transition
+
+The Debian packages built successfully, but installation failed on Debian Trixie (testing/unstable):
+
+[source,console]
+----
+$ sudo apt install ./openscad_2025.11.19-1_amd64.deb
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following packages have unmet dependencies:
+ openscad : Depends: libmimalloc2.1 but it is not installable
+            Depends: libzip4 but it is not installable
+E: Unable to correct problems, you have held broken packages.
+
+----
+
+The problem was clear: I was declaring dependencies for Debian Bookworm (stable), but building and running on Debian Trixie (testing), which has newer library versions.
+
+==== Understanding Debian Package Versioning
+
+Debian library packages include their SONAME (Shared Object Name) in the package name. This allows multiple versions to coexist:
+
+* `libmimalloc2.1` = libmimalloc with SONAME 2.1 (Bookworm)
+* `libmimalloc3` = libmimalloc with SONAME 3 (Trixie)
+* `libzip4` = libzip with SONAME 4 (Bookworm)
+* `libzip5` = libzip with SONAME 5 (Trixie)
+
+When a library's API/ABI changes significantly, the SONAME increments, and Debian creates a new package. This prevents incompatible upgrades from breaking existing software.
+
+_How to discover which SONAME version your binary actually needs:_
+
+The `ldd` command shows what shared libraries a binary is linked against, including their SONAME:
+
+[source,bash]
+----
+$ ldd /usr/bin/openscad | grep libmimalloc
+        libmimalloc.so.2 => /usr/lib/x86_64-linux-gnu/libmimalloc.so.2.1 (0x00007f8b2c400000)
+
+$ ldd /usr/bin/openscad | grep libzip
+        libzip.so.5 => /usr/lib/x86_64-linux-gnu/libzip.so.5.5 (0x00007f8b2c350000)
+
+----
+
+See that? `libmimalloc.so.2` is the SONAME (major version 2), and the actual file is `libmimalloc.so.2.1` (minor version 2.1). The Debian package name follows the SONAME.
+
+To find which Debian package provides that library:
+
+[source,bash]
+----
+$ dpkg -S /usr/lib/x86_64-linux-gnu/libmimalloc.so.2.1
+libmimalloc2.1:amd64: /usr/lib/x86_64-linux-gnu/libmimalloc.so.2.1
+
+----
+
+Or on a system where the binary isn't installed yet, use `objdump`:
+
+[source,bash]
+----
+$ objdump -p openscad | grep NEEDED | grep libmimalloc
+  NEEDED               libmimalloc.so.2
+
+----
+
+This shows exactly what SONAME the binary expects. Then you can search Debian packages:
+
+[source,bash]
+----
+$ apt-cache search libmimalloc
+libmimalloc2.1 - Compact general purpose allocator with excellent performance
+libmimalloc3 - Compact general purpose allocator with excellent performance
+
+----
+
+The lesson? _Don't guess dependencies—inspect the binary_.
+
+==== The Fix: Update Dependency Declarations
+
+I needed to update the control file (or in my case, the inline control generation in the workflow) to use Trixie's library versions:
+
+[source,diff]
+----
+-Depends: libmimalloc2.1, libzip4, ...
++Depends: libmimalloc3, libzip5, ...
+
+----
+
+But there's a more sophisticated approach: _dependency alternatives_. Since I'm extracting from Docker images that link against specific library versions, I could declare both old and new versions:
+
+[source,control]
+----
+Depends: libmimalloc3 | libmimalloc2.1, libzip5 | libzip4
+
+----
+
+This syntax means: "Prefer libmimalloc3, but accept libmimalloc2.1 if that's what's available." However, since I'm building on Trixie and the binary is linked against Trixie's libraries, this would actually fail - the binary _requires_ the newer versions.
+
+The correct solution depends on your distribution target:
+
+* _Target Bookworm_: Build on Bookworm, declare Bookworm dependencies
+* _Target Trixie_: Build on Trixie, declare Trixie dependencies
+* _Target both_: Build separate packages for each distribution
+
+In my case, I chose to target Trixie exclusively, so I updated the dependencies to match.
+
+==== Lesson: Match Build Environment to Target Environment
+
+This highlights a fundamental packaging principle: _your dependency declarations must match your build environment_. If you build on Debian Trixie, your binary will link against Trixie's libraries, and you must declare Trixie dependencies.
+
+Tools like `dpkg-shlibdeps` can automatically detect library dependencies by examining the binary, but since I was building packages from pre-compiled Docker images, I had to manage dependencies manually.
+
+_Troubleshooting Tip #3_: Inspecting binary dependencies when package installation fails:
+
+[source,bash]
+----
+== Extract the .deb without installing
+$ ar x openscad_2025.11.19-1_amd64.deb
+$ tar xf data.tar.xz
+$ ldd usr/bin/openscad | grep "not found"
+
+== If libraries are missing, find which package provides them on target system
+$ ssh target-debian-system "apt-file search libmimalloc.so.2"
+$ ssh target-debian-system "dpkg -S /usr/lib/x86_64-linux-gnu/libmimalloc.so.2.1"
+
+== This tells you the exact package name to add to dependencies
+
+----
+
+_Mistakes to Avoid #3_: Don't hardcode library versions without checking what's in your build environment. If you're building on Debian Trixie but declaring Debian Bookworm dependencies, your packages won't install anywhere.
+
+== Solution Part 3: Infrastructure Glue
+
+Beyond the major concurrency and packaging challenges, several smaller infrastructure issues needed attention to make the system production-ready.
+
+=== Issue 5: YAML Multi-line Gotchas
+
+==== The Silent Failure
+
+While testing the changes, I noticed commit messages weren't being formatted correctly. What should have been:
+
+[source,text]
+----
+update RPM repository with latest packages
+
+Automated update from workflow run 123456
+
+----
+
+Was appearing as:
+
+[source,text]
+----
+update RPM repository with latest packages Automated update from workflow run 123456
+
+----
+
+The problem was in the workflow YAML:
+
+[source,yaml]
+----
+== WRONG - GitHub Actions doesn't preserve literal newlines in this syntax
+git commit -m "update RPM repository with latest packages
+
+Automated update from workflow run ${{ steps.run.outputs.run_id }}"
+
+----
+
+==== Understanding YAML String Handling
+
+YAML has multiple ways to represent strings, and they have different whitespace handling. Here's where it gets tricky—and why my commit messages were getting mangled.
+
+_The YAML parser does several things behind the scenes:_
+
+. _Plain style_ (no quotes): Treats newlines as spaces, collapses consecutive whitespace
+. _Single/double quoted_: Escapes must be explicit (`\n` for newline, `\\` for backslash)
+. _Literal block style_ (`|`): Preserves newlines and trailing spaces _exactly_
+. _Folded block style_ (`>`): Converts single newlines to spaces, but preserves blank line paragraphs
+
+But here's the gotcha: _trailing whitespace in plain-style strings gets silently dropped_. So if you have:
+
+[source,yaml]
+----
+message: "Line one
+Line two"
+
+----
+
+The YAML parser sees: `"Line one Line two"` (single line, single space).
+
+Even worse, _GitHub Actions adds its own layer of processing_. It evaluates `${{ }}` expressions _before_ parsing the YAML, which means you can end up with malformed YAML if the expression output contains quotes or special characters.
+
+For multi-line git commit messages, we need an approach that survives both YAML parsing _and_ GitHub Actions expression evaluation:
+
+[source,yaml]
+----
+== CORRECT - literal block style preserves newlines
+git commit -m "update RPM repository with latest packages" \
+           -m "Automated update from workflow run ${{ steps.run.outputs.run_id }}"
+
+----
+
+Alternatively, using multiple `-m` flags is even clearer, as each `-m` creates a new paragraph in the commit message:
+
+[source,bash]
+----
+git commit -m "chore: cleanup old packages" \
+           -m "Automated cleanup from workflow run ${{ github.run_id }}" \
+           -m "- Removed .deb packages older than 7 days" \
+           -m "- Removed .rpm packages older than 7 days" \
+           -m "- Updated repository metadata"
+
+----
+
+This creates a properly formatted commit message with a subject line and body paragraphs.
+
+_Troubleshooting Tip #4_: Validating YAML in GitHub Actions workflows:
+
+[source,bash]
+----
+== Install yamllint locally
+$ pip install yamllint
+
+== Check your workflow file
+$ yamllint .github/workflows/create-release.yml
+
+== Common issues to watch for:
+== - Trailing spaces (breaks literal blocks)
+== - Inconsistent indentation (breaks structure)
+== - Unquoted special characters (: { } [ ] , & * # ? | - < > = ! % @ \)
+
+----
+
+_Commit message comparison_ (before and after fixing YAML):
+
+Before (broken):
+----
+commit 1234567
+Author: GitHub Actions
+Date:   2025-11-20
+
+    update RPM repository with latest packages Automated update from workflow run 123456
+
+----
+
+After (fixed):
+----
+commit 1234567
+Author: GitHub Actions
+Date:   2025-11-20
+
+    update RPM repository with latest packages
+
+    Automated update from workflow run 123456
+
+    Changes:
+    * Updated repository metadata
+    * Added packages for version 2025.11.20
+
+----
+
+Notice the difference? The first version is a single-line message (hard to read in git logs). The second version has proper paragraphs, making it clear what changed and why.
+
+_Mistakes to Avoid #4_: Don't rely on whitespace in YAML to create formatting. Use explicit syntax (literal blocks with `|`, multiple `-m` flags, or shell features like heredocs) to ensure your intent survives the YAML parser.
+
+=== Issue 6: Documentation Debt
+
+==== The README Update
+
+With all the technical issues fixed, I had one final problem: the documentation was outdated. The README still showed old installation instructions and didn't document the new APT/RPM repositories.
+
+I comprehensively updated the README to include:
+
+. _Architecture support table_: Clear mapping between different architecture naming conventions
+. _APT repository instructions_: Complete setup including GPG key import
+. _RPM repository instructions_: Setup for Fedora/RHEL/Rocky/AlmaLinux
+. _GitHub Releases section_: Manual package download instructions
+. _Version format documentation_: Explaining the `YYYY.MM.DD.BUILD_NUMBER` scheme
+. _Repository structure documentation_: Showing where packages are stored
+. _Distribution requirements_: Minimum Debian/Fedora versions
+
+Here's an example of the new APT installation section:
+
+[source,markdown]
+----
+==== Debian/Ubuntu (APT)
+
+
+----bash
+== Import GPG key
+curl -fsSL https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/gpg-public-key.asc | \
+  sudo gpg --dearmor -o /usr/share/keyrings/openscad-archive-keyring.gpg
+
+== Add repository
+echo "deb [signed-by=/usr/share/keyrings/openscad-archive-keyring.gpg] https://gounthar.github.io/openscad stable main" | \
+  sudo tee /etc/apt/sources.list.d/openscad.list
+
+== Update and install
+sudo apt-get update
+sudo apt-get install openscad
+----
+
+_Supported Distributions:_
+* Debian Trixie (13) and newer
+* Ubuntu 24.04 LTS and newer
+
+----
+
+This gives users a complete, copy-paste-ready installation experience with clear version requirements.
+
+== Testing the Complete System
+
+After all fixes were in place, I tested the complete pipeline:
+
+[source,bash]
+----
+== Trigger a full build
+git push origin multiplatform
+
+== This starts the cascade:
+== 1. Docker build workflow (3 architectures in parallel)
+== 2. Package extraction workflows (Debian + RPM)
+== 3. Repository update workflows (APT + RPM)
+== 4. Release creation workflow
+
+== Wait for completion, then test installation
+
+----
+
+Testing on each architecture:
+
+[source,bash]
+----
+== AMD64 (x86_64)
+curl -fsSL https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/gpg-public-key.asc | \
+  sudo gpg --dearmor -o /usr/share/keyrings/openscad-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/openscad-archive-keyring.gpg] https://gounthar.github.io/openscad stable main" | \
+  sudo tee /etc/apt/sources.list.d/openscad.list
+sudo apt-get update
+sudo apt-get install openscad -y
+openscad --version
+
+== ARM64 (aarch64) - same process
+== RISC-V64 - same process
+
+== RPM testing
+sudo rpm --import https://gounthar.github.io/openscad/rpm/RPM-GPG-KEY
+sudo curl -L https://gounthar.github.io/openscad/rpm/openscad.repo \
+  -o /etc/yum.repos.d/openscad.repo
+sudo dnf install openscad -y
+openscad --version
+
+----
+
+All installations succeeded, and concurrent workflows no longer conflicted.
+
+== Key Lessons Learned
+
+=== 1. Concurrency is Hard, Even in CI/CD
+
+GitHub Actions makes it easy to parallelize work, but it doesn't automatically handle coordination between workflows. When multiple workflows modify shared state (like a git branch), you need explicit concurrency control.
+
+The combination of GitHub's `concurrency` directive and the reset-and-restore pattern provides robust handling of concurrent updates—without complex locking.
+
+=== 2. RPM Spec Files Have Subtle Semantics
+
+The difference between `%dir /path/to/directory` and `/path/to/directory/` is easy to miss, but it completely changes RPM's packaging behavior. Understanding the ownership model is crucial.
+
+When in doubt, use:
+* `%dir` for shared directories you don't populate
+* Paths with trailing slashes for directories you own completely
+* Glob patterns for shared directories where you only own some files
+
+=== 3. Match Build Environment to Dependencies
+
+Your package dependencies must match what your binary is actually linked against. Tools like `dpkg-shlibdeps` (Debian) and `rpm`'s automatic dependency detection can help, but when working with pre-built binaries, manual verification is essential.
+
+=== 4. YAML is Surprisingly Complex
+
+YAML's string handling has many edge cases. For multi-line content in shell commands:
+
+* Use multiple `-m` flags for git commit messages
+* Use literal block style (`|`) when you need exact newline preservation
+* Test your YAML with `yamllint` to catch issues early
+
+=== 5. Idempotency and Retry Logic are Essential
+
+Network operations fail. APIs have transient issues. Build robust systems by:
+
+* Making operations idempotent (can be safely repeated)
+* Adding retry logic with exponential backoff
+* Using features like `--clobber` to replace instead of failing on duplicates
+* Logging clearly so you can diagnose intermittent issues
+
+=== 6. Documentation is Part of the Product
+
+The best automation is useless if users don't know how to use it. Invest in clear, complete documentation that includes:
+
+* Copy-paste-ready commands
+* Clear version/distribution requirements
+* Architecture support matrix
+* Troubleshooting guidance
+
+== Frequently Asked Questions
+
+=== How do I prevent concurrent GitHub Actions workflows from conflicting?
+
+Use GitHub's `concurrency` directive to control workflow execution:
+
+[source,yaml]
+----
+concurrency:
+  group: release-creation
+  cancel-in-progress: false
+
+----
+
+Combined with the reset-and-restore pattern for git operations, this prevents race conditions when multiple workflows modify the same branch.
+
+=== What is the reset-and-restore pattern in GitHub Actions?
+
+The reset-and-restore pattern handles concurrent git conflicts by:
+
+. Saving changes to a temporary directory
+. Fetching and resetting to the latest remote state
+. Restoring saved changes on top
+. Retrying the push operation
+
+This avoids merge conflicts in automated workflows.
+
+=== How do I fix "unpackaged files found" errors in RPM builds?
+
+Change `%dir /path/` to `/path/` (with trailing slash) in your RPM spec file's `%files` section. The `%dir` directive only packages the directory entry, not its contents.
+
+=== How do I synchronize multiple GitHub Actions workflows?
+
+Use workflow creation timestamps to detect if workflows were triggered by the same build:
+
+[source,bash]
+----
+== Get creation times and compare within a sync window (e.g., 5 minutes)
+DEB_TIME=$(gh api repos/${{ github.repository }}/actions/runs/${DEB_RUN} --jq '.created_at')
+RPM_TIME=$(gh api repos/${{ github.repository }}/actions/runs/${RPM_RUN} --jq '.created_at')
+
+----
+
+Workflows created within your sync window are from the same build and can be safely combined.
+
+== Conclusion: Building Robust Multi-Architecture CI/CD Pipelines
+
+Building a fully automated multi-architecture package distribution system for CI/CD pipelines is complex. It requires understanding:
+
+* _Git coordination patterns_ for concurrent modifications
+* _Package manager semantics_ (RPM, Debian) at a deep level
+* _Dependency management_ across different distribution versions
+* _GitHub Actions workflows_ and their concurrency model
+* _Retry and idempotency patterns_ for robust automation
+
+The reset-and-restore pattern proved particularly valuable. Instead of trying to merge concurrent changes (complex and error-prone), we save our changes, reset to the latest state, and reapply our changes on top. This works because our changes are additive and don't conflict with each other - APT updates modify `dists/`, RPM updates modify `rpm/`, and both are independent.
+
+The key insight is that _concurrent workflows are inevitable in modern CI/CD_. Rather than fighting them with complex locking, design your system to handle conflicts gracefully through idempotent operations and smart retry logic.
+
+Now the OpenSCAD build infrastructure runs smoothly: three architectures, two package formats, automatic repository updates, and GitHub Releases - all working in harmony. The next time someone pushes a commit, packages are built, tested, and published across all architectures within an hour, with zero manual intervention.
+
+And that's the dream of automation: complexity managed, reliability achieved, and maintainers free to focus on actual development rather than packaging mechanics.
+
+== Beyond Package Management: Applying These Patterns to Other CI/CD Scenarios
+
+The concurrency patterns and retry logic described here apply to many DevOps automation challenges:
+
+* _Artifact management_: Concurrent uploads to package registries
+* _Container registry updates_: Pushing multi-platform Docker images
+* _Infrastructure as Code_: Terraform state file conflicts
+* _Continuous deployment_: Coordinating deployments across environments
+
+The reset-and-restore pattern is particularly valuable for any scenario involving concurrent modifications to shared state in continuous integration pipelines.
+
+== Further Reading
+
+* _GitHub Actions Concurrency_: link:https://docs.github.com/en/actions/using-jobs/using-concurrency[https://docs.github.com/en/actions/using-jobs/using-concurrency]
+* _RPM Packaging Guide_: link:https://rpm-packaging-guide.github.io/[https://rpm-packaging-guide.github.io/]
+* _Debian Policy Manual_: link:https://www.debian.org/doc/debian-policy/[https://www.debian.org/doc/debian-policy/]
+* _YAML Specification_: link:https://yaml.org/spec/1.2.2/[https://yaml.org/spec/1.2.2/]
+* _Git Reset vs Merge_: link:https://git-scm.com/docs/git-reset[https://git-scm.com/docs/git-reset]
+
+---
+

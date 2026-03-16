@@ -1,0 +1,97 @@
+---
+author: gounthar
+categories:
+- aarch64
+- stationp1
+- Armbian
+- Firefly
+- Linux
+- RK3399
+- howto
+description: term2SVG is used to generate animated SVG files from shell sessions
+featured: true
+hidden: false
+image: assets/images/2021/08/20/E3RtT58meT.png
+tags:
+- aarch64
+- stationp1
+- Armbian
+- Firefly
+- Linux
+- RK3399
+- howto
+title: termtosvg on aarch64 Debian
+---
+
+== Installing termtosvg on an link:https://en.wikipedia.org/wiki/AArch64[aarch64] machine running link:https://www.debian.org/releases/bullseye/[bullseye].
+
+== What is termtosvg and what can I do with it?
+
+=== Term to what?
+
+termtosvg is an link:https://github.com/nbedos/termtosvg[abandonned] utility that allows to record terminal sessions as standalone SVG animations. Those animations come pretty handy if you want to spice up your documentation. Up to now it wasn't available as a package in Debian, so we had to build it on the machine.
+Fortunately, with recent and top notch distros like link:https://www.armbian.com/station-p1/[Armbian], we can install it with a simple
+
+```sudo apt install termtosvg----
+
+You may already know how much I love Armbian, and how much I love the link:http://bruno.verachten.fr/2021/02/18/How-to-Install-Armbian-on-the-Station-P1/[Station P1], so the combination of the two is just like heaven on earth.
+
+image::/assets/images/2021/08/20/kardashian-sassy.gif[kardashian-sassy]
+
+I already had written a blog post for termtosvg for the OrangePi link:/2020/01/03/Terminal-recording-on-the-OrangePi-Zero/[Zero].
+
+image::/assets/images/2021/08/20/whatever-name-I-choose.svg[whatever-name-I-choose]
+
+=== How to record my terminal
+
+The animated image just on top of this text has been generated thanks to two commands, the first one being:
+
+
+----bash
+termtosvg record -g 200x60 whatever-name-I-choose.cast
+----
+
+The `-g` is there to specify the geometry of your target terminal. The `record`part is there to tell you want to get a `.cast` file at the end. That's not mandatory, you could get your command as simple as `termtosvg`  and get the resulting SVG file as soon as you enter the `exit()` command. We'll see in a few paragraphs why I want to generate an intermediary `.cast` file.
+
+Pretty cool, heh? 
+
+Okay, my terminal settings are not that fancy, so let's throw glitter in your eyes.
+
+image::/assets/images/2021/08/20/glitter.svg[glitter]
+
+Now we're talking! This "cast" has been generated with the very same command. So the command once you enter `exit()`will create a `.cast` file which will then be used to generate a SVG file (with `termtosvg`) or a GIF file with the `asciicast2gif` command.
+
+=== How to generate the resulting SVG file
+
+Next mandatory step: generate the SVG file. Commands do not come any simpler:
+
+
+----termtosvg render glitter.cast glitter.svg----
+
+Afterwards, you just have to move your file wherever you need it and link/import it into your documentation.
+You're welcome.
+
+Now, why the hell did I generate an intermediary `.cast `file? Well, that format can be used as an input for another project, link:https://github.com/asciinema/asciicast2gif[asciicast2gif], which is part of link:https://github.com/asciinema/asciinema[asciinema]. Asciinema uses the same `.cast` format as termtosvg, so we can generate SVG from asciinema `cast` files, GIF files from termtosvg `cast`files, and the other way around.
+
+Now, what if you're out of luck, and termtosvg is not available on your distro? Let's try to build it by ourselves:
+
+== Compile and install `termtosvg`
+
+
+
+
+----bash
+git clone https://github.com/nbedos/termtosvg.git && cd termtosvg/
+== Prerequisites, use apt, apt-get, yum, whatever package manager you have on your system
+sudo apt-get install -y libxml2-dev libxslt-dev python3 python3-dev python3-pip python3-setuptools
+make build
+== If you ever have an error saying that python is not available, you could make an horrible hack like
+== sudo ln -s /usr/bin/python3 /usr/bin/python or anything smarter
+== Now, let's install it. Note that 1.1.0-py3 is the version that was available at the time I wrote this blog post, your
+== mileage may vary
+pip3 install dist/termtosvg-1.1.0-py3-none-any.whl
+```
+
+image::/assets/images/2021/08/20/great success.gif[great success]
+
+Now it's your turn to produce good looking shell recordings with termtosvg.

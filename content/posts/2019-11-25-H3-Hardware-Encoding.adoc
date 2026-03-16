@@ -1,0 +1,126 @@
+---
+author: Poddingue
+categories:
+- H3
+- Armbian
+- h.264
+- OrangePi
+- Zero
+description: Work with Armbian behind a corporate proxy
+draft: true
+featured: true
+hidden: false
+image: assets/images/Allwinner_H3_BLock_Diagram_1_.png
+tags:
+- Armbian
+- h.264
+- hardware_encoding
+- OrangePi
+title: Use x.264 hardware encoding on an OrangePi Zero running Armbian
+---
+
+[source,bash]
+----
+cd /usr/src/linux
+wget https://mirrors.edge.kernel.org/pub/linux/kernel/v4.x/linux-4.20.17.tar.xz && xz -d linux-4.20.17.tar.xz &&  tar -xf linux-4.20.17.tar && rm linux-4.20.17.tar
+armbian-config
+install kernel source
+cp linux-source-5.3.9-sunxi64/.config linux/linux-4.20.17
+cd linux && git clone  https://github.com/uboborov/sunxi-cedar-mainline
+cd sunxi-cedar-mainline/4.20.17
+cp sun7i-a20.dtsi ../../linux-4.20.17/arch/arm/boot/dts/sun7i-a20.dtsi
+cp sun8i-h3.dtsi ../../linux-4.20.17/arch/arm/boot/dts/sun8i-h3.dtsi
+cp sun8i-h3-orangepi-pc.dts ../../linux-4.20.17/arch/arm/boot/dts/sun8i-h3-orangepi-pc.dts
+cd ../../linux-4.20.17/ && make ARCH=arm sunxi_defconfig
+make ARCH=arm menuconfig
+sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-devx libmp3lame-dev libpulse-dev libv4l-dev libx264-dev libasound2-dev libgmp-dev libmpc-dev libmpfr-dev  libgmp-dev libgmp10 libgmp3-dev
+
+make -j2 ARCH=arm zImage dtbs
+
+----
+
+make modules_install et make install ne produit pas l'effet escompté.
+
+[source,bash]
+----
+cd /usr/src/linux/linux-4.20.17/arch/arm/boot/
+cp zImage /boot/zImage-4.20.17 && cp ./dts/sun8i-h2-plus-orangepi-zero.dtb /boot/sun8i-h2-plus-orangepi-zero-4.20.17.dtb
+cp /boot/boot.scr /boot/boot.scr.orig && vi /boot/boot.scr
+
+setenv bootargs console=ttyS0,115200 root=/dev/mmcblk0p1 rootwait panic=10
+load mmc 0:1 0x43000000 /boot/sun8i-h2-plus-orangepi-zero-4.20.17.dtb
+load mmc 0:1 0x42000000 /boot/zImage-4.20.17
+bootz 0x42000000 - 0x43000000
+
+git clone https://github.com/uboborov/ffmpeg_h264_H3.git
+git clone https://github.com/stulluk/FFmpeg-Cedrus.git
+cp ffmpeg_h264_H3/cedrus264.c FFmpeg-Cedrus/libavcodec/cedrus264.c
+cp -vraxu ffmpeg_h264_H3/sunxi/ FFmpeg-Cedrus/libavcodec/arm/
+cd FFmpeg-Cedrus/
+./configure --prefix=/usr --enable-nonfree --enable-gpl --enable-version3 --enable-vdpau --enable-libx264 --enable-libmp3lame --enable-libpulse --enable-libv4l2
+make -j2
+
+----
+
+It does not compile, so let's install an older version of gcc.
+
+[source,bash]
+----
+export ftp_proxy=http://ip:port
+export http_proxy=http://ip:port
+export https_proxy=http://ip:port
+wget ftp://ftp.lip6.fr/pub/gcc/releases/gcc-4.3.3/gcc-4.3.3.tar.bz2 && bunzip2 gcc-4.3.3.tar.bz2 && tar -xf gcc-4.3.3.tar && rm gcc-4.3.3.tar
+cd gcc-4.3.3
+
+----
+
+d'après https://gcc.gnu.org/install/prerequisites.html il faut gmp 4.3.2, MPFR Library version 3.1.0 (or later), MPC Library version 0.8.1 (or later)
+
+[source,bash]
+----
+wget ftp://ftp.gnu.org/gnu/gmp/gmp-4.3.2.tar.bz2
+wget https://www.mpfr.org/mpfr-3.1.6/mpfr-3.1.6.tar.bz2
+wget http://repository.timesys.com/buildsources/m/mpc/mpc-0.8.2/mpc-0.8.2.tar.gz
+tar -xf mpfr-3.1.6.tar.bz2 && mv mpfr-3.1.6 mpfr && rm mpfr-3.1.6.tar.bz2
+tar -xf gmp-4.3.2.tar.bz2 && mv -v gmp-4.3.2 gmp && rm gmp-4.3.2.tar.bz2
+tar -xzf mpc-0.8.2.tar.gz && mv -v mpc-0.8.2 mpc && rm mpc-0.8.2.tar.gz
+cd gmp && ./configure  --enable-static && make -j2 && make install
+cd ../mpfr/ && ./configure --enable-static && make -j2 && make install
+cd ../mpc/ && ./configure  --enable-static && make -j2 && make install
+cd .. && rm -fr mpc mpfr gmp
+wget ftp://ftp.gnu.org/gnu/gmp/gmp-4.3.2.tar.bz2
+wget https://www.mpfr.org/mpfr-3.1.6/mpfr-3.1.6.tar.bz2
+wget http://repository.timesys.com/buildsources/m/mpc/mpc-0.8.2/mpc-0.8.2.tar.gz
+tar -xf mpfr-3.1.6.tar.bz2 && mv mpfr-3.1.6 mpfr && rm mpfr-3.1.6.tar.bz2
+tar -xf gmp-4.3.2.tar.bz2 && mv -v gmp-4.3.2 gmp && rm gmp-4.3.2.tar.bz2
+tar -xzf mpc-0.8.2.tar.gz && mv -v mpc-0.8.2 mpc && rm mpc-0.8.2.tar.gz
+
+----
+
+as I got acos.c:192:19: error: GMP_RNDA undeclared (first use in this function); did you mean GMP_RNDD? I changed MPC release
+I also had to change mpfr to 3.1.2 instead of 3.1.0 because of compilation problems.
+
+[source,bash]
+----
+cd .. && mkdir objdir && cd objdir && ../gcc-4.3.3/configure
+make -j2 && make install
+
+https://stackoverflow.com/questions/9297933/cannot-configure-gcc-mpfr-not-found
+export ftp_proxy=http://ip:port
+wget ftp://ftp.lip6.fr/pub/gcc/releases/gcc-4.5.2/gcc-4.5.2.tar.bz2 && bunzip2 gcc-4.5.2.tar.bz2 && tar -xf gcc-4.5.2.tar && rm gcc-4.5.2.tar
+cd gcc-4.5.2
+./contrib/download_prerequisites
+
+
+sudo cp linux-4.20.17/arch/arm/boot/zImage /media/techforum/1868e640-9660-423a-8dd3-de560bfb2298/boot/zImage-4.20.17
+sudo cp linux-4.20.17/arch/arm/boot/dts/sun8i-h2-plus-orangepi-zero.dtb /media/techforum/1868e640-9660-423a-8dd3-de560bfb2298/boot/
+sudo cp sunxi-cedar-mainline/boot.scr /media/techforum/1868e640-9660-423a-8dd3-de560bfb2298/boot/
+sudo cp sunxi-cedar-mainline/sunxi_cedar.ko /media/techforum/1868e640-9660-423a-8dd3-de560bfb2298/lib/modules/
+sudo cp -R modules/lib/modules/4.20.17 /media/techforum/1868e640-9660-423a-8dd3-de560bfb2298/lib/modules/
+
+----
+
+Voir https://forum.armbian.com/topic/14641-nanopi-neo-air-ffmpeg-with-cedrus-h264/?tab=comments#comment-105822
+
+le gars arrive à encoder
+

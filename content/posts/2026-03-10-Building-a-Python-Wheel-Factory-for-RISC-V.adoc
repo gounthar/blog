@@ -1,0 +1,406 @@
+---
+author: Bruno Verachten
+categories:
+- risc-v
+- python
+- wheels
+- automation
+- github-actions
+date: 2026-03-10 00:00:00 +0100
+description: How I built a PEP 503 wheel index for riscv64 Python packages using two
+  BananaPi F3 boards, GitHub Actions self-hosted runners, and 26 forked repos.
+excerpt: You know that feeling when `pip install tokenizers` finishes in three seconds?
+  Now imagine that on RISC-V, where it takes thirty minutes. I got tired of waiting,
+  so I built a wheel factory to deliver prebuilt riscv64 Python wheels in seconds.
+featured: false
+hidden: false
+image: assets/images/2026/03/10/wheel-factory-header.jpg
+tags:
+- riscv64
+- python
+- wheels
+- pip
+- pep503
+- github-actions
+- bananapi
+- spacemit
+- cibuildwheel
+- packaging
+title: Building a Python Wheel Factory for RISC-V
+---
+
+image::/assets/images/2026/03/10/wheel-factory-header.jpg[Industrial machine in a large factory building]
+
+_Photo by link:https://unsplash.com/@homaappliances[Homa Appliances] on link:https://unsplash.com/photos/pWUyHVJgLhg[Unsplash]_
+
+You know that feeling when you type `pip install tokenizers` and it finishes in three seconds?
+That satisfying little progress bar, the "Successfully installed" message, and you're on your way.
+
+Now imagine the same command on a RISC-V board.
+No progress bar.
+Instead, Rust's link:https://doc.rust-lang.org/cargo/[cargo] starts downloading 200 crates.
+The link:https://cython.org/[Cython] compiler kicks in.
+GCC churns through C++ files.
+Thirty minutes later, if you're lucky, you have your package.
+If you're not lucky, your SSH session timed out and you get to start over.
+
+I got tired of waiting. So I built a wheel factory.
+
+The goal: get link:https://github.com/vllm-project/vllm[vLLM], a high-throughput LLM inference engine, running on RISC-V hardware.
+That meant building every native dependency from source, because PyPI had almost none of them as riscv64 wheels.
+
+---
+
+== The Problem Nobody Talks About
+
+RISC-V is having a moment.
+The Sophgo SG2044 has 64 cores.
+SpacemiT's K1 ships in real hardware you can buy today.
+But the Python ecosystem? It hasn't caught up.
+
+link:https://pypi.org/[PyPI] hosts prebuilt wheels for x86_64, aarch64, sometimes link:https://en.wikipedia.org/wiki/Ppc64[ppc64le].
+For riscv64? A handful of packages have started shipping wheels (`markupsafe`, `yarl`, `charset-normalizer`), but for the vast majority of packages with native extensions, there's nothing.
+Every Rust, C, or C++ package must be compiled from source on every install, on every machine, every time.
+
+The thing is, this isn't a RISC-V problem.
+The GCC 14.2 toolchain compiles everything just fine.
+Rust's riscv64gc target works perfectly.
+The compilation almost always succeeds. The toolchain is solid.
+The problem is that almost nobody's running `cibuildwheel` with riscv64 runners, so riscv64 wheels on PyPI remain rare.
+
+I decided to fix that, at least for the packages I needed.
+
+---
+
+== The Hardware
+
+Two BananaPi F3 boards sitting on my desk.
+Each one packs a SpacemiT K1 link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC]: 8 RISC-V cores at 1.6 GHz, link:https://github.com/riscv/riscv-v-spec[RVV 1.0] vector extensions with vlen=256, and 16 GB of RAM.
+Not exactly a build farm, but not nothing either.
+
+Why build natively instead of cross-compiling?
+Because I wanted wheels tested on actual RISC-V hardware.
+Cross-compiling with an riscv64 GCC toolchain on a fast x86_64 machine would be faster, sure, but then you're trusting that the cross-compiled build matches what real silicon does.
+(And no, link:https://www.qemu.org/[QEMU] user-mode emulation is _slower_ than native. Convenient, not fast.)
+For a first pass, I wanted confidence over speed.
+
+---
+
+== The Plan: Fork, Build, Index, Automate
+
+=== Twenty-Six Forks
+
+The approach was brute-force simple: for every Python package that needed a native wheel on riscv64, fork the upstream repo, add a GitHub Actions workflow that builds on my F3 boards, and publish the wheel.
+
+I started with 15 packages.
+By the time I was done chasing transitive dependencies, I had 26 forks.
+Twelve Rust/link:https://www.maturin.rs/[maturin] packages (tokenizers, pydantic-core, safetensors, tiktoken, blake3, cryptography, watchfiles, jiter, fastar, openai-harmony, rignore, textual-speedups) and thirteen C/setuptools packages (sentencepiece, pillow, cffi, zstandard, pyyaml, tree-sitter, tree-sitter-bash, httptools, uvloop, msgspec, pyzmq, setproctitle, and PyTorch itself).
+
+Each fork got the same treatment:
+
+. Fork upstream repo to `gounthar/`
+. Disable all upstream CI workflows (some repos had 40+ workflows for GPU builds, code coverage, linting, none of which would run on my riscv64 runners anyway)
+. Add a single `build-riscv64.yml` workflow
+. Register both F3 boards as self-hosted runners
+. Push button, wait for wheel
+
+The workflow structure was the same for every package, with just the build command varying:
+
+[source,yaml]
+----
+== For Rust/maturin packages:
+* run: pip install maturin && maturin build --release
+
+== For C/setuptools packages:
+* run: pip wheel . --no-deps -w /tmp/wheels/
+
+----
+
+=== The Self-Hosted Runner Situation
+
+Now, GitHub's official Actions runner doesn't support riscv64.
+The only option is link:https://github.com/ChristopherHX/github-act-runner[github-act-runner], a Go-based reimplementation by ChristopherHX.
+It works. Mostly.
+
+The quirks are real:
+
+_No `GITHUB_REPOSITORY` environment variable._
+The official runner sets this automatically.
+github-act-runner doesn't.
+So `gh release create` just fails with "No default remote repository has been set for this directory."
+The fix? Set `GH_REPO` explicitly in every job that uses the `gh` CLI:
+
+[source,yaml]
+----
+release:
+  env:
+    GH_REPO: ${{ github.repository }}
+
+----
+
+_Checkout is mandatory._
+On the official runner, some commands work without an explicit `actions/checkout` step because there's implicit repo context.
+Not here.
+Every job that touches git or `gh` needs a checkout step.
+I learned this one the hard way when `gh release create` failed with "fatal: not a git repository."
+
+_Runner restarts kill in-flight jobs._
+I needed to register both boards with all 26 repos.
+Each `github-act-runner configure` call requires stopping the service.
+If a build was running on that board? Gone. Cancelled.
+Register all repos first, _then_ trigger builds.
+I lost 9 builds learning this lesson.
+
+_No load balancing._
+Both runners listen for the same labels (`self-hosted, linux, riscv64`).
+Runner 1, being slightly faster to respond, grabbed every job.
+Runner 2 sat idle.
+To force a build onto runner 2, I had to stop runner 1's service.
+Not elegant, but it worked.
+
+---
+
+== The PEP 503 Index
+
+=== Why Not Just Use `--find-links`?
+
+My first attempt was simpler: upload all wheels to a GitHub Release and use `pip install --find-links https://github.com/.../releases/download/...`.
+
+Nope.
+`--find-links` expects an HTML page with links to wheel files.
+GitHub Release download URLs are direct file links, not directory listings.
+pip got confused and couldn't find anything.
+
+The real solution: a link:https://peps.python.org/pep-0503/[PEP 503] compliant package index hosted on GitHub Pages.
+A `simple/` directory with one subdirectory per package, each containing an `index.html` with links to wheel files including `#sha256=` integrity hashes.
+
+A quick `generate-index.py` script crawls the GitHub Releases, builds the HTML files, and deploys to a `gh-pages` branch.
+And just like that, a proper package index at `https://gounthar.github.io/riscv64-python-wheels/simple/`.
+
+The moment of truth, installing tokenizers on the second F3 (which had never compiled it):
+
+[source,console]
+----
+$ pip install tokenizers --extra-index-url https://gounthar.github.io/riscv64-python-wheels/simple/
+Downloading tokenizers-0.22.2-cp39-abi3-linux_riscv64.whl (3.4 MB)
+Successfully installed tokenizers-0.22.2
+
+----
+
+Three seconds. Not thirty minutes. I may have cheered.
+
+=== The Relative URL Bug
+
+But there was a catch.
+A few days later, cffi installs started failing with 404 errors.
+
+The PEP 503 index was generating relative URLs:
+
+[source,html]
+----
+<a href="cffi-2.0.0-cp313-cp313-linux_riscv64.whl#sha256=abc123...">
+
+----
+
+On GitHub Pages, that relative URL resolved to `https://gounthar.github.io/riscv64-python-wheels/simple/cffi/cffi-2.0.0-...whl`.
+But the actual wheels live in GitHub Releases, at `https://github.com/gounthar/riscv64-python-wheels/releases/download/v2026.03.09-cp313/cffi-2.0.0-...whl`.
+Completely different domain.
+
+The root cause was subtle: `generate-index.py` called `_find_release_tag()` to build the full URL, but during aggregation the script deletes and recreates the release.
+Between deletion and recreation, the tag didn't exist, the function returned empty, and the code fell back to just the filename.
+Relative URL. 404.
+
+The fix was two lines: always generate absolute URLs, and pass the release tag explicitly from the CI workflow instead of trying to auto-detect it.
+
+[source,html]
+----
+<!-- Before (broken): -->
+<a href="cffi-2.0.0-cp313-cp313-linux_riscv64.whl#sha256=abc123...">
+
+<!-- After (working): -->
+<a href="https://github.com/gounthar/riscv64-python-wheels/releases/download/v2026.03.09-cp313/cffi-2.0.0-cp313-cp313-linux_riscv64.whl#sha256=abc123...">
+
+----
+
+The devil is in the details with PEP 503.
+Your index can look perfect in a browser and still fail silently when pip tries to download.
+
+---
+
+== The Automation Pipeline
+
+=== The Full Loop
+
+I didn't want to SSH into a BananaPi every time pydantic-core released a new version.
+The whole point was automation. Here's the flow:
+
+----
+PyPI publishes new version
+  |
+detect-and-build.yml (daily, runs on ubuntu-latest)
+  -> Checks PyPI JSON API for each package
+  -> Compares with packages.json version list
+  | new version found
+Dispatches workflow_run to gounthar/<fork>
+  |
+build-riscv64.yml (runs on self-hosted BananaPi F3)
+  -> Builds wheel natively on riscv64
+  -> Creates GitHub Release in fork repo
+  |
+notify-index job sends repository_dispatch
+  |
+update-index.yml (runs on ubuntu-latest)
+  -> Downloads wheels from ALL fork releases
+  -> Creates central release with all wheels
+  -> Regenerates PEP 503 index
+  -> Deploys to GitHub Pages
+  |
+Users install instantly:
+  pip install PKG --extra-index-url https://gounthar.github.io/riscv64-python-wheels/simple/
+
+----
+
+The cross-repo dispatch needs a `DISPATCH_TOKEN`, a GitHub PAT with `repo` and `workflow` scopes.
+The default `GITHUB_TOKEN` is scoped to the current repo and can't trigger workflows in other repos.
+I had to run `gh secret set DISPATCH_TOKEN` in all 26 forks.
+I forgot this on the first batch of 10 new forks.
+The `notify-index` step failed silently (it had `|| true` to avoid breaking the release job).
+Cost me an hour of debugging before I noticed.
+
+=== Forty-Two PRs Across Fourteen Repos
+
+When I found the first CI bug (missing checkout step), I had to fix it in 14 fork repos.
+Then the DISPATCH_TOKEN issue.
+Then the GH_REPO fix.
+Three rounds of fixes. 14 repos each. That's 42 PRs.
+
+Doing this by hand? Not a chance. I wrote a bash script that:
+
+. Iterates `packages.json` to get the list of forks
+. For each fork: fetches the workflow file via GitHub API, applies the fix with Python string manipulation, creates a branch, pushes, creates a PR
+. Merges all PRs with `gh pr merge --admin`
+
+Each round took about two minutes.
+I don't even want to think about doing that through GitHub's UI by hand.
+
+---
+
+== The uvloop Saga
+
+If this article has a villain, it's uvloop.
+Not because of RISC-V. Because of Python packaging.
+
+uvloop compiled flawlessly on the F3 when I ran `pip wheel` manually.
+Eighteen minutes of C compilation (link:https://libuv.org/[libuv] + Cython bindings), and out popped a perfectly good wheel.
+But in CI? Five attempts.
+
+_Attempt 1_: `ModuleNotFoundError: No module named 'pkg_resources'`.
+This is 2026.
+Python 3.13 doesn't ship setuptools in the stdlib anymore, and setuptools 82 dropped `pkg_resources` entirely.
+uvloop's `setup.py` imports `pkg_resources` at the top level.
+Fix: pin `setuptools<81` in the build environment.
+
+_Attempt 2_: Same error. Wait, what?
+The fix was in the workflow file.
+But `pip wheel` creates an isolated build environment.
+Inside that sandbox, it installs the _latest_ setuptools (82+), which doesn't have `pkg_resources`.
+My pinned version in the outer environment was irrelevant.
+Fix: switch from `pip wheel` to `python3 setup.py bdist_wheel`, which uses the ambient environment.
+
+_Attempt 3_: Same error. Again.
+I stared at the workflow diff. The fix was there.
+Then I realized: github-act-runner caches workflow definitions.
+The runner was executing the _old_ version from before my fix.
+I had to wait for the cache to expire or restart the runner service.
+
+_Attempt 4_: Progress!
+The wheel compiled successfully. All 18 minutes of C code crunching through GCC.
+Then: `cp: cannot create regular file '/tmp/wheels/': Not a directory`.
+The output directory didn't exist.
+Fix: `mkdir -p /tmp/wheels`.
+
+_Attempt 5_: Success.
+Runner #2 (the one that had been sitting idle) finally built uvloop 0.22.1.
+
+Five attempts.
+The actual RISC-V compilation was never the problem. Not once.
+It was setuptools dropping APIs, pip's build isolation fighting legacy setup.py scripts, CI runner caching stale workflows, and a missing `mkdir`.
+The Python packaging ecosystem is in transition, and the rough edges show up in places you don't expect.
+
+---
+
+== A Surprising Discovery: ISA Compatibility
+
+I was worried that wheels built on RVV-capable hardware (the SpacemiT K1 has full RVV 1.0) would require vector extensions to run.
+That would mean separate builds for boards with and without RVV.
+
+I checked the link:https://en.wikipedia.org/wiki/Executable_and_Linkable_Format[ELF] attributes of the compiled shared objects:
+
+----
+Tag_RISCV_arch: "rv64i2p1_m2p0_a2p1_f2p2_d2p2_c2p0_zicsr2p0_zifencei2p0_zmmul1p0"
+
+----
+
+No vector extensions baked in.
+GCC targets baseline `rv64gc` by default, regardless of what the host CPU supports.
+These wheels run on _any_ riscv64 Linux system: boards with RVV, boards without it, even QEMU.
+One build to rule them all.
+
+---
+
+== The Result
+
+Twenty-five native riscv64 wheels.
+A PEP 503 index on GitHub Pages.
+Automated detection of new upstream versions.
+Two BananaPi F3 boards doing the building.
+One `--extra-index-url` flag away from instant installs.
+
+What used to take hours of compilation on every riscv64 machine now takes seconds:
+
+[source,bash]
+----
+pip install tokenizers pydantic-core safetensors tiktoken \
+    --extra-index-url https://gounthar.github.io/riscv64-python-wheels/simple/
+
+----
+
+Obviously these forks aren't going to stick around forever -- long-term, these packages should add riscv64 to their own cibuildwheel matrices.
+I'm planning to open upstream PRs for that.
+But for now, the wheel factory keeps running.
+
+[quote]
+____
+_Note:_ A word of caution: `--extra-index-url` checks both PyPI and the extra index, which means a malicious package with a higher version on PyPI could shadow ours. For maximum safety, use `--extra-index-url` with `--only-binary :all:` to avoid pulling unexpected source packages.
+____
+
+_What happened next? I tried the index on a clean machine and everything broke. That story is in part two: link:/article-dependency-rabbit-hole[The Dependency Rabbit Hole: When 25 RISC-V Python Wheels Weren't Enough]._
+
+---
+
+== Takeaways
+
+* _PEP 503 index URLs must be absolute_ when your wheels live on a different domain than your index. Relative URLs will silently 404.
+_ _`github-act-runner` is the only game in town* for riscv64 GitHub Actions, but expect quirks: set `GH_REPO` explicitly, always add `actions/checkout`, and don't restart the service during builds.
+* _Python's packaging transition bites in CI_: setuptools 82 dropped `pkg_resources`, pip's build isolation ignores your outer environment, and legacy `setup.py` scripts haven't caught up. Pin your build tools.
+* _Batch your CI fixes_: when you maintain 26 forks, a one-line fix means 26 PRs. Script it or lose your mind.
+* _Cross-repo dispatch needs a PAT_: `GITHUB_TOKEN` can't trigger workflows in other repos. Create a PAT with `repo` + `workflow` scopes and set it as `DISPATCH_TOKEN` in every fork.
+* _riscv64 wheels target baseline rv64gc_ by default -- no vector extensions required. One build works on all riscv64 Linux systems.
+* _The compiler is not the problem._ Seriously. Every single failure I hit was packaging, build isolation, or CI plumbing. GCC and Rust compiled everything I threw at them without complaining once.
+
+The PEP 503 index is live at link:https://gounthar.github.io/riscv64-python-wheels/simple/[https://gounthar.github.io/riscv64-python-wheels/simple/].
+The source and automation live at link:https://github.com/gounthar/riscv64-python-wheels[https://github.com/gounthar/riscv64-python-wheels].
+If you're running Python on RISC-V, try it out.
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: /mnt/c/support/users/dev/riscv/vllm/article-wheel-factory.adoc
+Conversion date: 2026-03-10
+Notes:
+* AsciiDoc source blocks converted to markdown fenced code blocks with language identifiers
+* AsciiDoc NOTE admonition converted to markdown blockquote with bold label
+* AsciiDoc cross-link converted to Jekyll post link syntax
+* Image paths adjusted for Jekyll assets structure
+* Frontmatter generated with categories, tags, excerpt for post listings
+* All metadata preserved from AsciiDoc attributes
+-->

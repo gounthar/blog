@@ -1,0 +1,138 @@
+---
+author: Bruno Verachten
+categories:
+- Jenkins
+- Conferences
+date: 2026-02-02 20:00:00 +0100
+description: 'Two days behind the Jenkins booth at FOSDEM 2026: visitor feedback,
+  Blue Ocean deprecation, Pipeline Graph View, Groovy pipeline confessions, and the
+  angry butler sticker everyone wants.'
+excerpt: You know that feeling when you've been standing behind a booth for ten hours
+  straight, your voice is gone, your feet are killing you, and you still don't want
+  it to end? That's FOSDEM for you.
+featured: true
+hidden: false
+image: assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg
+tags:
+- fosdem
+- jenkins
+- open-source
+- ci-cd
+- community
+- blue-ocean
+- pipeline-graph-view
+- java
+- groovy
+- stickers
+- brussels
+- fosdem-2026
+title: 'FOSDEM 2026: Jenkins Was There, and So Were You'
+toc: true
+---
+
+You know that feeling when you've been standing behind a booth for ten hours straight, your voice is gone, your feet are killing you, and you still don't want it to end? That's FOSDEM for you.
+
+== The Setup
+
+FOSDEM 2026. Brussels. The Université Libre de Bruxelles campus, with its graffiti-covered walls, its radical posters, its whole free software atmosphere that sets the mood before you even step inside a building. I've seen articles on LinkedIn mentioning 8,000 attendees this year. I don't have the official numbers, but honestly, it felt like it.
+
+This year, the Jenkins booth was on the ground floor instead of the first floor, sandwiched between Homebrew and GitLab (prime real estate, if you ask me). I got the impression they grouped booths by theme this time around, which was a nice change.
+
+image::{{ site.baseurl }}/assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg[Bruno Verachten (left) and Stéphane Merle (right) holding down the Jenkins booth at FOSDEM 2026]
+
+=== 🛠 The Crew
+
+Here's the thing: running a booth at FOSDEM isn't a one-person job, even though I sometimes feel like I'm trying to prove otherwise. I was the main booth person, alongside Stéphane Merle, who keeps our infrastructure running. But we had reinforcements, and I'm deeply grateful for every one of them.
+
+Alyssa Tong applied for the booth months ago and got us in (which is not always easy — thanks, Alyssa). She couldn't be there in person this year, but we owe her the spot. Then the elections happened, Stefan Spieker was elected as our new Events Officer for Jenkins, and he's now responsible for the logistics and our next application. Hervé Le Meur, Daniel Beck, James Nord, Adrien LeCharpentier, Ullrich Hafner, Valentin Delaye... I'm sure I'm forgetting someone, and I apologize if that's you. We'll try to include photos so I can do a proper roll call later.
+
+Kevin Martens, Mark Waite, and Jean-Marc Meessen couldn't make it either. We missed them.
+
+---
+
+== Two Days of Non-Stop Conversations
+
+From booth setup at 8 AM Saturday to teardown at 5 PM Sunday, we barely had time to breathe. There was a continuous flow of visitors, and leaving the booth even for a bathroom break felt like abandoning ship.
+
+=== 🤝 Old Friends, New Friends
+
+FOSDEM is where you reconnect with people. Thanks to Sylvain from Worldline, JF from Pine64, and many others who stopped by. I'm sorry if I forgot your name (it happens when you talk to hundreds of people over two days).
+
+And our GitLab neighbors? I was a bit worried we'd end up exchanging passive-aggressive jabs, but the exact opposite happened. We went full "coopetition" mode, and it was genuinely fun. We made new friends there.
+
+=== 😊 "It Just Works"
+
+The overwhelming feedback from visitors? Gratitude. People came to the booth to say thank you. Not all of us staffing the booth are the most critical contributors to the project, but we happily accept the appreciation on behalf of everyone who makes Jenkins what it is.
+
+Jenkins works. It just works. People are happy with it.
+
+Sure, the UI might look a bit dated. But here's the thing: Tim Jacomb and Jan Faracik have been doing a massive amount of work to modernize it. A lot of that work is invisible. When they removed prototype.js, there wasn't some dramatic visual overhaul, but it was a huge engineering effort under the hood. The modernization is real, even if it doesn't always make for flashy screenshots.
+
+On the booth, we were showing the usual slide deck with everything accomplished in 2025, but we were also demoing the experimental UI features. Some people were genuinely excited about those.
+
+---
+
+== The Pipeline Graph View Surprise
+
+Here's where things got interesting. We talked a lot about Blue Ocean, the pipeline visualization plugin that's been in maintenance mode for a while now. As we discussed at the Contributor Summit last Friday, it will be officially deprecated soon. There's only one maintainer left, and development is limited to bug fixes.
+
+The plugin people should be looking at now is link:https://plugins.jenkins.io/pipeline-graph-view/[Pipeline Graph View].
+
+And quite a few visitors had never heard of it. How is that possible? I think the answer is simple: Jenkins works, so people don't go looking for what's new in the ecosystem. If it ain't broke, why explore? Some visitors were also surprised to learn Blue Ocean was deprecated at all, despite the link:https://www.jenkins.io/blog/[blog posts] about it.
+
+We also talked about how Jenkins went from requiring Java 8 all the way to supporting Java 25 (yes, Java 25), thanks to the link:https://www.jenkins.io/blog/2023/11/06/introducing-2-2-2-java-support-plan/[2+2+2 plan] initiated by Mark Waite. Java 21 is now the minimum, and Java 25 is already supported. That's a story worth telling on its own.
+
+---
+
+== The Big Users Are Still Here
+
+As every year, we got testimonials from large-scale Jenkins users. Volvo, Bosch, Siemens, CERN (who were our neighbors at the event). These organizations run Jenkins at serious scale, with large controllers and demanding workloads. Year after year, same story: Jenkins handles it.
+
+=== 🔧 The Booth as a Help Desk
+
+There's always an aspect of the booth that's basically tech support. People who have a problem, didn't think to go to link:https://community.jenkins.io[community.jenkins.io] or Matrix, and want answers right there and then.
+
+And this is where the organic, improvised organization of the booth shines. We had people who handle infrastructure, people who handle security, core developers, plugin maintainers. Not every question landed on the right person immediately, but most of the time, we'd start a conversation at the booth table, then "satellite" contributors orbiting nearby would step in. We'd hand off the discussion, free up the table, and keep going. Most of the time, we either solved the problem or at least gave people solid leads.
+
+=== ⚠️ The Groovy Pipeline Trap
+
+Why does this keep happening every year? Since you can write Groovy in Jenkins pipelines, the door is wide open to put all your logic there. Instead of pushing intelligence into Python scripts, shell scripts, or other tools, people end up with massive Groovy pipelines that become unmaintainable.
+
+It's not that they did anything _wrong_. Jenkins gives you a lot of freedom in how you write your pipelines, and the downside is that without guidance, you can paint yourself into a maintenance corner. Every year, a few people show up saying "I can't maintain my pipelines anymore, what did I do wrong?" The answer is usually "nothing wrong per se, but let's talk about better patterns."
+
+---
+
+== Stickers: The True Currency of FOSDEM
+
+We didn't have new sticker designs this year, but they flew off the table as usual. The general consensus at FOSDEM? Jenkins has the best stickers.
+
+But not just the best stickers. The best open source automation server too. (I might be biased.)
+
+And the crowd favorite sticker? You'd think it would be the classic Jenkins butler. Nope. It's the angry butler with the flames, the one you see on a 500 error page. People rarely see it in the wild, but when they spot it on a sticker, they want it. Go figure.
+
+---
+
+== Thank You
+
+I want to thank every contributor who spent time at the booth with Stéphane and me. Some gave a little time, some gave a lot.
+
+Special thanks to Stefan Spieker for taking over the booth logistics. That's a big job, and he handled it.
+
+Thanks to every Jenkins user who stopped by to say hello, share a kind word, or just ask what this butler character is all about. Every year, there are people discovering CI/CD for the first time at our booth. You can see it in their eyes when they realize they can professionalize the way they build their software. That spark is why we keep coming back.
+
+With a bit of luck, Jenkins will have a booth again next year.
+
+If you were at FOSDEM this year, what was your highlight? And if you stopped by the Jenkins booth, I'd love to hear what stuck with you.
+
+See you there.
+
+---
+
+=== 🚀 Takeaways
+
+* _Pipeline Graph View is the future_ — If you're still using Blue Ocean, start planning your migration. Official deprecation is coming soon.
+* _Jenkins runs at scale_ — Volvo, Bosch, Siemens, CERN. If they trust it, you can too.
+* _Keep Groovy pipelines lean_ — Push your logic into scripts and tools. Use pipelines for orchestration, not business logic.
+* _The UI modernization is real_ — It's happening under the hood. Check out the experimental UI features.
+* _Java 21 is now the minimum_ — The 2+2+2 plan took Jenkins from Java 8 to supporting Java 25. Make sure you're keeping up.
+* _FOSDEM is worth it_ — If you've never been, go. If you've been, come say hi at the Jenkins booth next year.

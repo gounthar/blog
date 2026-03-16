@@ -1,0 +1,336 @@
+---
+author: Bruno Verachten
+categories:
+- Technical
+- RISC-V
+- Python
+- LLM
+description: Running LLM inference on RISC-V with the Python ML stack. Transformers
+  generates text at 0.15-0.93 tok/s on a BananaPi F3, while llama.cpp hits 8.21 tok/s.
+excerpt: from vllm import LLM on a RISC-V terminal. It works. But importing isn't
+  running. Can the Python ML stack actually generate text on a 1.6 GHz RISC-V board?
+featured: true
+hidden: false
+image: assets/images/2026/03/11/first-words-inference-header.jpg
+tags:
+- riscv64
+- python
+- llm
+- inference
+- transformers
+- vllm
+- llama-cpp
+- pytorch
+- bananapi
+- spacemit
+- benchmark
+- quantization
+title: 'First Words: LLM Inference on RISC-V'
+toc: true
+---
+
+image::/assets/images/2026/03/11/first-words-inference-header.jpg[First LLM inference on RISC-V hardware]
+_Photo by link:https://www.pexels.com/@pixabay[Pixabay] on link:https://www.pexels.com/photo/355465/[Pexels]_
+
+_This is part three of the RISC-V wheel factory series. Part one: link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[Building a Python Wheel Factory for RISC-V]. Part two: link:{% post_url 2026-03-11-the-dependency-rabbit-hole %}[The Dependency Rabbit Hole]._
+
+[source,python]
+----
+>>> from vllm import LLM
+INFO 03-10 14:22:08 platforms/cpu.py:29] RISC-V detected. Disabling chunked prefill.
+
+----
+
+That line took two articles' worth of work to make happen.
+
+Fifty Python wheels, built natively on RISC-V hardware. A PEP 503 index. PyTorch compiled from source. Five lazy-import patches to dodge missing C extensions. And now `from vllm import LLM` runs on a 1.6 GHz RISC-V board without crashing.
+
+But importing isn't running. The question was always: can this thing actually _generate text_?
+
+---
+
+== Act 1: The Transformers Path
+
+=== SmolLM2-135M — The Warm-Up
+
+The simplest possible test. link:https://huggingface.co/HuggingFaceTB/SmolLM2-135M[SmolLM2-135M] is a 135-million-parameter model from Hugging Face. Small enough to fit in memory many times over. Pure Python, pure FP32, no tricks.
+
+[source,python]
+----
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import time
+
+model_name = "HuggingFaceTB/SmolLM2-135M"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+
+inputs = tokenizer("The future of RISC-V is", return_tensors="pt")
+start = time.time()
+outputs = model.generate(**inputs, max_new_tokens=50)
+elapsed = time.time() - start
+
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+print(f"\n{50 / elapsed:.2f} tok/s")
+
+----
+
+Loading: 28.7 seconds. Generating 50 tokens: 53.9 seconds.
+
+_0.93 tokens per second._
+
+Not fast. But real. Actual text, generated on actual RISC-V silicon. The model responded with a paragraph about semiconductor manufacturing that was mostly coherent, if a bit repetitive. It used about 500 MB of RAM.
+
+=== TinyLlama-1.1B — The Reality Check
+
+link:https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0[TinyLlama 1.1B] is eight times larger. Still a small model by any modern standard, but now we're doing real matrix math.
+
+[source,console]
+----
+Loading model: 200.6 seconds
+Generating 100 tokens: 665.4 seconds
+
+----
+
+_0.15 tokens per second._
+
+Eleven minutes for a hundred tokens. About one token every seven seconds. I could have typed the answer faster.
+
+The model consumed 4.1 GB of RAM out of the 16 GB available. My SSH session stayed alive. The board didn't swap. It just... took its time.
+
+=== What's Actually Happening Under the Hood
+
+Before dismissing these numbers, it's worth understanding what the CPU is actually doing.
+
+PyTorch 2.10.0 on this board uses link:https://www.openblas.net/[OpenBLAS] 0.3.29 as its BLAS backend. OpenBLAS _does_ have some RISC-V Vector (RVV) optimized routines — basic GEMM kernels that use the board's 256-bit vector registers. So the matrix multiplications aren't entirely scalar.
+
+But here's what's missing: no quantization, no fused attention kernels, no optimized KV cache management. Every parameter is a 32-bit float. A 1.1B-parameter model at FP32 weighs roughly 4.4 GB in memory — and the CPU has to touch every one of those bytes for every single token.
+
+[source,python]
+----
+>>> import torch
+>>> torch.__config__.show()
+...
+BLAS_INFO=open
+USE_OPENMP=ON
+CPU capability: DEFAULT
+
+----
+
+That `CPU capability: DEFAULT` is the giveaway. PyTorch doesn't have a RISC-V SIMD dispatch path. There's no equivalent of the AVX-512 or NEON optimized kernels that x86 and ARM get. The OpenBLAS integration helps with raw matrix math, but everything else — attention, layer norms, activations — runs through generic scalar code.
+
+---
+
+== Act 2: The Qwen3.5 Experiment (and the OOM Wall)
+
+I tried link:https://huggingface.co/Qwen/Qwen3.5-0.8B[Qwen3.5-0.8B] next. 800M parameters, newer architecture, interesting benchmark candidate.
+
+[source,python]
+----
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3.5-0.8B")
+Loading weights: 100%|██████████| 320/320 [00:01<00:00, 192.14it/s]
+
+----
+
+The model loaded. Generation started. And then my SSH connection died.
+
+[source,console]
+----
+Read from remote host 192.168.1.36: Connection reset by peer
+client_loop: send disconnect: Broken pipe
+
+----
+
+On a board with 16 GB of RAM, loading an 800M-parameter model at FP32 (roughly 3.2 GB for weights alone) plus the KV cache, plus the PyTorch runtime overhead, plus whatever else the system needs — it gets tight. The Linux OOM killer likely stepped in and took the Python process with it, along with my SSH session.
+
+I didn't retry. The point was already clear: FP32 inference on a memory-constrained board hits walls fast. TinyLlama at 1.1B worked because it left enough headroom. Qwen3.5 at 800M _should_ have fit, but FP32 memory overhead is unpredictable with different architectures, different KV cache shapes, and different tokenizer sizes.
+
+---
+
+== Act 3: The vLLM Attempt
+
+=== So Close
+
+This was the real goal. vLLM is the production LLM serving engine. If it runs on RISC-V, that's the story.
+
+After the wheel factory (Part 1), the dependency cleanup (Part 2), and five lazy-import patches to skip missing native backends, `from vllm import LLM` actually works:
+
+[source,python]
+----
+>>> from vllm import LLM
+INFO 03-10 14:22:08 platforms/cpu.py:29] RISC-V detected. Disabling chunked prefill.
+INFO 03-10 14:22:08 platforms/cpu.py:30] RISC-V detected. Disabling prefix caching.
+
+----
+
+vLLM detects the RISC-V platform. It disables features that need architecture-specific optimization. It initializes the Gloo distributed backend (because vLLM always initializes distributed, even in single-device mode). It allocates KV cache blocks. The Python side of the engine starts up cleanly.
+
+Then you try to run inference:
+
+[source,python]
+----
+>>> llm = LLM(model="HuggingFaceTB/SmolLM2-135M", device="cpu")
+...
+AssertionError in cpu_model_runner.py _postprocess_tensors
+
+----
+
+=== The C++ Wall
+
+The crash happens at `cpu_model_runner.py` line 39, where vLLM tries to call into `vllm._C` — the C++ extension module that contains the optimized attention kernels, KV cache operations, and tensor postprocessing routines.
+
+On x86, these kernels use AVX-512 intrinsics. On ARM, they use NEON. On RISC-V... they don't exist yet. The `_C` module was never compiled because `cmake/cpu_extension.cmake` exits with an error when it doesn't recognize the architecture's SIMD capabilities.
+
+This isn't a bug. It's a known gap. The Python layer of vLLM — model loading, tokenization, scheduling, the HTTP server — all works on RISC-V. The C++ layer — the part that actually does fast inference — doesn't.
+
+=== There's Precedent
+
+Two upstream PRs show the path forward:
+
+* link:https://github.com/vllm-project/vllm/pull/20292[PR #20292] by @huangzhengx added full RVV 1.0 attention kernels for RISC-V. It was positively reviewed by maintainer @mgoin but closed because it fell behind the fast-moving main branch. The code wasn't rejected — it needs rebasing.
+
+* link:https://github.com/vllm-project/vllm/pull/22112[PR #22112] confirmed that even _scalar_ (non-SIMD) C++ extensions work on riscv64, achieving 0.50 tok/s with Qwen3-1.7B on a Sophgo SG2044 (64 cores @ 2.0 GHz).
+
+The gap between "vLLM imports" and "vLLM runs inference" is the C++ extension build. That's Phase 2 of this project.
+
+---
+
+== Act 4: The llama.cpp Baseline
+
+=== What Optimized Native Code Can Do
+
+I covered building llama.cpp on this board in a link:{% post_url 2026-02-27-Running-a-Local-LLM-on-RISC-V-Building-llama.cpp-on-a-Banana-Pi-F3-Part-1 %}[separate article]. The short version: llama.cpp compiles with GCC, uses RVV intrinsics for matrix multiplication, supports quantized models, and runs an OpenAI-compatible API server.
+
+Here are the numbers, measured with `llama-bench` on the same BananaPi F3, same day, clean system load, 8 threads:
+
+[cols="1,1,1,1,1", options="header"]
+|===
+| Model
+| Format
+| Size
+| Prompt (tok/s)
+| Generation (tok/s)
+
+| TinyLlama 1.1B
+| Q4_K_M
+| 636 MB
+| 12.45
+| 8.21
+
+| Qwen3.5-0.8B
+| Q4_K_M
+| 497 MB
+| 9.19
+| 2.89
+
+|===
+
+TinyLlama at 8.21 tokens per second. That's _usable_. Not fast, but the kind of speed where you can have a conversation and the response appears word by word in something resembling real time.
+
+=== Deconstructing the Gap
+
+TinyLlama: _0.15 tok/s_ (transformers, FP32) versus _8.21 tok/s_ (llama.cpp, Q4_K_M). That's a 55x difference on the same hardware, with the same model weights.
+
+It's tempting to call this a "Python vs C++" story, but that's misleading. The gap comes from three distinct factors stacked on top of each other:
+
+_Quantization_ is the biggest one. FP32 stores each parameter as 4 bytes. Q4_K_M uses roughly 4.5 bits per parameter — about 7x less memory. Less memory means less memory bandwidth consumed per token, and memory bandwidth is the bottleneck for LLM inference on any CPU. This alone accounts for most of the gap. Memory footprint tells the story: 4.1 GB (FP32) versus 636 MB (Q4_K_M) for the same model.
+
+_SIMD kernels_ come second. llama.cpp has hand-written RVV routines for quantized matrix multiplication. The BananaPi F3's SpacemiT K1 has 256-bit vector registers, and llama.cpp uses them. PyTorch's OpenBLAS integration has _some_ RVV support for FP32 GEMM, but the attention mechanism, layer norms, and activations are all scalar. The SIMD advantage for quantized operations is roughly 2-4x.
+
+_Framework overhead_ is the smallest factor. PyTorch has a dynamic computation graph, operator dispatch overhead, and Python interpreter overhead. llama.cpp has a static computation graph compiled into C++. This difference matters, but it's maybe 1.5-2x — not the headline number.
+
+If I had to put rough numbers on it: the 55x gap is about 70% quantization, 25% SIMD, 5% framework overhead.
+
+---
+
+== Act 5: The Middle Ground — llama-cpp-python
+
+There's a Python package that gives you the best of both worlds: link:https://github.com/abetlen/llama-cpp-python[llama-cpp-python]. It wraps llama.cpp's C++ inference engine in a Python API. You get `pip install`, you get a Python interface, and under the hood you get llama.cpp's quantized SIMD-accelerated inference.
+
+We built a native riscv64 wheel for it as part of the wheel factory (it's package number 33 in the index). The wheel is 4 MB, and it links against the same llama.cpp backend that runs the `llama-server` benchmarks above.
+
+[source,python]
+----
+from llama_cpp import Llama
+
+llm = Llama(model_path="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf", n_threads=8)
+output = llm("The future of RISC-V is", max_tokens=50)
+print(output["choices"][0]["text"])
+
+----
+
+Same Python UX as transformers. Same GGUF quantized models as llama.cpp. Same 8+ tok/s performance. If you need Python-based LLM inference on RISC-V today, this is the practical answer.
+
+---
+
+== How I Measured
+
+All benchmarks were run on the same hardware under controlled conditions. If you want to reproduce these numbers:
+
+[cols="1,1", options="header"]
+|===
+| Component
+| Details
+
+| _Board_
+| BananaPi F3 (SpacemiT K1, 8× Spacemit X60 cores @ 1.6 GHz)
+
+| _ISA_
+| rv64imafdcv (full RVV 1.0, vlen=256, zvfh)
+
+| _RAM_
+| 16 GB
+
+| _OS_
+| Armbian 25.11.2 (Debian trixie 13), kernel 6.6.99
+
+| _Python_
+| 3.13.5
+
+| _PyTorch_
+| 2.10.0 (built from source, CPU-only, OpenBLAS, Gloo)
+
+| _Transformers_
+| 5.3.0
+
+| _llama.cpp_
+| v1 (commit 2e7e638), GCC 14.2.0
+
+| _System load_
+| < 0.5 before each benchmark
+
+| _CPU governor_
+| performance
+
+| _Threads_
+| 8 (llama.cpp), PyTorch default (all available)
+
+|===
+
+The PEP 503 wheel index is live at link:https://gounthar.github.io/riscv64-python-wheels/simple/[https://gounthar.github.io/riscv64-python-wheels/simple/]. Fifty wheels, all built natively on this hardware. Point pip at it and go.
+
+---
+
+== What This Means
+
+The Python ML ecosystem runs on riscv64 today. Not hypothetically. I ran `pip install transformers`, loaded a model, and generated text. On a board that costs less than a Raspberry Pi 5.
+
+The performance is what you'd expect from FP32 inference on an in-order 1.6 GHz CPU without optimized attention kernels: slow. 0.15 tok/s for TinyLlama means this isn't a chatbot — it's a proof of concept. But llama.cpp on the same hardware, with quantization and RVV, gives 8.21 tok/s. The silicon can do the work. The software stack just needs to catch up.
+
+And it's catching up. ARM was in this exact position five or six years ago — slow Python inference, no SIMD kernels, "why would you run ML on ARM?" Today, ARM inference is a first-class citizen in every major framework. RISC-V is at the beginning of that same curve.
+
+=== Where It Goes From Here
+
+_Phase 2: vLLM C++ extensions._ The Python side of vLLM works on RISC-V. The C++ attention kernels need porting. Upstream PR #20292 had a working RVV implementation that was positively reviewed — it just needs rebasing against the current codebase.
+
+_K3 benchmarks._ SpacemiT's K3 chip has 8 out-of-order cores at 2.5 GHz plus 8 in-order cores, with 1024-bit vector registers (4x the K1's VLEN). I expect a significant jump.
+
+_Upstream contributions._ All fifty wheels in our index are built from forks. Each fork has an issue tracking the upstream PR to add riscv64 to the project's CI. The long-term goal is to make `pip install tokenizers` on riscv64 work from PyPI directly, without our custom index.
+
+If you want to help with any of this — especially the vLLM C++ extensions — the code is at link:https://github.com/gounthar/vllm[github.com/gounthar/vllm]. The wheel index is at link:https://gounthar.github.io/riscv64-python-wheels/simple/[https://gounthar.github.io/riscv64-python-wheels/simple/]. And if you find a package that's missing, let me know. I've gotten fast at forking.
+
+<!--
+Converted from AsciiDoc to Jekyll markdown.
+Original file: /mnt/c/support/users/dev/riscv/vllm/article-first-words-inference.adoc
+Conversion date: 2026-03-11
+Notes: Part 3 of RISC-V wheel factory series. All AsciiDoc internal links converted to Jekyll post_url tags. Tables converted to markdown pipe format. Code blocks converted to fenced syntax with language identifiers. Pexels photo attribution preserved.
+-->

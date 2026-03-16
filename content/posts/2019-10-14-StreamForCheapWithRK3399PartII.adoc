@@ -1,0 +1,707 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- OrangePi
+- ffmpeg
+description: How to compile a recent version of ffmpeg on an OrangePi RK3399 ?
+draft: true
+featured: true
+hidden: false
+image: assets/images/2019/11/12/58e16084a24d1_4F4BA18C759111B4A2A26C688B4A16AD57AC4C3003967F4FB4pimgpsh_fullsize_distr.jpg.9554f8f86cf67629f5f6f330a3559b6d_1_.jpg
+tags:
+- RK3399
+- ffmpeg
+- libaom
+title: 'Stream For Cheap With RK3399 #2 - Compile FFMPEG'
+---
+
+In link:https://medium.com/@poddingue/stream-for-cheap-rk3399-and-ffmpeg-part-i-149f330bd127[part one] of this series, I tried the installed ffmpeg version on the OrangePi link:http://www.orangepi.org/Orange%20Pi%20RK3399/[RK3399], and made a few assumptions.
+Now, let's try to compile ffmpeg on this very machine, if that could ever help us getting hardware acceleration.
+
+As I'm french, better setup the keyboard before doing anything else.
+
+![[insert gif keyboard]](../assets/images/keyboard.cast.gif)
+
+[source,bash]
+----
+sudo dpkg-reconfigure keyboard-configuration
+
+----
+
+Now, let's download the whole Internet on this poor machine before trying to compile anything:
+
+Let's add a backport repo in order to get more recent packages. 
+By the way, which Debian version are we running?
+
+[source,bash]
+----
+cat /etc/*-release
+PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
+NAME="Debian GNU/Linux"
+VERSION_ID="9"
+VERSION="9 (stretch)"
+VERSION_CODENAME=stretch
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+
+----
+
+Let's edit `/etc/apt/sources.list` and add this line:
+`deb https://deb.debian.org/debian stretch-backports main`
+
+Once it's done, let's issue a : 
+
+[source,bash]
+----
+sudo apt update
+sudo  aptitude -t stretch-backports dist-upgrade
+
+----
+
+image::../assets/images/apt-update.gif[]
+
+Now that the machine is up to date, let's download and install what's missing:
+
+[source,bash]
+----
+sudo apt -t stretch-backports install -y autoconf automake autotools-dev build-essential ccache checkinstall cleancss cmake debhelper dh-exec doxygen flite1-dev frei0r-plugins-dev git gnutls-bin graphviz ladspa-sdk libarchive-dev libass-dev libavc1394-dev libavcodec-dev libavcodec-extra libavdevice58 libavfilter7 libavformat-dev libavformat58 libbluray-dev libbs2b-dev libbz2-dev libc6 libcaca-dev libcdio-paranoia-dev libchromaprint-dev libcodec2-dev libcunit1-dev libcurl4-openssl-dev libdc1394-22-dev libdrm-dev libfdk-aac-dev libgl1-mesa-dev libglew-dev libglfw3-dev libgme-dev libgmp-dev libgnutls28-dev libgsm1-dev libgtest-dev libiec61883-dev libjack-jackd2-dev libjpeg-dev libjsoncpp-dev liblensfun-dev liblilv-0-0 liblilv-dev libmodplug-dev libmp3lame-dev libnss-mdns libogg-dev libomxil-bellagio-dev libopenal-dev libopencore-amrnb-dev libopencore-amrwb-dev libopenjp2-7-dev libopenmpt-dev libopus-dev libpciaccess-dev libpciaccess0 libperl-dev libpulse-dev librsvg2-dev librtmp-dev librubberband-dev libsctp-dev libsdl2-dev libshine-dev libsnappy-dev libsoxr-dev libspeex-dev libssh-dev libswresample-dev libtheora-dev libtool libtwolame-dev libuv1-dev libv4l-dev libva-dev libvdpau-dev libvo-amrwbenc-dev libvorbis-dev libvpx-dev libwavpack-dev libwebp-dev libx11-dev libx264-dev libx265-dev libxvidcore-dev libzmq3-dev libzvbi-dev mercurial nasm node-less pkg-config po4a python3-docutils python3-sphinx software-properties-common texinfo tree vainfo vdpau-va-driver xorg-dev yasm zlib1g-dev
+
+----
+
+I'm not so sure we need all of that, but I lost track of what I installed day to day, so this is a concatenation of everything I think we could ever need.
+As you can see, we have a few packages missing, so we will have to build them by ourselves.
+First of all is libmysofa, which we will get directly from Debian Sid:
+
+![[insert gif sofa-sid]](../assets/images/sofa-sid.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0.orig.tar.xz
+xz -d libmysofa_0.8~dfsg0.orig.tar.xz && tar -xvf libmysofa_0.8~dfsg0.orig.tar && rm libmysofa_0.8~dfsg0.orig.tar
+cd libmysofa-0.8/ && wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0-1.debian.tar.xz
+xz -d libmysofa_0.8~dfsg0-1.debian.tar.xz && tar -xvf libmysofa_0.8~dfsg0-1.debian.tar && rm libmysofa_0.8~dfsg0-1.debian.tar
+sudo apt -t stretch-backports install dh-exec cmake libcunit1-dev
+wget http://deb.debian.org/debian/pool/main/libm/libmysofa/libmysofa_0.8~dfsg0.orig.tar.xz && mv libmysofa_0.8~dfsg0.orig.tar.xz ..
+sudo -E dpkg-buildpackage -us -uc
+find .. -name "*sofa*deb" -exec sudo dpkg -i {} \; -print
+echo "Great!"
+
+----
+
+Now, regarding libncurses, libncurses5-dev could be the answer, so 
+`sudo apt -t stretch-backports install libncurses5-dev`
+should do the trick.
+
+Now for libvidstab:
+
+![[insert gif libvidstab]](../assets/images/libvidstab.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/libv/libvidstab/libvidstab_1.1.0.orig.tar.gz
+tar -xvzf libvidstab_1.1.0.orig.tar.gz
+cd vid.stab-1.1.0/ && wget http://deb.debian.org/debian/pool/main/libv/libvidstab/libvidstab_1.1.0-2.debian.tar.xz
+xz -d libvidstab_1.1.0-2.debian.tar.xz && tar -xvf libvidstab_1.1.0-2.debian.tar && rm libvidstab_1.1.0-2.debian.tar
+sudo -E dpkg-buildpackage -us -uc
+find .. -name "*vid*stab*deb" -exec sudo dpkg -i {} \; -print
+
+----
+
+![[insert gif nasm]](../assets/images/nasm.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://www.nasm.us/pub/nasm/releasebuilds/2.14rc0/nasm-2.14rc0.tar.gz
+tar xzvf nasm-2.14rc0.tar.gz
+cd nasm-2.14rc0
+./configure --prefix="$HOME/bin" --bindir="$HOME/bin"
+make -j$(nproc) VERBOSE=1
+make -j$(nproc) install
+make -j$(nproc) distclean
+
+----
+
+Now, let's build x264
+
+![[insert gif x264]](../assets/images/x264.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone http://git.videolan.org/git/x264.git -b stable
+cd x264/
+export CFLAGS="-mfpu=neon"
+PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-pic --enable-static --disable-cli --disable-asm --host=arm-linux --disable-opencl
+PATH="$HOME/bin:$PATH" make -j$(nproc) VERBOSE=1
+make -j$(nproc) install VERBOSE=1
+make -j$(nproc) distclean
+
+----
+
+I had to disable `ASM` and to add the `mfpu` cflag for it to work, see this link:https://code.videolan.org/videolan/x264/issues/6[issue].
+
+Now, let's compile fdk-aac
+
+![[insert gif fdk-aac]](../assets/images/fdk-aac.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget -O fdk-aac.tar.gz https://github.com/mstorsjo/fdk-aac/tarball/master
+tar xzvf fdk-aac.tar.gz
+cd mstorsjo-fdk-aac*
+autoreconf -fiv
+./configure --prefix="$HOME/bin" --disable-shared
+make -j$(nproc)
+make -j$(nproc) install
+make -j$(nproc) distclean
+
+----
+
+Let's have a look at libvpx:
+
+![[insert gif libvpx]](../assets/images/libvpx.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone https://chromium.googlesource.com/webm/libvpx
+cd libvpx
+./configure
+make -j${nproc}
+sudo make install
+
+g++: internal compiler error: Killed (program cc1plus)
+
+----
+
+As you can see, I got some strange errors saying that the compiler had an internal error... Google told me link:https://bitcointalk.org/index.php?topic=304389.0[later] on that it could be linked to not having enough memory.
+
+I checked during the build with htop, and that was the case. Of course, I was using the 6 cores, so that was not the best thing to do with memory hungry compiler instances.
+
+But anyway, as I already had a SSD plugged into this machine, let's make use of it.
+
+![[insert gif mkswap]](../assets/images/swap.cast.gif)
+
+[source,bash]
+----
+dd if=/dev/zero of=/media/linaro/0E9ACA2339F586E/swap.img bs=1024k count=10000 # Ten Gigs should be enough
+sudo su -
+free
+mkswap /media/linaro/0E9ACA2339F586E5/swap.img
+swapon /media/linaro/0E9ACA2339F586E5/swap.img
+free
+
+----
+
+Up to now, everything looks ok, now let's configure and compile FFmpeg with fewer options before going too far, if ever there was a BIG blocking point somewhere:
+
+![[insert gif ffmpeg-configure]](../assets/images/ffmpeg-cofigure.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources/FFmpeg
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --pkg-config-flags="--static" --prefix="$HOME/bin" --extra-cflags="-I$HOME/bin/include" --extra-ldflags="-L$HOME/bin/lib" --extra-cflags="-I/usr/local/include" --extra-ldflags="-L/usr/local/lib" --bindir="$HOME/bin" --enable-debug=3 --enable-vaapi --enable-libvorbis --enable-libvpx --disable-debug --enable-gpl   --cpu=native --enable-opengl --enable-libfdk-aac --enable-libx264 --enable-libx265 --extra-libs=-lpthread --enable-nonfree --arch=arm
+
+----
+
+[insert gif ffmpeg-compilation-1]
+
+[source,bash]
+----
+PATH="$HOME/bin:$PATH" make -j$(nproc) 
+make -j$(nproc) install 
+make -j$(nproc) distclean 
+hash -r
+
+----
+
+It worked, that's cool.
+
+Now, let's have a look at libmysofa, as it has not been found by `configure`.
+
+![[insert gif install-libmysofa]](../assets/images/install-libmysofa.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources/
+git clone https://github.com/hoene/libmysofa.git
+cd libmysofa/
+cd build/
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make -j${nproc} all
+sudo make install
+
+----
+
+Oh well, forget it... 
+
+A last try with configure, to see if we have everything available:
+
+![[insert gif last-configure]](../assets/images/last-configure.cast.gif)
+
+[source,bash]
+----
+cd ~/ffmpeg_sources/FFmpeg/
+./configure --enable-gpl --enable-version3 --disable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse  --enable-librsvg --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp' --arch=arm
+
+----
+
+Pretty encouraging. Let's compile everything and see what we can do
+
+Let's go with x265 now:
+![[insert gif x265-sid]]()
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/x/x265/x265_3.2.orig.tar.gz
+tar -xvzf x265_3.2.orig.tar.gz
+cd x265_3.2/
+wget http://deb.debian.org/debian/pool/main/x/x265/x265_3.2-2.debian.tar.xz
+xz -d x265_3.2-2.debian.tar.xz && tar -xvf x265_3.2-2.debian.tar && rm x265_3.2-2.debian.tar
+sudo apt -t stretch-backports install python3-sphinx
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libx265-dev_3.2-2_armhf.deb ../libx265-179-dbgsym_3.2-2_armhf.deb ../libx265-179_3.2-2_armhf.deb ../libx265-doc_3.2-2_all.deb
+
+----
+
+Once the dependencies were installed, I downloaded the master branch of FFmpeg:
+
+![[insert gif download-ffmpeg]](../assets/images/download-ffmpeg.cast.gif)
+
+[source,bash]
+----
+mkdir ffmpeg_sources
+cd ffmpeg_sources
+git clone https://github.com/FFmpeg/FFmpeg -b master
+cd FFmpeg/
+
+----
+
+I then launched the configure command with the hope if would find everything...
+
+![[insert gif configure-ffmpeg]](../assets/images/configure-ffmpeg.cast.gif)
+
+[source,bash]
+----
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --disable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse  --enable-librsvg --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp'
+
+----
+
+I got: `ERROR: x265 not found using pkg-config`.
+
+which is strange, because 
+
+[source,bash]
+----
+pkg-config --list-all|grep x265
+x265                   x265 - H.265/HEVC video encoder
+says x265 is there... and  pkg-config --debug 2>&1|grep x265
+File 'x265.pc' appears to be a .pc file
+Will find package 'x265' in file '/usr/lib/arm-linux-gnueabihf/pkgconfig/x265.pc'
+
+----
+
+As seen link:https://stackoverflow.com/questions/51918409/compiling-ffmpeg-x265-not-found-using-pkg-config[there], I may need libnuma, so:
+
+```bash 
+sudo apt -t stretch-backports install libnuma-dev
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+libnuma-dev is already the newest version (2.0.12-1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+1 not fully installed or removed.
+After this operation, 0 B of additional disk space will be used.
+Do you want to continue? [Y/n]
+Setting up x265-dbgsym (3.2-2) ...
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --disable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse  --enable-librsvg --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp'
+----
+
+Still got `ERROR: x265 not found using pkg-config`.
+
+So, we'll try another way. Let's compile the standard x265 static version, and make it link:https://bitbucket.org/multicoreware/x265/issues/125/x265-not-found-using-pkg-config[available] to ffmpeg:
+
+![[insert gif x265]](../assets/images/x265.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+hg clone https://bitbucket.org/multicoreware/x265
+cd ~/ffmpeg_sources/x265/build/linux
+PATH="$HOME/bin:$PATH" cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="$HOME/bin" -DENABLE_SHARED:bool=off --prefix="$HOME/ffmpeg_build" ../../source
+make -j$(nproc) VERBOSE=1
+make -j$(nproc) install VERBOSE=1
+make -j$(nproc) clean VERBOSE=
+----
+
+Let's try with extending 
+
+
+----bash
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --disable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse  --enable-librsvg --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp' --pkg-config-flags="--static"
+ERROR: librsvg-2.0 not found using pkg-config
+----
+
+It worked for x265. Now, let's tackle with librsvg:
+
+![[insert gif librsvg]](../assets/images/librsvg.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/libr/librsvg/librsvg_2.44.15.orig.tar.xz
+xz -d librsvg_2.44.15.orig.tar.xz && tar -xvf librsvg_2.44.15.orig.tar && rm librsvg_2.44.15.orig.tar
+cd librsvg-2.44.15/
+sudo apt -t stretch-backports install cargo
+./configure
+
+configure: error: librsvg needs at rustc version at least 1.27
+sudo apt -t stretch-backports install rustc
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+rustc is already the newest version (1.24.1+dfsg1-1~deb9u4).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+----
+
+You know what? Let's just forget about librsvg for the time being...
+
+
+----bash
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --disable-static  --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp -lpthread -lm -lz' --pkg-config-flags="--static" --extra-ldexeflags="-static"
+
+ERROR: chromaprint not found
+----
+
+Hmmm, let's have a look at it:
+
+![[insert gif chromaprint]](../assets/images/chromaprint.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/c/chromaprint/chromaprint_1.4.2.orig.tar.gz
+tar -xvzf chromaprint_1.4.2.orig.tar.gz
+cd chromaprint-1.4.2/
+wget http://deb.debian.org/debian/pool/main/c/chromaprint/chromaprint_1.4.2-1.debian.tar.xz
+xz -d chromaprint_1.4.2-1.debian.tar.xz
+tar -xvf chromaprint_1.4.2-1.debian.tar
+rm chromaprint_1.4.2-1.debian.tar
+export DEB_DH_SHLIBDEPS_ARGS_ALL=--dpkg-shlibdeps-params=--ignore-missing-info
+sudo -E dpkg-buildpackage -us -uc
+----
+
+Unfortunately, we had some packages missing, and apt was not able to help us.
+Let's switch back to aptitude, so that it can propose us some solutions
+
+
+----bash
+sudo aptitude -t stretch-backports install libavcodec-dev libavformat-dev libswresample-dev
+I chose this solution
+The following actions will resolve these dependencies:
+
+     Remove the following packages:
+1)     libavresample-dev [7:4.1.4-1 (now)]
+2)     libpostproc-dev [7:4.1.4-1 (now)]
+3)     libswscale-dev [7:4.1.4-1 (now)]
+
+     Downgrade the following packages:
+4)     libavutil-dev [7:4.1.4-1 (now) -> 7:3.2.14-1~deb9u1 (oldstable)]
+
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libchromaprint-dev_1.4.2-1_armhf.deb ../libchromaprint-tools_1.4.2-1_armhf.deb ../libchromaprint1_1.4.2-1_armhf.deb
+sudo ldconfig
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --enable-shared --enable-small --enable-avisynth --enable-chromaprint  --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp -lpthread -lm -lz' --pkg-config="pkg-config --static" --extra-ldexeflags="-static"
+----
+
+Did it help? Not at all.  `ERROR: chromaprint not found`
+
+Let's try to build chromaprint from its repo.
+
+![[insert gif ]](../assets/images/chromaprint-from-repo.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+git clone https://github.com/acoustid/chromaprint.git
+cd chromaprint
+export CMAKE_ARGS="-DCMAKE_INSTALL_PREFIX=$BASE_DIR/chromaprint-$OS-$ARCH -DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=ON -DBUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS='-static -static-libgcc -static-libstdc++' -DCMAKE_CXX_FLAGS='-static -static-libgcc -static-libstdc++'"
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=ON .
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+----
+
+You know what? I got once again `ERROR: chromaprint not found`
+
+Damn... Ok, let's forget chromaprint for the time being...
+
+
+----bash
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --enable-shared --enable-small --enable-avisynth --enable-frei0r --enable-gmp --enable-gnutls --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp -lpthread -lm -lz' --pkg-config="pkg-config --static" --extra-ldexeflags="-static"
+
+ERROR: gnutls not found using pkg-config
+----
+
+Ok, let's forget gnutls for the time being...
+
+
+----bash
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --enable-shared --enable-small --enable-avisynth --enable-frei0r --enable-gmp --enable-ladspa  --enable-libaom --enable-libass --enable-libcaca --enable-libcdio  --enable-libcodec2 --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-lv2 --enable-libmysofa  --enable-openal --enable-opengl --enable-libdrm  --enable-nonfree --enable-libfdk-aac --enable-libbluray --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp -lpthread -lm -lz' --pkg-config="pkg-config --static" --extra-ldexeflags="-static"
+
+ERROR: aom >= 1.0.0 not found using pkg-config
+----
+
+As aom has not been found, we will have to build it... But before building it, let's download, build and install its dependencies and other libs we want to build. Unfortunately, a few libraries which are available through apt are too old to be used as is, so we have to download and compile them... 
+Let's download the source
+
+![[insert gif aom]](../assets/images/aom.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+git clone https://aomedia.googlesource.com/aom
+cd aom
+----
+
+And launch cmake/make with the right options (found link:https://github.com/AOMediaCodec/libavif/issues/7[there]).
+
+![[insert gif build-aom]](../assets/images/build-aom.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources/aom
+cmake . -DCMAKE_C_FLAGS="-mfpu=vfp -mfloat-abi=hard"
+rm -rf CMakeCache.txt CMakeFiles
+mkdir -p ../aom_build
+cd ../aom_build
+cmake ../aom -DCMAKE_C_FLAGS="-mfpu=vfp -mfloat-abi=hard"
+----
+
+Then edit `CMakeCache.txt` and change
+
+`ENABLE_NEON:BOOL=OFF`
+
+Let's build it for real now
+
+[insert gif build-aom-2]
+
+
+----bash
+CMakeFiles/aom_rtcd.dir/build.make:75: recipe for target 'CMakeFiles/aom_rtcd.dir/aom_dsp/aom_dsp_rtcd.c.o' failed
+----
+
+I think I will have to investigate more on that... So for now, let's just cheat a little bit, and use a Debian source package:
+
+![[insert gif build-with-debian-source]]()
+
+
+----bash
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/a/aom/aom_1.0.0.errata1.orig.tar.xz
+xz -d aom_1.0.0.errata1.orig.tar.xz && tar -xvf aom_1.0.0.errata1.orig.tar && rm aom_1.0.0.errata1.orig.tar
+cd aom-1.0.0.errata1
+wget http://deb.debian.org/debian/pool/main/a/aom/aom_1.0.0.errata1-2.debian.tar.xz
+xz -d aom_1.0.0.errata1-2.debian.tar.xz && tar -xvf aom_1.0.0.errata1-2.debian.tar && rm aom_1.0.0.errata1-2.debian.tar
+wget http://deb.debian.org/debian/pool/main/a/aom/aom_1.0.0.errata1.orig.tar.xz;cd -
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i ../libaom-dev_1.0.0.errata1-2_armhf.deb ../aom-tools_1.0.0.errata1-2_armhf.deb ../libaom0_1.0.0.errata1-2_armhf.deb ../libaom-doc_1.0.0.errata1-2_all.deb
+----
+
+Another launch of configure does not work either... It does have the same problem of not finding aom.
+You know what? I have already managed to configure and compile, so I will have to investigate later on...
+
+So... Why not trying directly the ffmpeg source package from Sid?
+
+![[insert ffmpeg-sid gif]](../assets/images/ffmpeg-sid.cast.gif)
+
+
+----bash
+cd ~/ffmpeg_sources
+wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4.orig.tar.xz
+xz -d ffmpeg_4.1.4.orig.tar.xz && tar -xvf ffmpeg_4.1.4.orig.tar && rm ffmpeg_4.1.4.orig.tar
+cd ffmpeg-4.1.4/ && wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4-1.debian.tar.xz
+xz -d ffmpeg_4.1.4-1.debian.tar.xz && tar -xvf ffmpeg_4.1.4-1.debian.tar && rm ffmpeg_4.1.4-1.debian.tar
+wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4.orig.tar.xz && mv ffmpeg_4.1.4.orig.tar.xz ..
+sudo -E dpkg-buildpackage -us -uc
+sudo dpkg -i libavutil56_4.1.4-1_armhf.deb libswresample-dev_4.1.4-1_armhf.deb libswscale5_4.1.4-1_armhf.deb libavformat58_4.1.4-1_armhf.deb libswscale-dev_4.1.4-1_armhf.deb libavutil-dev_4.1.4-1_armhf.deb libpostproc55_4.1.4-1_armhf.deb libavfilter7_4.1.4-1_armhf.deb libpostproc-dev_4.1.4-1_armhf.deb ffmpeg_4.1.4-1_armhf.deb libavfilter-extra7_4.1.4-1_armhf.deb libavformat-dev_4.1.4-1_armhf.deb libavresample4_4.1.4-1_armhf.deb libavresample-dev_4.1.4-1_armhf.deb libavcodec-extra_4.1.4-1_all.deb libavfilter-extra_4.1.4-1_all.deb libavfilter-dev_4.1.4-1_armhf.deb ffmpeg-doc_4.1.4-1_all.deb libavcodec-dev_4.1.4-1_armhf.deb libavdevice58_4.1.4-1_armhf.deb libavdevice-dev_4.1.4-1_armhf.deb libavcodec58_4.1.4-1_armhf.deb libavcodec-extra58_4.1.4-1_armhf.deb
+----
+
+Let' now test ffmpeg available hardware accelerators. First of all, let's download a classic video: 
+
+
+----bash
+wget http://distribution.bbb3d.renderfarming.net/video/mp4/bbb_sunflower_1080p_30fps_normal.mp4
+mv bbb_sunflower_1080p_30fps_normal.mp4 /media/linaro/0E9ACA2339F586E5/
+cd /media/linaro/0E9ACA2339F586E5/
+----
+
+![[insert ffmpeg-hwaccel]](../assets/images/ffmpeg-hwaccel.cast.gif)
+
+
+----bash
+ffmpeg -hwaccels
+rm /tmp/*.ts
+ffmpeg -hwaccel vdpau -i bbb_sunflower_1080p_30fps_normal.mp4 /tmp/vdpau.ts
+ffmpeg -hwaccel vaapi -i bbb_sunflower_1080p_30fps_normal.mp4 /tmp/vaapi.ts 
+ffmpeg -hwaccel drm -i bbb_sunflower_1080p_30fps_normal.mp4 /tmp/drm.ts
+----
+
+Looks pretty bad. Of course, these accelerators, despite having been compiled and being available can't work on this machine.
+To drive home this point, let's issue a few commands:
+
+![[insert gif hwaccels]](../assets/images/hwaccels.cast.gif)
+
+
+----bash
+vainfo
+vdpauinfo
+```
+
+Now, we're sure this won't work. So what shall we do? Well, with that version of ffmpeg, or even the most recent one, there is not much hope.
+Fortunately, we can use a fork of ffmpeg that has been done by RockChip, and see if that could help us getting hardware acceleration with RK3399.
+Stay tuned.
+
+
+[insert gif ffmpeg-hwaccels]
+ajouter des options, puis lancer hwaccels puis fermer.
+Suite au prochain �pisode.
+
+
+Essayer les options trouv�es l�:
+ https://www.raspberrypi.org/forums/viewtopic.php?t=199775
+
+  280  sudo apt install libx264-dev
+  281  cd ~/ffmpeg_sources
+  282  git clone https://github.com/FFmpeg/FFmpeg -b master
+  283  cd FFmpeg
+  284  PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure   --pkg-config-flags="--static"   --prefix="$HOME/bin"   --extra-cflags="-I$HOME/bin/include"   --extra-ldflags="-L$HOME/bin/lib"   --extra-cflags="-I/usr/local/include"   --extra-ldflags="-L/usr/local/lib"   --bindir="$HOME/bin"   --enable-debug=3   --enable-vaapi   --enable-libvorbis   --enable-libvpx   --disable-debug   --enable-gpl   --cpu=native   --enable-opengl   --enable-libfdk-aac   --enable-libx264   --enable-libx265   --extra-libs=-lpthread   --enable-nonfree 
+  285  PATH="$HOME/bin:$PATH" make -j$(nproc) 
+  286  make -j$(nproc) install 
+  287  make -j$(nproc) distclean 
+  288  hash -r
+  289  cd ~/ffmpeg_sources
+  290  git clone http://git.videolan.org/git/x264.git -b stable
+  291  cd x264/
+  292  PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-static --disable-opencl
+  293  PATH="$HOME/bin:$PATH" make -j$(nproc) VERBOSE=1
+  294  make -j$(nproc) install VERBOSE=1
+  295  sudo apt install nasm
+  296  no NEON support, try adding -mfpu=neon to CFLAGS come on!
+  297  PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-static --disable-opencl
+  298  sudo apt install yasm
+  299  PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-static --disable-opencl
+  300  PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/bin" --bindir="$HOME/bin" --enable-static --disable-opencl --host=arm-linux --enable-pic
+  301  PATH="$HOME/bin:$PATH" make -j$(nproc) VERBOSE=1
+  302  make -j$(nproc) install VERBOSE=1
+  303  make -j$(nproc) distclean
+  304  cd ~/ffmpeg_sources
+  305  git clone https://github.com/FFmpeg/FFmpeg -b master
+  306  cd FFmpeg
+  307  PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure   --pkg-config-flags="--static"   --prefix="$HOME/bin"   --extra-cflags="-I$HOME/bin/include"   --extra-ldflags="-L$HOME/bin/lib"   --extra-cflags="-I/usr/local/include"   --extra-ldflags="-L/usr/local/lib"   --bindir="$HOME/bin"   --enable-debug=3   --enable-vaapi   --enable-libvorbis   --enable-libvpx   --disable-debug   --enable-gpl   --cpu=native   --enable-opengl   --enable-libfdk-aac   --enable-libx264   --enable-libx265   --extra-libs=-lpthread   --enable-nonfree 
+  308  PATH="$HOME/bin:$PATH" make -j$(nproc) 
+  309  make -j$(nproc) install 
+  310  make -j$(nproc) distclean 
+  311  sudo apt install libopengl-dev
+  312  sudo apt-cache search opengl
+  313  sudo apt-cache search opengl|grep dev
+  314  sudo apt-cache search opengl|grep dev|grep lib
+  315  sudo apt install libglew-dev libglfw3-dev
+  316  cd ~/ffmpeg_sources
+  317  git clone https://github.com/FFmpeg/FFmpeg -b master
+  318  cd FFmpeg
+  319  PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure   --pkg-config-flags="--static"   --prefix="$HOME/bin"   --extra-cflags="-I$HOME/bin/include"   --extra-ldflags="-L$HOME/bin/lib"   --extra-cflags="-I/usr/local/include"   --extra-ldflags="-L/usr/local/lib"   --bindir="$HOME/bin"   --enable-debug=3   --enable-vaapi   --enable-libvorbis   --enable-libvpx   --disable-debug   --enable-gpl   --cpu=native   --enable-opengl   --enable-libfdk-aac   --enable-libx264   --enable-libx265   --extra-libs=-lpthread   --enable-nonfree 
+  320  PATH="$HOME/bin:$PATH" make -j$(nproc) 
+  321  make -j$(nproc) install 
+  322  make -j$(nproc) distclean 
+  323  hash -r
+  324  sudo apt-get -y install autoconf automake build-essential libass-dev libtool pkg-config texinfo zlib1g-dev libva-dev cmake mercurial libdrm-dev libvorbis-dev libogg-dev git libx11-dev libperl-dev libpciaccess-dev libpciaccess0 xorg-dev
+  325  sudo add-apt-repository ppa:oibaf/graphics-drivers
+  326  sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get -y dist-upgrade
+  327  sudo apt-get install software-properties-common
+  328  sudo add-apt-repository ppa:oibaf/graphics-drivers
+  329  export CFLAGS="-mfpu=neon"
+  330  export https_proxy=http://10.24.219.17:3128
+  331  export http_proxy=http://10.24.219.17:3128
+  332  sudo add-apt-repository ppa:oibaf/graphics-drivers
+  333  sudo -E su 
+  334  ./youtube-main-camera.sh 
+  335  vi ./youtube-main-camera.sh
+  336  ./youtube-main-camera.sh 
+  337  lsusb 
+  338  ./youtube-main-camera.sh 
+  339  ffmpeg -hwaccels
+  340  ll
+  341  ll *mkv
+  342  cd /media/linaro/0E9ACA2339F586E5/
+  343  ll
+  344  cd camera-rushes/
+  345  ll
+  346  vainfo
+  347  sudo apt-cache search vainfo
+  348  sudo apt install vainfo
+  349  vainfo
+  350  sudo apt-get install vdpau-va-driver
+  351  ls /usr/lib/arm-linux-gnueabihf/dri/
+  352  wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/libmali-rk-utgard-450-r7p0_1.6-1_armhf.deb
+  353  export http_proxy=http://10.24.219.17:3128
+  354  exports http_proxy=http://10.24.219.17:3128
+  355  export https_proxy=http://10.24.219.17:3128
+  356  wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/libmali-rk-utgard-450-r7p0_1.6-1_armhf.deb
+  357  wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/
+  358  cat index.html 
+  359  wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/libmali-rk-dev_1.7-1_armhf.deb
+  360  sudo dpkg -i libmali-rk-dev_1.7-1_armhf.deb 
+  361  cd
+  362  git clone rockchip_drv_video.so
+  363  git clone https://github.com/hizukiayaka/rockchip-video-driver.git
+  364  cd rockchip-video-driver/
+  365  ll
+  366  make
+  367  autoreconf 
+  368  aclocal
+  369  ./configure
+  370  cat CMakeLists.txt 
+  371  cmake
+  372  cmake .
+  373  ll
+  374  make
+  375  sudo make install
+  376  sudo ln -s /usr/local/lib/dri/rockchip_drv_video.so /usr/lib/arm-linux-gnueabihf/dri/rockchip_drv_video.so
+  377  cd
+  378  git clone -b release https://github.com/rockchip-linux/mpp.git
+  379  cd mpp/
+  380  cmake -DRKPLATFORM=ON -DHAVE_DRM=ON && make -j {nproc}
+  381  cmake -DRKPLATFORM=ON -DHAVE_DRM=ON && make -j (nproc(
+  382  cmake -DRKPLATFORM=ON -DHAVE_DRM=ON && make -j (nproc)
+  383  cmake -DRKPLATFORM=ON -DHAVE_DRM=ON && make -j$(nproc)
+  384  sudo make install
+  385  ll /usr/local/lib/librockchip_*
+  386  ffmpeg -hide_banner -f lavfi -i nullsrc -c:v libx264 -preset help -f mp4 -
+  387  cd /media/linaro/0E9ACA2339F586E5/
+  388  ll
+  389  cd camera-rushes/
+  390  ll
+  391  ffmpeg -i 1562251002.mkv -c:v libx264 -preset slow -crf 22 -c:a copy output.mkv
+  392  ffmpeg -i 1562251002.mkv -c:v libxh264_rkmpp -preset slow -crf 22 -c:a copy output.mkv
+  393  cat ~/youtube-main-camera.sh 
+  394  ffmpeg  -vcodec h264_rkmpp -i rtmp://192.168.1.210:1935/live/stream15 -s 320x240 /tmp/test.avi
+  395  ffmpeg -hwaccel drm -hwaccel_device /dev/dri/card0 -c:v h264_rkmpp -i rtmp://192.168.1.210:1935/live/stream15 -f null - -benchmark
+  396  history >~/history1.txt
+
+git clone https://gitlab.freedesktop.org/mesa/drm.git
+sudo apt install meson
+
+
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/ffmpeg_build/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/arm-linux-gnueabihf/pkgconfig:$HOME/bin/lib/pkgconfig:/usr/local/lib/pkgconfig" ./configure --enable-gpl --enable-version3 --enable-shared --enable-small --enable-avisynth --enable-frei0r --enable-gmp --enable-ladspa --enable-libcaca --enable-libcdio --enable-libfontconfig --enable-libfreetype  --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack  --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb  --enable-libopencore-amrwb --enable-libopencore-amrwb  --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-librtmp --enable-libshine  --enable-libsnappy --enable-libsoxr --enable-libspeex  --enable-libssh --enable-libtheora  --enable-libtwolame --enable-libv4l2 --enable-libvo-amrwbenc  --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp  --enable-libx264 --enable-libx265 --enable-libxvid --enable-libxml2  --enable-libzmq --enable-libzvbi --enable-libmysofa  --enable-openal --enable-opengl --enable-nonfree --enable-libfdk-aac --enable-hwaccel='h264_vaapi,hevc_vaapi,vp9_vaapi' --enable-decoder='vp8,vp9' --extra-libs='-lnettle -lhogweed -lgmp -lpthread -lm -lz' --pkg-config="pkg-config --static" --extra-ldexeflags="-static"

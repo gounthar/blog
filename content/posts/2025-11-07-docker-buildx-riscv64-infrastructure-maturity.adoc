@@ -1,0 +1,235 @@
+---
+author: Poddingue
+categories:
+- Docker
+- RISC-V64
+- DevOps
+- Infrastructure
+description: Announcing Docker Buildx support for RISC-V64—a story of infrastructure
+  maturity where adding new features becomes straightforward
+featured: true
+hidden: false
+image: assets/images/2025/11/07/docker-buildx-infrastructure.jpg
+tags:
+- docker-buildx
+- riscv64
+- github-actions
+- automation
+- buildkit
+- containers
+- infrastructure-as-code
+title: 'Docker Buildx for RISC-V64: When Infrastructure Just Works'
+toc: true
+---
+
+Sometimes the best technical stories aren't about heroic debugging sessions or clever workarounds. They're about the moment when you realize your infrastructure has matured enough that adding new features feels... easy. Docker Buildx support just landed in our RISC-V64 Docker project, and it took three small PRs and about 10 minutes of build time.
+
+_Photo by link:https://unsplash.com/@judaism_photography[Jude Smart] on link:https://unsplash.com/photos/bridge-above-water-near-buildings-2cWEDnJtDjE[Unsplash]_
+
+== Introduction
+
+I'm talking about Docker Buildx support landing in our RISC-V64 Docker project. And honestly? It took three small PRs and less than 10 minutes of build time.
+
+Let me back up.
+
+== A Quick Recap: Where We Are
+
+A few days ago, I published a comprehensive piece about link:https://www.linkedin.com/pulse/running-github-actions-risc-v64-production-journey-docker-verachten-daaze/[running GitHub Actions on RISC-V64 in production]. That article covered the entire journey: setting up a self-hosted runner on a BananaPi F3, building Docker Engine, CLI, and Compose from source, creating automated packaging pipelines, and maintaining APT and RPM repositories.
+
+It was months of work. Patching build systems. Wrestling with submodules. Testing on real hardware. Setting up weekly builds and daily release tracking.
+
+But here's the thing: that investment paid off this week in the best possible way.
+
+== The Discovery: Hey, Where's Buildx?
+
+I was looking through our APT repository and noticed something missing. We had:
+
+* Docker Engine (dockerd, containerd, runc)
+* Docker CLI (the `docker` command)
+* Docker Compose (multi-container orchestration)
+* Tini (container init process)
+
+But no Docker Buildx.
+
+Now, if you're not familiar with Buildx, here's why this matters.
+
+== What is Docker Buildx, Anyway?
+
+Docker Buildx is a CLI plugin that extends the `docker build` command with the full power of BuildKit. Think of it as Docker builds on steroids.
+
+What does that mean in practice?
+
+_Multi-platform builds_: Want to build an AMD64 container image from your RISC-V64 machine? Or create images for both architectures at once? `docker buildx build --platform linux/riscv64,linux/amd64` handles it.
+
+_Advanced caching_: Buildx brings sophisticated caching strategies that can dramatically speed up rebuilds. If you're iterating on a Dockerfile with lots of dependencies, this saves both time and bandwidth.
+
+_Build secrets_: Need to inject credentials during build without baking them into layers? Buildx has you covered with `--secret` flag support.
+
+_Remote builders_: Got a more powerful machine elsewhere? You can offload builds to remote BuildKit instances while working locally.
+
+For anyone doing serious container work, Buildx isn't optional—it's essential. Modern Docker workflows depend on it.
+
+So yeah, not having it in our RISC-V64 repository was a gap I wanted to close.
+
+== The Implementation: Three PRs and Done
+
+Here's where things get interesting. Remember all that infrastructure we built for Docker Engine, CLI, and Compose? The automated workflows, the packaging scripts, the repository management?
+
+Turns out, adding Buildx mostly meant plugging it into existing systems.
+
+=== PR #103: Automated Release Tracking
+
+First, I added a daily workflow (`track-buildx-releases.yml`) that checks for new Docker Buildx releases, exactly like we do for Moby and CLI. It runs at 08:00 UTC, looks for new tags in the upstream `docker/buildx` repository, and automatically triggers a build if we haven't built that version yet.
+
+=== PR #104: Repository Workflow Triggers
+
+Next, I updated the APT repository workflow to include Buildx. This workflow already handled Docker Engine, CLI, and Compose packages—it just needed to know about one more package type. Added `"Build Docker Buildx Debian Package"` to the workflow trigger list.
+
+=== PR #105: Download Logic Fix
+
+Here's where I found the actual bug. The APT repository workflow had logic to download packages from GitHub releases and add them to the repository. It was checking for the latest Buildx release tag... but it wasn't actually downloading the `.deb` package.
+
+One section of code added:
+
+[source,bash]
+----
+== Find latest Buildx release
+BUILDX_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+                 --limit 50 --json tagName | \
+                 jq -r '.[] | select(.tagName | test("^buildx-v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | .tagName' | \
+                 head -1)
+
+== Download Buildx package
+if [ -n "$BUILDX_RELEASE" ]; then
+  echo "Downloading Buildx package from $BUILDX_RELEASE..."
+  gh release download "$BUILDX_RELEASE" -p 'docker-buildx-plugin_*.deb' \
+    --repo gounthar/docker-for-riscv64 --clobber || true
+fi
+
+----
+
+That's it. The build itself? Already working. The packaging scripts? Already existed as templates. The repository signing and publishing? Already automated.
+
+== The Build: 9 Minutes and 13 Seconds
+
+I triggered the build workflow for Buildx v0.29.1 (the latest upstream release as of November 2025). The BananaPi F3 self-hosted runner picked it up.
+
+Nine minutes and thirteen seconds later: done.
+
+Native RISC-V64 binary compiled. GitHub release created. Debian package built automatically. RPM package built automatically. Both added to their respective repositories. GPG-signed metadata generated.
+
+I opened a terminal:
+
+[source,bash]
+----
+sudo apt update
+sudo apt install docker-buildx-plugin
+
+----
+
+Verified:
+
+[source,bash]
+----
+$ docker buildx version
+github.com/docker/buildx v0.29.1
+
+----
+
+It just... worked.
+
+== What Users Get Now
+
+If you're running Docker on RISC-V64 using our repository, you now have access to:
+
+_Latest upstream version_: v0.29.1, same as any other architecture
+
+_Standard installation_: Just `apt install docker-buildx-plugin` or the RPM equivalent
+
+_Automatic updates_: Daily tracking means new Buildx releases get built and packaged within hours
+
+_Full feature set_: Multi-platform builds, advanced caching, build secrets—all of it
+
+And here's what makes me proud: it's all integrated into the same infrastructure. The same automated tracking. The same build pipelines. The same repository management. The same GPG signing.
+
+Adding Buildx didn't require inventing new processes. It required connecting existing pieces.
+
+== When You Know Your Infrastructure Is Working
+
+I've been thinking about what this moment represents.
+
+A few months ago, the question was: "Can we even get Docker working on RISC-V64?" We were patching build files, debugging submodule conflicts, and manually compiling binaries.
+
+Today, the question is: "What feature should we add next?" And the answer took three PRs and less than 10 minutes of actual build time.
+
+That's infrastructure maturity.
+
+It's not about the individual components being perfect. It's about the system being composable. When you can add new capabilities by following existing patterns, when automation carries the heavy lifting, when the boring parts stay boring—that's when you know you've built something sustainable.
+
+== The Complete Picture
+
+Let's zoom out for a second. Here's what we have now for RISC-V64:
+
+[cols="1,1", options="header"]
+|===
+| Component
+| Status
+
+| _Docker Engine_
+| dockerd, containerd, runc - Weekly builds, daily release tracking
+
+| _Docker CLI_
+| docker command - Weekly builds, daily release tracking
+
+| _Docker Compose_
+| Multi-container orchestration - Weekly builds, daily release tracking
+
+| _Docker Buildx_
+| Advanced build features - Weekly builds, daily release tracking
+
+| _Tini_
+| Container init process - Weekly builds, automated packaging
+
+|===
+
+All built natively on RISC-V64 hardware.
+All packaged for Debian and RPM distributions.
+All served through signed, maintained repositories.
+All automatically updated when upstream releases new versions.
+
+This is what a mature Docker ecosystem looks like.
+
+== Takeaways & What's Next
+
+Here's what I'm taking away from this:
+
+* _Infrastructure investment compounds_ - Those days building automation weren't just for Docker Engine. They made every subsequent addition easier.
+
+* _Good patterns are reusable_ - The same workflow structure worked for Engine, CLI, Compose, and now Buildx. That's not luck, that's design.
+
+* _Boring is beautiful_ - The most successful automation is the kind you forget exists until you need it. This workflow has been running weekly for days without intervention.
+
+* _RISC-V64 is ready_ - Not "almost ready" or "ready for experiments." Ready. Full Docker toolchain, maintained repositories, automated updates.
+
+What's next? Honestly, I'm not sure. The foundation is solid enough that we can shift focus from "make it work" to "make it better." Performance optimization? User experience improvements? More container tooling?
+
+Or maybe just let it run. Sometimes the best thing you can do with infrastructure is nothing.
+
+== Try It Yourself
+
+If you want to try Docker on RISC-V64, everything you need is at link:https://github.com/gounthar/docker-for-riscv64[github.com/gounthar/docker-for-riscv64]. Installation instructions, repository setup, the works.
+
+And if you want the deep dive on how we got here—the self-hosted runner setup, the build pipeline architecture, the repository management—check out the link:https://www.linkedin.com/pulse/running-github-actions-risc-v64-production-journey-docker-verachten-daaze/[comprehensive article on LinkedIn].
+
+For now, I'm just going to appreciate that moment when you add a feature and it feels... easy.
+
+That's how you know you've done something right.
+
+== Resources
+
+* GitHub Repository: link:https://github.com/gounthar/docker-for-riscv64[github.com/gounthar/docker-for-riscv64]
+* APT Repository: link:https://gounthar.github.io/docker-for-riscv64[gounthar.github.io/docker-for-riscv64]
+* Previous Article: link:https://www.linkedin.com/pulse/running-github-actions-risc-v64-production-journey-docker-verachten-daaze/[Running GitHub Actions on RISC-V64 in Production]
+* Docker Buildx Documentation: link:https://docs.docker.com/buildx/working-with-buildx/[docs.docker.com/buildx]
+* Upstream Buildx: link:https://github.com/docker/buildx[github.com/docker/buildx]
+

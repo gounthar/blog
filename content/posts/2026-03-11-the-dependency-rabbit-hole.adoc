@@ -1,0 +1,417 @@
+---
+author: Bruno Verachten
+categories:
+- Technical
+- RISC-V
+- Python
+description: A clean-machine pip install exposed stale riscv64 PyTorch wheels, missing
+  system libraries like libopenblas, and transitive dependencies (numpy, grpcio) our
+  PEP 503 wheel index missed.
+excerpt: 'You know that feeling when you''ve just shipped something, everything''s
+  green, and you lean back in your chair thinking nailed it? Twenty-five native riscv64
+  wheels, a PEP 503 index on GitHub Pages, two BananaPi F3 boards doing the building.
+  So I did what any responsible engineer would do: I tried it on a clean machine.
+  Everything broke.'
+featured: false
+hidden: false
+image: assets/images/2026/03/11/dependency-rabbit-hole-header.jpg
+tags:
+- riscv64
+- python
+- wheels
+- pip
+- pep503
+- manylinux
+- auditwheel
+- numpy
+- pytorch
+- vllm
+- openblas
+- transitive-dependencies
+- bananapi
+- spacemit
+- grpcio
+- self-hosted-runners
+- github-actions
+title: 'The Dependency Rabbit Hole: Why 25 RISC-V Python Wheels Weren''t Enough'
+toc: true
+---
+
+You know that feeling when you've just shipped something, everything's green, and you lean back in your chair thinking "nailed it"?
+
+Twenty-five native riscv64 wheels.
+A PEP 503 index on GitHub Pages.
+Two BananaPi F3 boards doing the building.
+`pip install tokenizers` in three seconds flat.
+
+So I did what any responsible engineer would do: I tried it on a clean machine.
+
+Everything broke.
+
+image::/assets/images/2026/03/11/dependency-rabbit-hole-header.jpg[Exploring the dependency rabbit hole of riscv64 Python wheel packaging]
+
+_Photo by link:https://www.pexels.com/@bowovisuals[BOWOVISUALS] on link:https://www.pexels.com/photo/5823147/[Pexels]_
+
+_This is part two of the RISC-V wheel factory series. Part one: link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[Building a Python Wheel Factory for RISC-V]._
+
+== Act 1: The Ten-Second Lie
+
+I had a second BananaPi F3 sitting on the desk.
+Same hardware, same link:https://www.armbian.com/[Armbian] install, but this one had never seen vllm, never compiled a wheel. Nothing installed beyond the base system.
+A perfect test subject.
+
+I set up a venv, pointed pip at the index, and installed PyTorch:
+
+[source,console]
+----
+$ pip install torch --extra-index-url https://gounthar.github.io/riscv64-python-wheels/simple/
+Downloading torch-2.10.0a0+git9e1a40a-cp313-cp313-linux_riscv64.whl (78.4 MB)
+Successfully installed torch-2.10.0a0
+
+----
+
+Seventy-eight megabytes, ten seconds.
+That felt _great_.
+I opened a Python shell and tried `import torch`.
+
+[source,python]
+----
+>>> import torch
+Traceback (most recent call last):
+  ...
+ImportError: libopenblas.so.0: cannot open shared object file
+
+----
+
+Right. I'll come back to the missing libraries -- the wrong _wheel_ was actually more interesting.
+
+---
+
+== Act 2: The Wrong Wheel
+
+=== When Version Strings Lie
+
+The missing library wasn't even the interesting part.
+
+A few days earlier, I'd rebuilt PyTorch on the primary F3 board.
+The first build (78 MB) had been compiled with `USE_DISTRIBUTED=0` -- no distributed training support, no link:https://github.com/facebookincubator/gloo[Gloo] backend.
+When I tried `from vllm import LLM` with that build, it died immediately: `torch.distributed.is_available()` returned `False`, and vLLM flat-out refuses to start without it.
+Even in single-device mode, vLLM initializes a distributed backend.
+Why? Don't ask me -- that's just how it works.
+
+So I rebuilt PyTorch with `USE_DISTRIBUTED=1` and `USE_GLOO=1`.
+The new wheel was 82 MB, published to the pytorch fork's release page.
+It worked perfectly on the primary board.
+`from vllm import LLM` -- worked.
+
+Except the central wheel index (riscv64-python-wheels) still pointed to the _first_ build.
+The aggregation pipeline downloads wheels from each fork's release and republishes them in a central release.
+I'd rebuilt PyTorch in the fork.
+I never re-ran the aggregation.
+
+The index was stale.
+We had the fix.
+We just never shipped it.
+
+On the clean machine, `pip install torch` happily downloaded the old 78 MB wheel.
+It imported fine (once I fixed the libraries -- more on that in a second).
+But `torch.distributed.is_available()` returned `False`, and the whole point of rebuilding was lost.
+
+Four megabytes of difference, and nothing in the version string or the filename to warn you.
+
+Ouch.
+
+I added stale-wheel detection to the aggregation script after that.
+When a fork publishes a new wheel with the same package name but different content, the script now flags it and replaces the old one instead of silently keeping the stale copy.
+Closing the barn door, but at least the next horse won't escape unnoticed.
+
+---
+
+== Act 3: Wheels Are Not Self-Contained
+
+=== The System Library Surprise
+
+Back to the `libopenblas.so.0: cannot open shared object file` error.
+Then `libnuma.so.1`.
+
+[source,console]
+----
+$ sudo apt install libopenblas0 libnuma1
+
+----
+
+Two packages.
+Fifteen megabytes of system libraries.
+Problem solved, `import torch` works.
+
+But wait -- why would you even need to do this? On x86_64, you'd never hit this.
+link:https://pypi.org/[PyPI] wheels for major architectures go through `auditwheel`, which bundles shared libraries into the wheel itself, following the link:https://github.com/pypa/manylinux[manylinux] standard.
+The wheel ships with its own copy of OpenBLAS, its own libnuma, everything.
+Install the wheel, get the libraries. Self-contained.
+
+On riscv64, the manylinux infrastructure exists. `manylinux_2_39_riscv64` images landed in the link:https://github.com/pypa/manylinux[pypa/manylinux] project in summer 2025, and link:https://pypa.github.io/auditwheel/[auditwheel] gained musllinux riscv64 support in version 6.2.0, with manylinux riscv64 policies following later.
+But almost nobody uses it yet.
+Our wheels are tagged `linux_riscv64`, which basically means: built on this specific machine, linked against whatever was installed at build time.
+If the target machine doesn't have those libraries?
+You get a link:https://en.wikipedia.org/wiki/Dynamic_linker[dynamic linker] error at import time.
+
+=== The Manylinux Gap
+
+This is a known gap.
+The manylinux spec is maintained by the link:https://packaging.python.org/en/latest/[Python Packaging Authority], and riscv64 support has technically landed -- `cibuildwheel` 3.1.2 can target riscv64, and the link:https://riseproject.dev/2025/05/14/easy-installation-of-binary-python-packages-on-riscv64-devices/[RISE project] has been pushing adoption.
+But most upstream maintainers haven't added riscv64 to their build matrices yet.
+Until they do, most riscv64 wheels carry an implicit assumption: the user has the right system libraries installed.
+
+For PyTorch, that's link:https://www.openblas.net/[OpenBLAS] and libnuma.
+For other packages, it might be different libraries entirely.
+There's no way to know until `import` fails.
+
+Not exactly a smooth experience for someone just trying to run Python on their board.
+
+=== The URL That Looked Right
+
+And then there was cffi.
+
+`pip install cffi` against the index returned a 404. The wheel existed in the GitHub release. The index page listed it. But pip couldn't download it.
+
+The problem was in the index generator. When building the PEP 503 HTML pages, the script used relative URLs for the wheel links. That works when the HTML and the files live in the same location. But our wheels live on GitHub Releases, not on GitHub Pages. The relative URL resolved to a Pages path that didn't exist.
+
+[source,html]
+----
+<!-- What the index generated -->
+<a href="cffi-2.0.0-cp313-cp313-linux_riscv64.whl">cffi</a>
+
+<!-- What it should have been -->
+<a href="https://github.com/gounthar/cffi/releases/download/riscv64-v2.0.0/cffi-2.0.0-cp313-cp313-linux_riscv64.whl">cffi</a>
+
+----
+
+Every package in the index had this bug. cffi was just the first one I noticed because it happened to not be cached locally on the build machine. The fix was a one-line change in `generate-index.py`: use absolute URLs pointing to the GitHub release assets.
+
+Another clean-machine special. On the build machine, pip had cached all the wheels from earlier installs, so the broken URLs never mattered.
+
+---
+
+== Act 4: The numpy Blind Spot
+
+=== The Package Everyone Forgot
+
+With the system libraries installed and the correct PyTorch wheel manually downloaded, I moved on to installing vLLM's dependencies.
+The first thing pip did was resolve numpy.
+
+numpy has no riscv64 wheel on PyPI.
+Of course it doesn't.
+So pip fell back to building from source.
+
+[source,console]
+----
+Building wheel for numpy (pyproject.toml) ...
+
+----
+
+Twenty-five minutes.
+
+Twenty-four minutes and fifty-eight seconds of wall time, to be precise.
+Ninety-seven minutes of CPU time spread across all eight cores.
+link:https://mesonbuild.com/[Meson] orchestrating Fortran and C compilation.
+On a 1.6 GHz RISC-V link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC].
+
+I stared at the terminal.
+We built 25 wheels.
+We went through the whole fork-build-index-automate pipeline.
+And we missed numpy.
+_numpy._
+The single most downloaded scientific Python package on PyPI, with over 700 million downloads per month.
+
+How did that happen?
+
+---
+
+== Act 5: How We Missed It
+
+=== The Dirty Environment Trap
+
+The package list was curated bottom-up.
+I started with vLLM's `requirements/common.txt` and `requirements/cpu.txt`, identified packages with native extensions, checked PyPI for riscv64 wheels, and forked the ones that didn't have any.
+
+Well, numpy isn't in vLLM's requirements files.
+It's a transitive dependency -- PyTorch depends on it, and several other packages pull it in.
+On the primary F3 board, numpy was already installed system-wide: the Debian `python3-torch` package pulls in `python3-numpy` as a dependency.
+When I ran `pip install` in a `--system-site-packages` venv, numpy was already there.
+pip never tried to install it.
+It never compiled from source.
+It never showed up as a problem.
+
+I even had a detection script.
+`detect-source-builds.sh` parses pip install output for the telltale "Building wheel for" lines that indicate a source compilation.
+It was sitting in the repo.
+I never wired it into CI.
+I never ran it on a clean machine.
+It existed, and it did nothing.
+
+(Sounds familiar? Build a tool, forget to actually use it. Classic me.)
+
+The lesson is embarrassingly simple: if you're building a wheel index, you need to resolve the full transitive dependency tree, not just scan the direct requirements files.
+`pip install --dry-run` would have told me everything I needed to know.
+I just never ran it in the right environment.
+
+---
+
+== Act 6: The Audit
+
+=== Taking Stock of What's Actually Missing
+
+Time to stop being reactive.
+
+I installed vLLM's full dependency set in a clean venv (with `--dry-run` this time) and checked every package with native extensions against PyPI's riscv64 wheel availability.
+
+The good news: several packages that I'd assumed needed wheels already had them on PyPI.
+`markupsafe`, `charset-normalizer`, `rpds-py`, `pybase64` -- all had riscv64 wheels on PyPI already, tagged `manylinux_2_39_riscv64` by their maintainers.
+The ecosystem is slowly catching up.
+
+The bad news: six more packages were missing.
+
+[cols="1,1,1", options="header"]
+|===
+| Package
+| Extension type
+| Build time (estimated)
+
+| numpy
+| C + link:https://en.wikipedia.org/wiki/Fortran[Fortran] (meson)
+| 25 min
+
+| grpcio
+| C++ (huge)
+| 20-30 min
+
+| orjson
+| Rust (link:https://www.maturin.rs/[maturin])
+| 10 min
+
+| multidict
+| C (setuptools)
+| 2 min
+
+| frozenlist
+| C (setuptools)
+| 2 min
+
+| propcache
+| C (setuptools)
+| 2 min
+
+|===
+
+Twenty-six forks were about to become thirty-two.
+
+---
+
+== Act 7: The Fork Factory, Round Two
+
+=== Back to the Grind
+
+Forking six repos takes about three minutes with `gh repo fork`.
+Adding `build-riscv64.yml` workflows takes a bit longer because each package has its own build system quirks.
+The first round of 26 forks had taught me the patterns, so I moved fast.
+
+numpy and multidict built on the first try.
+That was the high point.
+
+(Side note: I keep being surprised by how fast multidict compiles -- under two minutes for a C extension. Meanwhile grpcio takes half an hour because it basically recompiles all of gRPC from scratch. The variance between "C package" and "C package" is wild.)
+
+=== The Runner Registration Problem (Again)
+
+orjson uses Rust and maturin, a pattern I'd handled a dozen times by now.
+But it sat in the "queued" state forever.
+Why? Because link:https://github.com/ChristopherHX/github-act-runner[github-act-runner] requires explicit per-repo registration -- you can't just add repos dynamically.
+The runners weren't registered for the new forks.
+The build had nowhere to go.
+
+=== Build System Quirks That Keep You Humble
+
+grpcio was worse.
+The link:https://grpc.io/[gRPC] repo has a non-standard layout: the Python package lives in `src/python/grpcio/`, not at the repo root.
+My workflow template assumed `pip wheel .` would work from the repo root.
+It didn't.
+The `setup.py` for the gRPC Python bindings is buried three directories deep.
+I needed to `cd src/python/grpcio` before building, or point pip at the right subdirectory.
+
+propcache and frozenlist share a maintainer (link:https://github.com/aio-libs[aio-libs]) and share a quirk: they use a custom link:https://peps.python.org/pep-0517/[PEP 517] build backend called `pep517_backend.hooks` that lives inside the repo.
+That backend requires `expandvars` as a build dependency, which isn't declared in the standard `pyproject.toml` build-requires.
+The build fails before it even starts compiling C code.
+
+Each failure required: read the error, understand the build system, fix the workflow, push, wait for the runner to pick it up, watch it fail or succeed.
+Six packages.
+Two succeeded immediately, four needed fixes.
+Not terrible, but it adds up.
+
+---
+
+== Act 8: The Runner Registration Tax
+
+=== The Ceremony Nobody Enjoys
+
+Every new fork needs both runners registered.
+github-act-runner makes this a ceremony (because apparently just adding a label and having it work would be too easy, right?).
+
+[source,bash]
+----
+== On each board, for each new repo:
+sudo systemctl stop github-runner
+cd ~/github-act-runner
+./github-act-runner configure --token <FRESH_TOKEN> --url https://github.com/gounthar/<repo>
+sudo systemctl start github-runner
+
+----
+
+The registration token expires in about an hour.
+Generate it too early, and by the time you SSH into the second board, it's dead.
+Runner names must be unique per repo.
+Both boards have the hostname `bananapif3-1` because I set them up from the same image. Yes, I know.
+Runner 1 registers as `bananapif3-1`, runner 2 tries to register with the same name, gets rejected.
+I have to override the name manually.
+
+And the worst part: stopping the service kills any in-flight build.
+Six new repos times two boards is twelve registrations.
+If I'm not careful about sequencing, I kill a build that's been running for twenty minutes and have to start it over.
+
+I lost two numpy builds this way.
+Fifty minutes of computation, gone because I stopped the runner to register an orjson fork.
+
+Nobody warns you about this part of self-hosted CI.
+The builds? They work fine.
+It's all the stuff _around_ the builds that eats your time.
+
+---
+
+== What This Taught Me
+
+=== What I'd Tell Past Me
+
+The wheel factory from link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[part one] solved a real problem.
+But it solved it for the packages I _knew_ about, on a machine that already had half the dependencies pre-installed.
+The clean-machine test exposed every assumption I'd baked in without realizing it.
+
+Would I do it differently if I started over? Sure. But I didn't know any of this until the clean machine rubbed my nose in it.
+
+So here's the short version, the stuff I wish someone had told me:
+
+* _Test on a clean machine._ Your dev environment lies to you. `pip install --dry-run` in a bare venv -- not `--system-site-packages`, a _bare_ one. That's the only way to see the full dependency picture. I should have done this from day one.
+* _Re-run your aggregation after rebuilding any wheel._ A stale index is worse than no index, because it _looks_ like it works. The PyTorch wheel had the same version string, the same filename. Four megabytes of difference and a build flag were the only clue. There's no mechanism in link:https://peps.python.org/pep-0503/[PEP 503] to help you here.
+* _Document your system library dependencies._ On x86_64, manylinux makes wheels portable. On riscv64, `manylinux_2_39_riscv64` support exists in the tooling but barely any upstream projects use it yet. `libopenblas0` and `libnuma1` aren't going to install themselves.
+* _Script everything._ Seriously. When you're managing 30+ repos across two boards, the manual runner registration approach is painful. And it kills builds. Two boards, thirty-two repos, and the registration overhead starts to dominate the actual compilation time.
+* _Don't assume you've found everything._ Somewhere in the dependency tree, there's probably a thirty-third package waiting to surprise me the next time I try a clean install.
+
+The fork count is now thirty-two.
+All six new packages built successfully and are in the index. grpcio, the big one, took two and a half hours of C++ compilation. The others ranged from two minutes (multidict) to twenty-five (numpy).
+Time to bring another clean machine.
+
+_The PEP 503 index is live at https://gounthar.github.io/riscv64-python-wheels/simple/. If you're running Python on RISC-V, point pip at it. And if you find a missing package, let me know -- I've gotten fast at forking._
+
+<!--
+Converted from AsciiDoc to Jekyll markdown
+Original file: /mnt/c/support/users/dev/riscv/vllm/article-dependency-rabbit-hole.adoc
+Conversion date: 2026-03-11
+Conversion notes: All AsciiDoc headers converted to markdown (= to #, == to ##, === to ###). Code blocks converted to fenced markdown. Tables converted to markdown pipe format. All AsciiDoc attributes stripped. Image converted with Jekyll asset path. LinkedIn URL reference replaced with internal blog post link. Pexels attribution preserved. Table of contents auto-generated with [TOC].
+-->

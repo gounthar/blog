@@ -1,0 +1,502 @@
+---
+author: Poddingue
+categories:
+- RK3399
+description: How to compile a recent version of RockChip's ffmpeg on an OrangePi RK3399
+  ?
+draft: true
+featured: true
+hidden: false
+image: assets/images/2019/11/12/58e16084a24d1_4F4BA18C759111B4A2A26C688B4A16AD57AC4C3003967F4FB4pimgpsh_fullsize_distr.jpg.9554f8f86cf67629f5f6f330a3559b6d_1_.jpg
+tags:
+- rk3399
+- ffmpeg
+- libaom
+title: 'Stream For Cheap With RK3399 #3 - Compile RockChip''s FFMPEG fork'
+---
+
+In link:https://medium.com/@poddingue/in-part-one-of-this-series-i-tried-the-installed-ffmpeg-version-on-the-orangepi-rk3399-and-made-ff214fcc37c6[part two] of this series, I compiled the master branch of ffmpeg on the OrangePi link:http://www.orangepi.org/Orange%20Pi%20RK3399/[RK3399], with the hope we would get hardware acceleration automagically and failed.
+Now, let's try to compile RockChip's ffmpeg fork on this very machine, if that could ever help us getting hardware acceleration.
+Yes, a fork from RockChip does exist, for a reason, so let's try this out.
+
+[source,bash]
+----
+sudo apt install libass-dev libcaca-dev libdc1394-22-dev libopenmpt-dev libpulse-dev libssh-dev libzvbi-dev libcdio-dev libcdparanoia-dev libsdl2-dev
+sudo apt-get build-dep ffmpeg
+mkdir ffmpeg_sources
+cd ffmpeg_sources
+git clone https://github.com/rockchip-linux/ffmpeg.git
+cd ffmpeg
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --enable-rkmpp --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm -lnettle -lhogweed -lgmp" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+./configure --enable-static --disable-shared
+make && make install
+
+wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/libmali-rk-utgard-450-r7p0_1.7-1_armhf.deb
+wget https://github.com/rockchip-linux/rk-rootfs-build/blob/master/packages/armhf/libmali/libmali-rk-dev_1.7-1_armhf.deb
+
+sudo -E dpkg -i libmali-rk-dev_1.7-1_armhf.deb 
+
+----
+
+[insert gif rockchip-video-driver]
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone https://github.com/hizukiayaka/rockchip-video-driver.git
+cd rockchip-video-driver/
+cmake .
+make -j$(nproc)
+sudo make install
+
+----
+
+As I got an error telling me about the lack of rockchip_drv_video.so, I made a link:
+
+[source,bash]
+----
+sudo ln -s /usr/local/lib/dri/rockchip_drv_video.so /usr/lib/arm-linux-gnueabihf/dri/rockchip_drv_video.so
+
+----
+
+Let's compile the RockChip mpp, so that we will be able to use it with ffmpeg afterwards:
+
+[insert gif rockchip-mpp]
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone -b release https://github.com/rockchip-linux/mpp.git
+cd mpp/
+cmake -DRKPLATFORM=ON -DHAVE_DRM=ON && make -j$(nproc)
+sudo make install
+
+----
+
+libva will be asked for later on, so let's compile and install it now:
+
+[insert gif libva]
+
+[source,bash]
+----
+wget http://deb.debian.org/debian/pool/main/libv/libva/libva_2.5.0.orig.tar.gz
+tar -xvzf libva_2.5.0.orig.tar.gz
+cd libva-2.5.0/
+wget http://deb.debian.org/debian/pool/main/libv/libva/libva_2.5.0-1.debian.tar.xz
+xz -d libva_2.5.0-1.debian.tar.xz && tar -xvf libva_2.5.0-1.debian.tar && rm libva_2.5.0-1.debian.tar
+sudo -E dpkg-buildpackage -us -uc -d
+sudo apt install mesa-va-drivers
+cd .. && sudo dpkg -i libva2-dbgsym_2.5.0-1_armhf.deb va-driver-all_2.5.0-1_armhf.deb libva-drm2_2.5.0-1_armhf.deb libva-glx2_2.5.0-1_armhf.deb libva-wayland2_2.5.0-1_armhf.deb libva-x11-2_2.5.0-1_armhf.deb libva-dev_2.5.0-1_armhf.deb libva2_2.5.0-1_armhf.deb
+
+----
+
+As zmq was also missing:
+
+[insert gif zmq]
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone https://github.com/zeromq/libzmq.git
+export CFLAGS="-DZMQ_STATIC"
+mkdir build && cd build/
+cmake ../libzmq/ && make && sudo make install
+
+sudo apt-get install libfdk-aac-dev nettle-dev
+
+cd ~/ffmpeg_sources
+git clone -b rockchip/release/4.1 https://github.com/rockchip-linux/ffmpeg.git
+
+
+libavutil/hwcontext_drm.c:124:29: error: ‘DRM_FORMAT_NV12_10’ undeclared here (not in a function); did you mean ‘DRM_FORMAT_NV21’?
+
+ PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --enable-rkmpp --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm -lnettle -lhogweed -lgmp" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gnutls --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopencv --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gnutls --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopencv --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+
+ERROR: gnutls not found using pkg-config
+
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopencv --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+ERROR: opencv not found using pkg-config
+
+----
+
+Ok, let's get rid of opencv for the time being:
+
+[source,bash]
+----
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure --arch=arm --bindir="$HOME/bin" --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags="-I$HOME/ffmpeg_build/include" --extra-ldflags="-L$HOME/ffmpeg_build/lib" --extra-libs="-lpthread -lm" --pkg-config-flags="--static" --prefix="$HOME/ffmpeg_build"
+
+WARNING: Building with deprecated library libavresample
+libavutil/avconfig.h is unchanged
+libavcodec/parser_list.c is unchanged
+libavcodec/bsf_list.c is unchanged
+libavformat/muxer_list.c is unchanged
+
+
+PATH="$HOME/bin:$PATH" make -j$(nproc)
+
+----
+
+I got ‘DRM_FORMAT_NV12_10’ undeclared here .
+
+As stated link:https://github.com/rockchip-linux/ffmpeg/issues/5[there], I just removed the offending line
+I made the patch with diff -u  ./libavutil/hwcontext_drm.c ./libavutil/hwcontext_drm.c.back >patch.
+
+[source,bash]
+----
+--- ./libavutil/hwcontext_drm.c 2019-11-14 17:19:09.134249800 +0000
++++ ./libavutil/hwcontext_drm.c.back    2019-11-14 17:18:27.530249780 +0000
+@@ -121,7 +121,7 @@
+     { AV_PIX_FMT_YUV422P,   DRM_FORMAT_YUV422,      },
+     { AV_PIX_FMT_NV21,      DRM_FORMAT_NV21,        },
+     { AV_PIX_FMT_NV12,      DRM_FORMAT_NV12,        },
+-//    { AV_PIX_FMT_P010,      DRM_FORMAT_NV12_10,     },
++    { AV_PIX_FMT_P010,      DRM_FORMAT_NV12_10,     },
+     { AV_PIX_FMT_YUV420P,   DRM_FORMAT_YUV420,      },
+ };
+
+sudo make -j$(nproc) install
+
+wget http://distribution.bbb3d.renderfarming.net/video/mp4/bbb_sunflower_1080p_30fps_normal.mp4
+sudo -E /home/linaro/bin/ffmpeg -benchmark -loglevel 48 -vcodec h264_rkmpp -i bbb_sunflower_1080p_30fps_normal.mp4 -map 0:v:0 -f null -
+
+frame=19036 fps=237 q=-0.0 Lsize=N/A time=00:10:34.83 bitrate=N/A speed=7.91x
+video:7585kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+Input file #0 (/media/linaro/0E9ACA2339F586E5/slides_rushes/bbb_sunflower_1080p_30fps_normal.mp4):
+  Input stream #0:0 (video): 19036 packets read (237848132 bytes); 19036 frames decoded;
+  Input stream #0:1 (audio): 21 packets read (10080 bytes);
+  Input stream #0:2 (audio): 2 packets read (2560 bytes);
+  Total: 19059 packets (237860772 bytes) demuxed
+Output file #0 (pipe:):
+  Output stream #0:0 (video): 19036 frames encoded; 19036 packets muxed (7766688 bytes);
+  Total: 19036 packets (7766688 bytes) muxed
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xab44b8f0
+mpp_dec: mpp_dec_parser_thread exit
+mpp_dec: mpp_dec_parser_thread exit ok
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xab44b9f8
+mpp_dec: mpp_dec_hal_thread exit ok
+bench: utime=10.101s
+19036 frames successfully decoded, 0 decoding errors
+bench: maxrss=93880kB
+[AVIOContext @ 0xab3cd8a0] Statistics: 259311905 bytes read, 972 seeks
+
+----
+
+So it now works for decoding, that's a good thing.
+What if we now tried that with the latest official version of ffmpeg, straight from github?
+
+You know what? It worked. I just don't know why, but it worked:
+
+[source,bash]
+----
+frame=19036 fps=234 q=-0.0 Lsize=N/A time=00:10:34.83 bitrate=N/A speed=7.79x
+video:7585kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+Input file #0 (/media/linaro/0E9ACA2339F586E5/slides_rushes/bbb_sunflower_1080p_30fps_normal.mp4):
+  Input stream #0:0 (video): 19036 packets read (237848132 bytes); 19036 frames decoded;
+  Input stream #0:1 (audio): 21 packets read (10080 bytes);
+  Input stream #0:2 (audio): 2 packets read (2560 bytes);
+  Total: 19059 packets (237860772 bytes) demuxed
+Output file #0 (pipe:):
+  Output stream #0:0 (video): 19036 frames encoded; 19036 packets muxed (7766688 bytes);
+  Total: 19036 packets (7766688 bytes) muxed
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xab149dd0
+mpp_dec: mpp_dec_parser_thread exit
+mpp_dec: mpp_dec_parser_thread exit ok
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xab149ed8
+mpp_dec: mpp_dec_hal_thread exit ok
+bench: utime=9.628s stime=8.357s rtime=81.544s
+19036 frames successfully decoded, 0 decoding errors
+bench: maxrss=75008kB
+[AVIOContext @ 0xab11b8b0] Statistics: 259311905 bytes read, 972 seeks
+
+----
+
+It looks like gstreamer already has the hardware encoding enabled: https://github.com/rockchip-linux/mpp/issues/104
+
+[source,bash]
+----
+cd ~/ffmpeg_sources
+git clone https://github.com/rockchip-linux/gstreamer-rockchip.git
+cd gstreamer-rockchip
+sudo apt install -y gstreamer-1.0 gstreamer1.0-plugins-base libgstreamer-plugins-base1.0-dev
+./autogen.sh
+
+
+configure: No package 'gstreamer-1.0' found
+configure: error: no gstreamer-1.0 >= 1.12.0 (GStreamer) found
+
+sudo apt-get install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+./autogen.sh
+PATH="$HOME/bin:$PATH" make -j$(nproc)
+
+
+gstkmsutils.c:41:5: error: ‘DRM_FORMAT_NV12_10’ undeclared here (not in a function); did you mean ‘DRM_FORMAT_NV12’?
+
+----
+
+So I commented this line:
+
+[source,bash]
+----
+//  DEF_FMT (NV12_10, P010_10LE),
+
+----
+
+[source,bash]
+----
+git clone https://github.com/rockchip-linux/gstreamer-rockchip-extra.git
+cd gstreamer-rockchip-extra
+./autogen.sh
+linaro@captation-techforum-rk3399-4GB:~/ffmpeg_sources/gstreamer-rockchip-extra$ PATH="$HOME/bin:$PATH" make -j$(nproc)
+
+rkx_kmsutils.c:41:5: error: ‘DRM_FORMAT_NV12_10’ undeclared here (not in a function); did you mean ‘DRM_FORMAT_NV12’?
+
+linaro@captation-techforum-rk3399-4GB:~/ffmpeg_sources/gstreamer-rockchip-extra$ vi ./gst/rkximage/rkx_kmsutils.c
+//  DEF_FMT (NV12_10, P010_10LE),
+
+PATH="$HOME/bin:$PATH" make -j$(nproc)
+
+----
+
+other errors, abandonned but opened an issue: https://github.com/rockchip-linux/gstreamer-rockchip-extra/issues/19 
+
+[source,bash]
+----
+linaro@captation-techforum-rk3399-4GB:~/ffmpeg_sources$ git clone https://github.com/rockchip-linux/gstreamer-camera.git
+linaro@captation-techforum-rk3399-4GB:~/ffmpeg_sources$ cd gstreamer-camera
+linaro@captation-techforum-rk3399-4GB:~/ffmpeg_sources/gstreamer-camera$ ./autogen.sh
+
+----
+
+make gives an error regarding osThread does not name a type. I added some comment to this issue: https://github.com/rockchip-linux/gstreamer-camera/issues/1#issuecomment-554295804
+
+
+
+Let's try to encode: 
+
+[source,bash]
+----
+gst-launch-1.0 v4l2src ! video/x-raw,format=NV12,width=640,height=480,framerate=30/1 ! queue ! mpph264enc ! queue ! h264parse ! mpegtsmux ! filesink location=/home/linaro/2k.ts 
+
+----
+
+Most of the time, it completly crashes the machine
+
+[source,bash]
+----
+/usr/bin/gst-launch-1.0 v4l2src device=/dev/video0 io-mode=4 ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! mpph264enc ! filesink location=2k.h264
+Setting pipeline to PAUSED ...
+mpi: mpp version: b212d1b author: Jacob Chen [mpp]: fix mjpeg buffer leak
+Pipeline is live and does not need PREROLL ...
+Setting pipeline to PLAYING ...
+New clock: GstSystemClock
+h264e_api: h264e_config MPP_ENC_SET_RC_CFG bps 7776000 [7290000 : 8262000]
+client_loop: send disconnect: Connection reset by peer
+
+----
+
+Then I tried that, but the machine kept on crashing
+
+[source,bash]
+----
+gst-launch-1.0 videotestsrc ! 'video/x-raw,format=YUY2,width=1920,height=1080,framerate=30/1' ! mpph264enc ! fpsdisplaysink video-sink=fakesink text-overlay=false sync=false -ve
+Setting pipeline to PAUSED ...
+mpi: mpp version: b212d1b author: Jacob Chen [mpp]: fix mjpeg buffer leak
+Pipeline is PREROLLING ...
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0/GstFakeSink:fakesink0: sync = false
+h264e_api: h264e_config MPP_ENC_SET_RC_CFG bps 7776000 [7290000 : 8262000]
+/GstPipeline:pipeline0/GstVideoTestSrc:videotestsrc0.GstPad:src: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:src: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstMppH264Enc:mpph264enc0.GstPad:sink: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:sink: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstMppH264Enc:mpph264enc0.GstPad:src: caps = video/x-h264, stream-format=(string)byte-stream, alignment=(string)au, width=(int)1920, height=(int)1080, pixel-aspect-ratio=(fraction)1/1, framerate=(fraction)30/1, interlace-mode=(string)progressive, colorimetry=(string)bt709, chroma-site=(string)mpeg2, multiview-mode=(string)mono, multiview-flags=(GstVideoMultiviewFlagsSet)0:ffffffff:/right-view-first/left-flipped/left-flopped/right-flipped/right-flopped/half-aspect/mixed-mono
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0.GstGhostPad:sink.GstProxyPad:proxypad0: caps = video/x-h264, stream-format=(string)byte-stream, alignment=(string)au, width=(int)1920, height=(int)1080, pixel-aspect-ratio=(fraction)1/1, framerate=(fraction)30/1, interlace-mode=(string)progressive, colorimetry=(string)bt709, chroma-site=(string)mpeg2, multiview-mode=(string)mono, multiview-flags=(GstVideoMultiviewFlagsSet)0:ffffffff:/right-view-first/left-flipped/left-flopped/right-flipped/right-flopped/half-aspect/mixed-mono
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0/GstFakeSink:fakesink0.GstPad:sink: caps = video/x-h264, stream-format=(string)byte-stream, alignment=(string)au, width=(int)1920, height=(int)1080, pixel-aspect-ratio=(fraction)1/1, framerate=(fraction)30/1, interlace-mode=(string)progressive, colorimetry=(string)bt709, chroma-site=(string)mpeg2, multiview-mode=(string)mono, multiview-flags=(GstVideoMultiviewFlagsSet)0:ffffffff:/right-view-first/left-flipped/left-flopped/right-flipped/right-flopped/half-aspect/mixed-mono
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0.GstGhostPad:sink: caps = video/x-h264, stream-format=(string)byte-stream, alignment=(string)au, width=(int)1920, height=(int)1080, pixel-aspect-ratio=(fraction)1/1, framerate=(fraction)30/1, interlace-mode=(string)progressive, colorimetry=(string)bt709, chroma-site=(string)mpeg2, multiview-mode=(string)mono, multiview-flags=(GstVideoMultiviewFlagsSet)0:ffffffff:/right-view-first/left-flipped/left-flopped/right-flipped/right-flopped/half-aspect/mixed-mono
+Pipeline is PREROLLED ...
+Setting pipeline to PLAYING ...
+New clock: GstSystemClock
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0/GstFakeSink:fakesink0: sync = false
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 2, dropped: 0, current: 2.90, average: 2.90
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 4, dropped: 0, current: 3.10, average: 3.00
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 6, dropped: 0, current: 0.58, average: 1.25
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 7, dropped: 0, current: 1.05, average: 1.22
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 10, dropped: 0, current: 2.83, average: 1.47
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 11, dropped: 0, current: 0.46, average: 1.23
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 12, dropped: 0, current: 0.40, average: 1.05
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 13, dropped: 0, current: 0.68, average: 1.00
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 14, dropped: 0, current: 1.28, average: 1.02
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 20, dropped: 0, current: 2.80, average: 1.26
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 22, dropped: 0, current: 3.87, average: 1.34
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 33, dropped: 0, current: 21.28, average: 1.95
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 45, dropped: 0, current: 22.33, average: 2.58
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 57, dropped: 0, current: 22.35, average: 3.17
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 76, dropped: 0, current: 36.54, average: 4.11
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 97, dropped: 0, current: 41.57, average: 5.11
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 118, dropped: 0, current: 41.99, average: 6.05
+/GstPipeline:pipeline0/GstFPSDisplaySink:fpsdisplaysink0: last-message = rendered: 139, dropped: 0, current: 41.53, average: 6.95
+
+----
+
+But this command does work
+
+[source,bash]
+----
+$ sudo gst-launch-1.0 -e videotestsrc is-live=false num-buffers=500 \
+[quote]
+____
+! video/x-raw,format=NV12,width=1280,height=720 \
+! mpph264enc ! filesink location=1280.h264
+____
+
+(gst-plugin-scanner:741): GLib-GObject-WARNING **: 09:29:09.504: cannot register existing type 'GstKMSSink'
+
+(gst-plugin-scanner:741): GLib-GObject-CRITICAL **: 09:29:09.504: g_type_add_interface_static: assertion 'G_TYPE_IS_INSTANTIATABLE (instance_type)' failed
+
+(gst-plugin-scanner:741): GLib-GObject-CRITICAL **: 09:29:09.504: g_type_add_interface_static: assertion 'G_TYPE_IS_INSTANTIATABLE (instance_type)' failed
+
+(gst-plugin-scanner:741): GLib-CRITICAL **: 09:29:09.504: g_once_init_leave: assertion 'result != 0' failed
+
+(gst-plugin-scanner:741): GStreamer-CRITICAL **: 09:29:09.504: gst_element_register: assertion 'g_type_is_a (type, GST_TYPE_ELEMENT)' failed
+Setting pipeline to PAUSED ...
+mpi: mpp version: b212d1b author: Jacob Chen [mpp]: fix mjpeg buffer leak
+Pipeline is PREROLLING ...
+h264e_api: h264e_config MPP_ENC_SET_RC_CFG bps 3456000 [3240000 : 3672000]
+Pipeline is PREROLLED ...
+Setting pipeline to PLAYING ...
+New clock: GstSystemClock
+Got EOS from element "pipeline0".
+Execution ended after 0:00:14.428808048
+Setting pipeline to PAUSED ...
+Setting pipeline to READY ...
+Setting pipeline to NULL ...
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xab2a1c30
+Freeing pipeline ...
+linaro@captation-techforum-rk3399-4GB:~$ ffprobe -hide_banner 1280.h264
+Input #0, h264, from '1280.h264':
+  Duration: N/A, bitrate: N/A
+    Stream #0:0: Video: h264 (High), yuv420p(progressive), 1280x720, 30 fps, 30 tbr, 1200k tbn, 60 tbc
+
+gst-launch-1.0 videotestsrc num-buffers=512 ! video/x-raw,format=NV12,width=1920,height= 1080,framerate=30/1 \
+    ! queue ! mpph264enc ! queue ! h264parse ! mpegtsmux ! filesink location=/home/linaro/2k.ts
+
+----
+
+crashe la machine à tous les coups
+quelques infos (en chinois) ici: http://blog.iotwrt.com/media/2017/05/04/VIDEO/ 
+
+
+J'essaye de coupler les deux:
+
+[source,bash]
+----
+ffmpeg  -f v4l2 -pix_fmt nv12 -s 1920x1080 -r 30 -i /dev/video0 -vcodec copy - | gst-launch-1.0 fdsrc ! 'video/x-h264,framerate=30/1,stream-format=byte-stream'! mpph264enc ! filesink location=test1.mp4
+WARNING: erroneous pipeline: could not link fdsrc0 to mpph264enc0, mpph264enc0 can't handle caps video/x-h264, framerate=(fraction)30/1, stream-format=(string)byte-stream
+ffmpeg version N-95733-g73ee53f317 Copyright (c) 2000-2019 the FFmpeg developers
+  built with gcc 9 (Debian 9.2.1-19)
+  configuration: --arch=arm --bindir=/home/linaro/bin --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags=-I/home/linaro/ffmpeg_build/include --extra-ldflags=-L/home/linaro/ffmpeg_build/lib --extra-libs='-lpthread -lm' --pkg-config-flags=--static --prefix=/home/linaro/ffmpeg_build
+  WARNING: library configuration mismatch
+  avresample  configuration: --prefix=/usr --extra-version=2 --toolchain=hardened --libdir=/usr/lib/arm-linux-gnueabihf --incdir=/usr/include/arm-linux-gnueabihf --arch=arm --enable-gpl --disable-stripping --enable-avresample --disable-filter=resample --enable-avisynth --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librsvg --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 35.101 / 56. 35.101
+  libavcodec     58. 62.100 / 58. 62.100
+  libavformat    58. 35.100 / 58. 35.100
+  libavdevice    58.  9.100 / 58.  9.100
+  libavfilter     7. 66.100 /  7. 66.100
+  libavresample   4.  0.  0 /  4.  0.  0
+  libswscale      5.  6.100 /  5.  6.100
+  libswresample   3.  6.100 /  3.  6.100
+  libpostproc    55.  6.100 / 55.  6.100
+[video4linux2,v4l2 @ 0xab27de70] The driver does not permit changing the time per frame
+[video4linux2,v4l2 @ 0xab27de70] Time per frame unknown
+[video4linux2,v4l2 @ 0xab27de70] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, video4linux2,v4l2, from '/dev/video0':
+  Duration: N/A, start: 0.000000, bitrate: N/A
+    Stream #0:0: Video: rawvideo (NV12 / 0x3231564E), nv12, 1920x1080, 1000k tbr, 1000k tbn, 1000k tbc
+[NULL @ 0xab2812a0] Unable to find a suitable output format for 'pipe:'
+pipe:: Invalid argument
+
+----
+
+[source,bash]
+----
+ffmpeg  -f v4l2 -pix_fmt nv12 -s 1920x1080 -r 30 -i /dev/video0 -c copy -f mpegts - >/dev/null
+
+----
+
+fonctionne
+
+[source,bash]
+----
+ffmpeg  -f v4l2 -pix_fmt nv12 -s 1920x1080 -r 30 -i /dev/video0 -c:v rawvideo -f rawvideo - >/dev/null
+
+----
+
+fonctionne aussi...
+
+Donc 
+
+[source,bash]
+----
+ffmpeg  -f v4l2 -pix_fmt nv12 -s 1920x1080 -r 30 -i /dev/video0 -c:v rawvideo -f rawvideo - >/dev/null| gst-launch-1.0 fdsrc ! 'video/x-raw,format=YUY2,width=1920,height=1080,framerate=30/1'! mpph264enc ! filesink location=test1.mp4
+
+----
+
+passe à Setting pipeline to NULL ... donc fichier vide
+
+et gstreamer tout seul foire uasis:
+
+[source,bash]
+----
+gst-launch-1.0 -v v4l2src device=/dev/video0 ! 'video/x-raw,format=YUY2,width=1920,height=1080,framerate=30/1'! mpph264enc ! filesink location=test1.mp4
+Setting pipeline to PAUSED ...
+mpi: mpp version: b212d1b author: Jacob Chen [mpp]: fix mjpeg buffer leak
+Pipeline is live and does not need PREROLL ...
+Setting pipeline to PLAYING ...
+h264e_api: h264e_config MPP_ENC_SET_RC_CFG bps 7776000 [7290000 : 8262000]
+/GstPipeline:pipeline0/GstV4l2Src:v4l2src0.GstPad:src: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, pixel-aspect-ratio=(fraction)1/1, colorimetry=(string)bt709, interlace-mode=(string)progressive
+New clock: GstSystemClock
+/GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:src: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, pixel-aspect-ratio=(fraction)1/1, colorimetry=(string)bt709, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstMppH264Enc:mpph264enc0.GstPad:sink: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, pixel-aspect-ratio=(fraction)1/1, colorimetry=(string)bt709, interlace-mode=(string)progressive
+/GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:sink: caps = video/x-raw, format=(string)YUY2, width=(int)1920, height=(int)1080, framerate=(fraction)30/1, pixel-aspect-ratio=(fraction)1/1, colorimetry=(string)bt709, interlace-mode=(string)progressive
+^Chandling interrupt.
+Interrupt: Stopping pipeline ...
+Execution ended after 0:00:44.645408271
+Setting pipeline to PAUSED ...
+Setting pipeline to READY ...
+Setting pipeline to NULL ...
+mpp_thread: MPP_THREAD_STOPPING status set mThread 0xaaf23140
+Freeing pipeline ...
+
+----
+
+fichier vide
+
+[source,bash]
+----
+  configuration: --arch=arm --bindir=/home/linaro/bin --disable-stripping --enable-libaom --enable-avisynth --enable-avresample --enable-chromaprint --enable-frei0r --enable-gpl --enable-ladspa --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libdc1394 --enable-libfdk-aac --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libiec61883 --enable-libmp3lame --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-shared --incdir=/usr/include/arm-linux-gnueabihf --libdir=/usr/lib/arm-linux-gnueabihf --enable-nonfree --enable-rkmpp --enable-version3 --enable-libdrm --extra-cflags=-I/home/linaro/ffmpeg_build/include --extra-ldflags=-L/home/linaro/ffmpeg_build/lib --extra-libs='-lpthread -lm' --pkg-config-flags=--static --prefix=/home/linaro/ffmpeg_build
+
+ffmpeg -benchmark -loglevel 48 -vcodec h264_rkmpp -i ffmpeg-30fps-vaapi-HQ42.mov -map 0:v:0 -f null -
+
+
+ 385 ll /usr/local/lib/librockchip_*
+ 386 ffmpeg -hide_banner -f lavfi -i nullsrc -c:v libx264 -preset help -f mp4 -
+ 387 cd /media/linaro/0E9ACA2339F586E5/
+ 388 ll
+ 389 cd camera-rushes/
+ 390 ll
+ 391 ffmpeg -i 1562251002.mkv -c:v libx264 -preset slow -crf 22 -c:a copy output.mkv
+ 392 ffmpeg -i 1562251002.mkv -c:v libxh264_rkmpp -preset slow -crf 22 -c:a copy output.mkv
+ 393 cat ~/youtube-main-camera.sh 
+ 394 ffmpeg -vcodec h264_rkmpp -i rtmp://192.168.1.210:1935/live/stream15 -s 320x240 /tmp/test.avi
+ 395 ffmpeg -hwaccel drm -hwaccel_device /dev/dri/card0 -c:v h264_rkmpp -i rtmp://192.168.1.210:1935/live/stream15 -f null - -benchmark
+ 396 history >~/history1.txt
+
+----

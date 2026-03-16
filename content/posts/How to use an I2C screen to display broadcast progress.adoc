@@ -1,0 +1,41 @@
+---
+author: Poddingue
+categories:
+- H3
+- GPIO
+- I2C
+- OrangePi
+- Armbian
+description: How to use an I2C screen to display broadcast progress on the OrangePi
+  Zero running Armbian
+draft: true
+featured: true
+hidden: false
+image: assets/images/2020/01/05/61MssWzM-tL._SX342__1_.jpg
+tags:
+- H3
+- GPIO
+- I2C
+- OrangePi
+- Armbian
+title: How to use an I2C screen to display broadcast progress on the OrangePi Zero
+  running Armbian
+---
+
+== How to use an I2C screen to display broadcast progress
+
+I found the second part of the link:https://stackoverflow.com/questions/59249817/how-to-replace-carriage-return-without-new-line-in-ffmpeg-output-thanks-to-sed[answer] there.
+As for the first part, it's still on the Ubuntu X86 machine, I have to find the command before loosing it.
+Waiting for this, here is a fake command on Windows:
+
+[source,bash]
+----
+ffmpeg -y -f lavfi -i testsrc=duration=10:size=1920x1080:rate=25 -progress pipe:3 null.mkv 3> ffmpeg.log
+
+----
+
+[source,bash]
+----
+cat ffmpeg.log |awk '/^frame/{split($1,frame,"=")}/^fps/{split($1,fps,"=")}/^speed=.+x$/{split($1,speed,"=");printf "%s|%s|%s\n", frame[2],fps[2],speed[2]}'
+
+----

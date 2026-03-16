@@ -1,0 +1,277 @@
+---
+author: gounthar
+categories:
+- jenkins
+- riscv
+- jdk
+- jdk21
+date: 2023-08-25 11:43:53 +0100
+description: Can we get Jenkins to run with JDK21 on RISC-V? Let's find out!
+draft: true
+featured: true
+hidden: false
+image: assets/images/2023/08/25/a-glimpse-of-the-future.png
+tags:
+- jenkins
+- riscv
+- jdk
+- jdk21
+title: A glimpse of the future
+toc: true
+---
+
+== Configuring an Orange Pi Zero as a Router with USB Tethering Using Ansible
+
+So, you’ve got an Orange Pi Zero lying around, and you want to turn it into a router using USB tethering from your phone? Great idea! But manually configuring it every time you reboot or reconnect? Nah, that’s no fun. Let’s automate the whole thing using _Ansible_. Spoiler alert: It’s not as straightforward as it sounds, but we’ll get through it together.
+
+---
+
+== The Goal
+
+We want to:
+. Use USB tethering from a phone to provide internet access to the Orange Pi Zero.
+. Connect other devices (like a laptop) to the Orange Pi Zero via Ethernet and give them internet access.
+. Automate the entire setup using Ansible so it’s reproducible and hassle-free.
+
+---
+
+== The Challenges
+
+Oh boy, where do I start? Here’s what we had to deal with:
+
+. _Dynamic USB Interface Names_: The USB tethering interface name changes every time you reconnect the phone. Fun, right?
+. _Changing IP Ranges_: The phone’s USB tethering kept assigning different subnets (e.g., `192.168.43.x`, `192.168.24.x`). Consistency? Never heard of it.
+. _DHCP Server Configuration_: Getting the DHCP server to work reliably on the Orange Pi Zero was a bit of a headache.
+. _NAT and Routing_: Making sure traffic from the Ethernet interface (`end0`) gets routed through the USB tethering interface.
+
+But hey, we figured it out! Let’s walk through the solution step by step.
+
+---
+
+== The Solution
+
+We used _Ansible_ to automate the entire configuration. Here’s the high-level plan:
+
+. _Enable IP Forwarding_: So the Orange Pi Zero can route traffic between interfaces.
+. _Set Up a DHCP Server_: To assign IP addresses to devices connected to the Ethernet interface.
+. _Configure NAT_: To allow devices on the Ethernet interface to access the internet via USB tethering.
+. _Dynamic USB Interface Handling_: Detect the USB tethering interface and configure it automatically.
+. _Automate Everything_: Use Ansible to make the setup reproducible.
+
+---
+
+== The Playbook
+
+Here’s the final Ansible playbook we came up with:
+
+[source,yaml]
+----
+---
+* name: Configure Orange Pi Zero as a router with dynamic USB tethering
+  hosts: orange_pi_zero
+  become: yes
+  vars:
+    ethernet_interface: "end0"
+    dhcp_range_start: "192.168.2.100"
+    dhcp_range_end: "192.168.2.200"
+    dhcp_subnet: "192.168.2.0"
+    dhcp_netmask: "255.255.255.0"
+    dhcp_gateway: "192.168.2.1"
+    dns_servers: "8.8.8.8, 8.8.4.4"
+
+  tasks:
+    * name: Update and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    * name: Install required packages
+      apt:
+        name:
+          * isc-dhcp-server
+          * iptables
+          * net-tools
+        state: present
+
+    * name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+    * name: Configure DHCP server
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          default-lease-time 600;
+          max-lease-time 7200;
+          subnet {{ dhcp_subnet }} netmask {{ dhcp_netmask }} {
+              range {{ dhcp_range_start }} {{ dhcp_range_end }};
+              option routers {{ dhcp_gateway }};
+              option domain-name-servers {{ dns_servers }};
+          }
+
+    * name: Configure DHCP server to listen on the Ethernet interface
+      lineinfile:
+        path: /etc/default/isc-dhcp-server
+        regexp: '^INTERFACESv4='
+        line: 'INTERFACESv4="{{ ethernet_interface }}"'
+        state: present
+
+    * name: Restart DHCP server
+      service:
+        name: isc-dhcp-server
+        state: restarted
+        enabled: yes
+
+    * name: Create USB tethering configuration script
+      copy:
+        dest: /usr/local/bin/configure-usb-tethering.sh
+        content: |
+          #!/bin/bash
+          # Detect the USB tethering interface
+          USB_IFACE=$(ip link show | grep -oP 'enx[^:]+' | head -n 1)
+          if [ -z "$USB_IFACE" ]; then
+              echo "No USB tethering interface found."
+              exit 1
+          fi
+          echo "USB tethering interface detected: $USB_IFACE"
+
+          # Bring up the interface and configure it with DHCP
+          sudo ip link set $USB_IFACE up
+          sudo dhclient -v $USB_IFACE
+
+          # Wait for DHCP to assign an IP address
+          sleep 5
+
+          # Get the default gateway provided by the phone
+          GATEWAY=$(ip route | grep default | grep $USB_IFACE | awk '{print $3}')
+          if [ -z "$GATEWAY" ]; then
+              echo "Failed to detect the default gateway."
+              exit 1
+          fi
+          echo "Default gateway: $GATEWAY"
+
+          # Remove existing default routes
+          sudo ip route del default via 192.168.1.254 dev wlan0 2>/dev/null || true
+
+          # Add default routes with adjusted metrics
+          sudo ip route add default via $GATEWAY dev $USB_IFACE metric 100
+          sudo ip route add default via 192.168.1.254 dev wlan0 metric 600
+
+          # Configure NAT and routing
+          sudo iptables -t nat -A POSTROUTING -o $USB_IFACE -j MASQUERADE
+          sudo iptables -A FORWARD -i {{ ethernet_interface }} -o $USB_IFACE -j ACCEPT
+          sudo iptables -A FORWARD -i $USB_IFACE -o {{ ethernet_interface }} -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+          # Save iptables rules
+          sudo iptables-save | sudo tee /etc/iptables/rules.v4
+
+          echo "USB tethering configuration complete."
+        mode: '0755'
+
+    * name: Create systemd service for USB tethering configuration
+      copy:
+        dest: /etc/systemd/system/usb-tethering.service
+        content: |
+          [Unit]
+          Description=Configure USB Tethering
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/configure-usb-tethering.sh
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    * name: Enable and start USB tethering service
+      service:
+        name: usb-tethering
+        state: started
+        enabled: yes
+
+    * name: Ensure Ethernet interface is up
+      command: ip link set {{ ethernet_interface }} up
+
+    * name: Check if IP address is already assigned to Ethernet interface
+      shell: ip addr show {{ ethernet_interface }} | grep -q "inet {{ dhcp_gateway }}/24"
+      ignore_errors: yes
+      register: ip_assigned
+
+    * name: Set static IP for Ethernet interface (if not already assigned)
+      command: ip addr add {{ dhcp_gateway }}/24 dev {{ ethernet_interface }}
+      when: not ip_assigned.rc == 0
+
+  handlers:
+    * name: Save iptables rules
+      command: iptables-save > /etc/iptables/rules.v4
+
+----
+
+== The Challenges We Faced (and How We Solved Them)
+. Dynamic USB Interface Names
+   The USB tethering interface name changes every time you reconnect the phone. For example, it could be enx1234567890ab one time and enxabcdef123456 the next.
+
+Solution: We wrote a script to dynamically detect the USB tethering interface by looking for interfaces with names starting with enx.
+
+. Changing IP Ranges
+   The phone’s USB tethering kept assigning different subnets (e.g., 192.168.43.x, 192.168.24.x). This made it hard to predict the gateway IP.
+
+Solution: We used dhclient to dynamically configure the USB tethering interface and detect the gateway IP.
+
+. DHCP Server Configuration
+   The DHCP server (isc-dhcp-server) kept failing because it wasn’t configured to listen on the correct interface.
+
+Solution: We explicitly set the INTERFACESv4 variable in /etc/default/isc-dhcp-server to the Ethernet interface (end0).
+
+. NAT and Routing
+   We needed to ensure traffic from the Ethernet interface (end0) was routed through the USB tethering interface.
+
+Solution: We used iptables to set up NAT and forwarding rules.
+
+== Diagrams
+
+Here’s a simple diagram to visualize the setup:
+
+----
++-------------------+       +-------------------+       +-------------------+
+[cols="1,1,1,1,1", options="header"]
+|===
+| Phone (USB Tet.)
+| <--->
+| Orange Pi Zero
+| <--->
+| Laptop/Device
+
+| 
+| 
+| (Router)
+| 
+| (Ethernet)
+
+|===
++-------------------+       +-------------------+       +-------------------+
+
+----
+
+== Lessons Learned
+
+Automation is Key: Manually configuring this setup every time would have been a nightmare. Ansible made it reproducible and easy to tweak.
+
+Dynamic Environments are Tricky: Dealing with dynamic interface names and changing IP ranges required some creative scripting.
+
+Testing is Crucial: We had to test the setup multiple times to ensure it worked reliably.
+
+== Future Improvements
+Better Error Handling: The script could be improved to handle edge cases, like when the USB tethering interface isn’t detected.
+
+Support for Multiple Devices: Extend the setup to support multiple devices connected via Ethernet.
+
+Monitoring: Add monitoring to track internet usage and connection status.
+
+== Conclusion
+Turning an Orange Pi Zero into a router using USB tethering is a fun and practical project. With Ansible, we automated the entire setup, making it easy to replicate and maintain. Sure, there were challenges along the way, but that’s what makes it interesting, right?
+
+Give it a try, and let me know how it goes! 🚀

@@ -1,0 +1,468 @@
+---
+author: gounthar
+categories:
+- jenkins
+- android
+- termux
+- ansible
+- devops
+- automation
+date: 2025-10-30 10:00:00 +0200
+description: Transforming aging Android phones into Jenkins CI/CD infrastructure with
+  full automation using Ansible and Infrastructure as Code principles. From 3-hour
+  manual setup to 15-minute automated deployment.
+featured: true
+hidden: false
+image: assets/images/2025/10/30/2025-10-30-automating-jenkins-on-android-with-ansible/love-part-3-16-9.png
+tags:
+- jenkins
+- android
+- termux
+- ansible
+- infrastructure-as-code
+- jcasc
+- automation
+- sustainability
+title: 'Automating Jenkins on Old Android Phones: From Naive Experiment to Production-Ready
+  Infrastructure'
+toc: true
+---
+
+image::/assets/images/2025/10/30/2025-10-30-automating-jenkins-on-android-with-ansible/love-part-3-16-9.png[Jenkins on Android automation banner]
+
+I had this old Android phone sitting in my drawer. You know the type - perfectly functional, but replaced by a newer model, gathering dust for months. I kept thinking: "This thing has 4GB of RAM, a decent ARM processor, and runs Linux under the hood with Termux... could I run Jenkins on it?"
+
+Spoiler: Yes. _But_ not without some interesting detours along the way.
+
+This is the story of how a naive experiment became a production-ready automation solution, complete with Infrastructure as Code, Configuration as Code, and a 98% success rate on fresh installations.
+
+== TL;DR - The Practical Takeaway
+
+Don't want to read about my mistakes? Here's what you need to know:
+
+* _GitHub repository with complete automation_: link:https://github.com/gounthar/termux-jenkins-automation[https://github.com/gounthar/termux-jenkins-automation]
+* _Ansible playbooks handle everything_: From Termux base setup through Jenkins controller + agent configuration
+* _Zero manual steps required_: Infrastructure as Code approach - just run one script
+* _15 minutes to running Jenkins_: Transform a fresh Android phone into CI/CD infrastructure automatically
+* _Works on fresh installations_: Tested repeatedly on bare Termux environments (98% success rate)
+
+Clone the repo, run `./scripts/run-setup.sh`, answer a few prompts, and you'll have Jenkins running on Android. _That said_, if you're curious about _how_ I got it working and _why_ you might want to try it, read on.
+
+== The Journey: From Manual Setup to Full Automation
+
+=== Phase 1: The Naive Beginning
+
+My initial thought process was embarrassingly simple:
+
+. Termux gives me a Linux environment on Android
+. Jenkins is just a Java application
+. Therefore... it should just work, right? ¯\_(ツ)_/¯
+
+_Spoiler:_ It did work! _However_, not before teaching me several valuable lessons about service management, SSH authentication, and why you should always test on fresh installations.
+
+I manually installed Jenkins:
+
+[source,bash]
+----
+== In Termux on my phone
+pkg install openjdk-21
+wget https://get.jenkins.io/war-stable/2.528.1/jenkins.war
+java -jar jenkins.war --httpPort=8080
+
+----
+
+Nice! Jenkins started! 🎉
+
+_But then_ reality hit:
+
+* No SSH daemon (can't connect agents)
+* No build tools (can't actually build anything)
+* Process dies when terminal closes
+* Setup takes 2-3 hours of manual configuration
+* Forgot what I installed day-to-day
+
+You know what? This needs automation.
+
+=== Phase 2: "Let's Ansible This Thing"
+
+I've been tinkering with Ansible lately, _so_ let's automate everything with Infrastructure as Code principles. How hard could it be?
+
+_Answer:_ Not that hard, actually! _But_ with some interesting surprises along the way.
+
+I started building roles, piece by piece:
+
+* `termux-base`: SSH daemon, Python, basic packages
+* `jenkins-controller`: Jenkins installation and initialization
+* `jenkins-agent`: SSH agent configuration
+* `jenkins-jcasc`: Configuration as Code deployment
+
+Before I knew it, I had 8 reusable Ansible roles covering the complete deployment. Pretty neat! 🤩
+
+=== Phase 3: The Fresh Install Reality Check
+
+Here's where things got interesting. I ran my automation on my development phone - _it worked perfectly_.
+
+Time to call it done... right?
+
+_Of course not._ _That's because_ it worked on MY phone - the one I'd been tinkering with for weeks. _However_, would it work on a FRESH Termux installation?
+
+I wiped my test phone completely and ran the automation on bare Termux. You know, like an actual user would.
+
+_Result:_ Immediate failure. 💥
+
+The problem? My development phone had packages I'd installed manually months ago, and those dependencies weren't in my playbooks. Things like:
+
+* Repository configurations (`root-repo`, `pointless` for gcc-8)
+* Build tools I'd installed ad-hoc
+* Environment variables set in my `.bashrc`
+* SSH key permissions I'd fixed manually
+
+_The fix:_ Systematic fresh installation testing became mandatory. Every change, every role update - tested on a wiped device.
+
+_Current success rate_: 98% on fresh Termux installations. The 2% failure is usually network timeouts during package downloads.
+
+== The Automation Solution: 8 Ansible Roles
+
+The complete automation is organized into focused, reusable roles:
+
+=== 1. termux-base
+Foundation setup:
+* Updates/upgrades Termux packages
+* Installs core packages (openssh, python, git)
+* Configures SSH daemon (port 8022)
+* Generates SSH host keys
+* Sets up authorized_keys
+
+=== 2. termux-complete-setup (NEW - The Game Changer)
+Comprehensive package installation - _59+ packages_ organized by function:
+
+[source,yaml]
+----
+== Build Essentials (15 packages)
+build_essentials:
+  * clang
+  * gcc-8
+  * cmake
+  * make
+  * autoconf
+  * automake
+  # ... more
+
+== Languages (6 packages)
+languages:
+  * openjdk-21
+  * python
+  * golang
+  * rust
+  * perl
+  * tcl
+
+== Dev Tools (14 packages)
+dev_tools:
+  * git
+  * gh
+  * maven
+  * gnupg
+  * curl
+  * wget
+  # ... more
+
+----
+
+This role alone prevented 90% of "missing dependency" failures.
+
+=== 3. jenkins-controller
+Jenkins installation:
+* Installs OpenJDK 21
+* Downloads Jenkins WAR file
+* Creates Jenkins home directory structure
+* Deploys skip-wizard Groovy script
+* Starts Jenkins as a managed service (more on this below)
+
+=== 4. jenkins-agent
+Agent configuration:
+* Creates Jenkins agent workspace
+* Generates SSH key pair for agent-controller communication
+* Configures localhost SSH connection
+* Tests SSH connectivity
+
+=== 5. jenkins-jcasc
+Configuration as Code:
+* Deploys JCasC YAML configuration
+* Configures admin user
+* Sets up SSH agent node
+* Defines tool installations (Git, JDK, Maven)
+* Creates sample pipeline jobs
+
+=== 6. jenkins-backup
+Backup and export:
+* Exports job definitions (config.xml files)
+* Backs up installed plugins list
+* Backs up JCasC configuration
+* Creates compressed tarball with metadata
+
+=== 7. termux-boot-setup
+Auto-start configuration:
+* Configures Jenkins to start on device boot
+* Checks for Termux:Boot installation
+* Sets up wake lock to prevent device sleep
+* Waits for network before starting services
+
+=== 8. termux-buildtools (Legacy)
+Superseded by `termux-complete-setup` but kept for backwards compatibility.
+
+== Key Technical Insights
+
+=== Service Management: runit over Background Processes
+
+Initially, I ran Jenkins as a background process:
+
+[source,bash]
+----
+java -jar jenkins.war &
+
+----
+
+This approach had problems:
+* Process dies when terminal closes
+* No automatic restart on failure
+* No log management
+* Difficult to monitor
+
+_The solution:_ Termux's service management system using `runit` and `sv`:
+
+[source,bash]
+----
+== Jenkins runs as a managed service
+sv status jenkins
+== Output: run: jenkins: (pid 31647) 95s; run: log: (pid 26734) 4516s
+
+== Service management commands
+sv up jenkins      # Start
+sv down jenkins    # Stop
+sv restart jenkins # Restart
+
+----
+
+Logs are handled by `svlogd` with automatic rotation:
+
+[source,bash]
+----
+== View live logs
+tail -f ~/.jenkins/logs/current
+
+== All logs automatically rotated and compressed
+ls -lh ~/.jenkins/logs/
+
+----
+
+This mirrors production service management and prevents the "my Jenkins died overnight" problem.
+
+=== Jenkins Configuration as Code
+
+Manual Jenkins configuration through the UI isn't reproducible. The solution: JCasC (Jenkins Configuration as Code).
+
+Complete Jenkins configuration in YAML:
+
+[source,yaml]
+----
+jenkins:
+  systemMessage: "Jenkins on Android (Termux) - Automated Setup"
+  numExecutors: 0  # Controller doesn't run builds
+  securityRealm:
+    local:
+      users:
+        * id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD:-admin}"
+
+credentials:
+  system:
+    domainCredentials:
+      * domain:
+          name: "SSH Agent Credentials"
+        credentials:
+          * basicSSHUserPrivateKey:
+              id: "termux-agent-key"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/data/data/com.termux/files/home/.jenkins/ssh/id_ed25519}"
+
+nodes:
+  * permanent:
+      name: "termux-agent-1"
+      remoteFS: "/data/data/com.termux/files/home/jenkins-agent"
+      launcher:
+        ssh:
+          host: "localhost"
+          port: 8022
+          credentialsId: "termux-agent-key"
+
+----
+
+The automation deploys this configuration, and Jenkins applies it on startup. No clicking through UI settings.
+
+=== Architecture Overview
+
+The automation deploys a complete Jenkins infrastructure on a single Android device:
+
+----
+┌─────────────────────────────────────┐
+│      Android Phone (Termux)         │
+│  ┌────────────────────────────────┐ │
+│  │  Jenkins Controller (Minimal)  │ │
+│  │  - Port 8080 (Web UI)          │ │
+│  │  - JCasC configured             │ │
+│  └──────────┬─────────────────────┘ │
+│             │ SSH (localhost:8022)  │
+│  ┌──────────▼─────────────────────┐ │
+│  │  Jenkins Agent (SSH)           │ │
+│  │  - Build tools installed       │ │
+│  │  - 2 executors                 │ │
+│  └────────────────────────────────┘ │
+└─────────────────────────────────────┘
+
+----
+
+The controller handles job orchestration while delegating builds to the agent. This mirrors production setups and teaches Jenkins best practices.
+
+== Quick Start Guide
+
+Ready to try it yourself?
+
+=== Prerequisites
+
+_On the Android device:_
+* Android 7.0 or later
+* Termux app installed from F-Droid
+* At least 2GB free storage
+
+_On your laptop/PC:_
+* Ansible 2.10+
+* SSH client
+* Git
+
+=== Installation
+
+[source,bash]
+----
+== 1. On the Android device (in Termux)
+pkg install openssh python
+sshd
+passwd
+whoami
+ifconfig wlan0
+
+== 2. On your laptop/PC
+git clone https://github.com/gounthar/termux-jenkins-automation.git
+cd termux-jenkins-automation
+./scripts/run-setup.sh
+
+== 3. Answer prompts:
+== - IP address (from ifconfig)
+== - SSH port (8022 default)
+== - Username (from whoami)
+== - Jenkins admin password
+== - Authentication method (SSH key recommended)
+
+== 4. Wait ~15 minutes
+
+== 5. Access Jenkins:
+== http://<phone-ip>:8080
+
+----
+
+That's it! The script handles prerequisites checking, inventory configuration, and playbook execution.
+
+== Why This Matters
+
+=== Environmental Impact
+
+According to the UN, link:https://www.unep.org/news-and-stories/press-release/un-report-time-seize-opportunity-tackle-challenge-e-waste[53.6 million metric tons of e-waste] were generated globally in 2019. A significant portion is functional smartphones replaced by newer models.
+
+This project demonstrates:
+* Practical e-waste repurposing
+* Extending hardware lifecycle
+* Low-power CI/CD infrastructure
+* Educational value (learn Jenkins without cloud costs)
+
+=== Technical Learning
+
+Building this automation taught:
+* Infrastructure as Code principles
+* Service management best practices
+* Configuration as Code (JCasC)
+* Fresh installation testing methodology
+* Ansible role architecture
+* SSH security and key management
+
+These lessons apply far beyond Android - they're fundamental DevOps skills.
+
+=== Cost-Effective CI/CD
+
+For hobbyists, students, or small projects:
+* _Cost_: $0 (using existing hardware)
+* _Power consumption_: ~5W (vs. 200W+ for traditional server)
+* _Noise_: Silent
+* _Space_: Fits in a drawer
+
+Perfect for learning, experimentation, or lightweight CI/CD pipelines.
+
+== Lessons for Production Jenkins
+
+While this project targets Android devices, the patterns apply to any Jenkins deployment:
+
+* _Infrastructure as Code_: All configuration in version control
+* _Service Management_: Proper process supervision (systemd, runit, etc.)
+* _Configuration as Code_: JCasC for reproducible Jenkins configuration
+* _Fresh Installation Testing_: Never assume dependencies are present
+* _Modular Roles_: Break automation into focused, reusable components
+* _Documentation_: Comprehensive setup guides prevent "it works on my machine"
+
+The `termux-jenkins-automation` repository demonstrates these principles in a constrained environment (no root, mobile platform, limited resources). If it works on Android, these patterns will definitely work on traditional servers.
+
+== What's Next?
+
+The automation is production-ready for single-device setups. Future enhancements could include:
+
+* _Multi-device clustering_: Coordinate multiple Android phones as a Jenkins cluster
+* _Plugin automation_: Automated plugin installation and updates via JCasC
+* _Backup/restore workflows_: Scheduled backups to cloud storage (S3, Google Drive)
+* _Performance optimization_: Memory tuning for constrained devices
+* _Monitoring integration_: Prometheus metrics export
+* _Web UI for setup_: Replace script prompts with web interface
+* _Docker support_: Run Jenkins in Termux using Docker (experimental)
+
+The foundation is solid. The patterns are proven. The infrastructure is code.
+
+== Resources
+
+* _GitHub Repository_: link:https://github.com/gounthar/termux-jenkins-automation[https://github.com/gounthar/termux-jenkins-automation]
+* _Documentation_: Complete setup guides, troubleshooting, and architecture docs in the repo
+* _Related Articles_:
+  * link:/2023/03/10/android-and-jenkins/[Android and Jenkins: What Is the Limit?]
+  * link:/2025/05/21/jenkins-on-android/[Android and Jenkins Part Two]
+  * link:https://www.jenkins.io/blog/2023/04/07/android-and-jenkins-discovery/[Jenkins.io: Building Android apps with Jenkins]
+
+== Conclusion
+
+From naive experiment to production-ready automation - that's the Infrastructure as Code journey.
+
+What started as "can I run Jenkins on an old phone?" became a comprehensive automation solution demonstrating:
+
+* ✅ Infrastructure as Code principles
+* ✅ Configuration as Code with JCasC
+* ✅ Systematic testing methodologies
+* ✅ Service management best practices
+* ✅ Modular, reusable Ansible architecture
+* ✅ Environmental sustainability
+* ✅ Cost-effective learning platform
+
+_The final result?_ A 98% automated setup that deploys Jenkins in under 15 minutes on a device most people would throw away.
+
+Whether you're repurposing e-waste, building a home lab, learning Jenkins administration, or just enjoy a good technical challenge - this automation provides a reproducible path from bare Android device to functioning Jenkins infrastructure.
+
+Every drawer has potential infrastructure gathering dust. Let's put it to work.
+
+---
+
+_Have questions or improvements? Open an issue or pull request on link:https://github.com/gounthar/termux-jenkins-automation[GitHub]. I'd love to see what you build with this!_

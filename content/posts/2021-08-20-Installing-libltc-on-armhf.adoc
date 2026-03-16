@@ -1,0 +1,540 @@
+---
+author: gounthar
+categories:
+- armhf
+- sound
+- time
+description: How to generate a timecoded soundtrack
+featured: true
+hidden: false
+image: assets/images/2021/09/01/ltc-tools-front-image.cast.svg
+tags:
+- armhf
+- sound
+- time
+title: Installing libltc on armhf Debian
+toc: true
+---
+
+== Installing libltc on armhf Debian
+
+One of my (way too many) current projects is to create a device that would mimic link:https://dish.tc/faq/[dish.tc].
+I have created a link:https://gitlab.com/gounthar/time-whisperer[repository] at Gitlab so that anyone can help make this idea come true.
+
+To sum up, we would add an audio track to every recording we make (be it audio or video or both) so that link:https://www.youtube.com/watch?v=9qjrMeCW1-c[video editing software] would then be able to synchronize everything without any human intervention.
+
+I'm not sure yet of the SBC I will use for that job. For sure, I would like to use the OrangePi link:https://fr.aliexpress.com/item/1005001688034180.html?spm=a2g0o.store_pc_groupList.8148356.7.73dd94fb03pmOp[Zero], as it is cheap (as I am), or any other SBC, as long as it is handled by link:https://www.armbian.com/download/?device_support=Supported[Armbian] and has good audio features (yes, I know the Zero doesn't have great link:https://fr.aliexpress.com/item/32770665186.html?spm=a2g0o.store_pc_groupList.8148356.1.7f667fddpaPeIL[audio] features nor link:https://forum.armbian.com/topic/6021-orange-pi-zero-i2s/?do=findComment&comment=52342[I2S], but I already have it, so...)
+The first step is then to install link:https://github.com/x42/libltc[libltc] which is not yet part of Debian for ARM.
+
+== Installation
+
+If you're lucky, the package will be available from your package repo manager:
+
+image::/assets/images/2021/09/01/apt-install.cast.svg[apt-install.cast]
+
+[source,bash]
+----
+sudo apt install libtlc11
+
+----
+
+Should you not find it, then we'll install it from source:
+
+image::/assets/images/2021/09/01/clone.cast.svg[clone.cast]
+
+[source,bash]
+----
+git clone https://github.com/x42/libltc.git
+cd libltc/
+aclocal; autoheader; libtoolize --copy; autoconf; automake --gnu --add-missing --copy
+./configure
+
+----
+
+
+
+image::/assets/images/2021/09/01/configure.cast.svg[configure.cast]
+
+[source,bash]
+----
+[...]
+ libltc configured:
+ -----------------------
+
+  version:             1.3.1
+  interface revision:  12:0:1
+
+  doxygen:             no
+  installation prefix: /usr/local
+
+ type "make" followed my "make install" as root.
+ run "make check" to perform selftests.
+
+
+----
+
+Ok, let's do that:
+
+[source,bash]
+----
+make && make check 
+sudo make install
+
+----
+
+
+
+image::/assets/images/2021/09/01/make.cast.svg[make.cast]
+
+
+
+image::/assets/images/2021/09/01/make-install.cast.svg[make-install.cast]
+
+Ok, perfect, the library is now installed on our `armhf` machine. Now what?
+
+image::/assets/images/2021/09/01/libltc11-bullseye-armhf-files.png[libltc11-bullseye-armhf-files]
+
+Yes, it's a library and not a standalone program. You can now develop something that will use this library, or ... install other tools that give you the opportunity to generate SMTPE encoded in sounds or sound files.
+One of them is link:https://github.com/x42/ltc-tools[ltc-tools].
+
+Installing ltc-tools
+-----------------------------------------------------------------
+
+Unfortunately this time, this tool hasn't made yet its way to the official Debian repositories, so you'll have to build it by yourself.
+
+image::/assets/images/2021/09/01/ltc-tools-clone.cast.svg[ltc-tools-clone.cast]
+
+[source,bash]
+----
+cd && git clone https://github.com/x42/ltc-tools.git
+
+----
+
+ltc-tools is already packaged to build as a Debian package, so let's install its dependencies
+
+image::/assets/images/2021/09/01/ltc-tools-dependencies.cast.svg[ltc-tools-dependencies.cast]
+
+[source,bash]
+----
+cd ltc-tools && sudo apt install debhelper dpkg-dev fakeroot libjack-jackd2-dev libltc-dev libsndfile1-dev 
+
+----
+
+Now, let's build the package:
+
+image::/assets/images/2021/09/01/ltc-tools-build-package.cast.svg[ltc-tools-build-package.cast]
+
+[source,bash]
+----
+dpkg-buildpackage -rfakeroot -b -uc -us
+ll ../*ltc*deb
+
+----
+
+We just have to install the package now, almost as if it was coming from the official Debian repo:
+
+image::/assets/images/2021/09/01/ltc-tools-install-package.cast.svg[ltc-tools-install-package.cast]
+
+[source,bash]
+----
+sudo apt install -f ../ltc-tools*deb
+
+----
+
+What are the binaries available by the way?
+
+image::/assets/images/2021/09/01/ltc-tools-whatsin-package.cast.svg[ltc-tools-whatsin-package.cast]
+
+We have 
+
+[source,bash]
+----
+jltc2mtc
+jltcdump
+jltcgen
+jltcntp
+jltctrigger
+ltcdump
+ltcgen
+
+----
+
+Let's see what each of them does.
+
+== Using ltc-tools
+
+=== jltc2mtc: JACK app to translate linear time code to midi time code.
+
+[source,bash]
+----
+jltc2mtc --help
+jltc2mtc - JACK app to translate linear time code to midi time code.
+
+Usage: jltc2mtc [ OPTIONS ]
+
+Options:
+  -f, --fps <num>[/den]      set expected [initial] framerate (default 25/1)
+  -F, --detectfps            autodetect framerate from LTC (recommended)
+  -l, --ltcport <portname>   autoconnect LTC input port
+  -m, --mtcport <portname>   autoconnect MTC output port
+  -s, --sysex                send system-excluve seek message
+                             instead of MTC quarter frames
+  -h, --help                 display this help and exit
+  -V, --version              print version information and exit
+
+
+This tool reads LTC from a JACK-audio port and generates corresponding
+MTC on a JACK-midi port.
+
+jltc2mtc supports both forward and backwards played timecode, and compensates
+for decoder and port latencies.
+Note that MTC only supports 4 framerates: 24, 25, 30df and 30 fps.
+Framerates other than that are announced as 25fps MTC.
+Drop-frame-timecode is detected by the corresponding bit in the LTC frame,
+regardless of the -F option. You can /force/ it with -f 30000/1001.
+
+Note that MTC distinguishes between film speed and video speed only by the
+rate at which timecode advances, not by the information contained in the
+timecode messages; thus, 29.97 fps dropframe is represented as 30 fps
+dropframe with 0.1% pulldown
+
+----
+
+Nice utils, but that's not what I'm looking for. Next!
+
+=== jltcdump: JACK app to parse linear time code.
+
+[source,bash]
+----
+jltcdump --help
+jltcdump - JACK app to parse linear time code.
+
+Usage: jltcdump [ OPTIONS ] [ JACK-PORTS ]
+
+Options:
+  -f, --fps  <num>[/den]     set expected [initial] framerate (default 25/1)
+  -F, --detectfps            autodetect framerate from LTC
+  -H  <alpha>
+  --highpass <alpha>         set R/S highpass filter coefficient (dflt 0.6)
+  -h, --help                 display this help and exit
+  -o, --output <path>        write to file(s)
+  -s, --signals              start/stop parser using SIGUSR1/SIGUSR2
+  -r, --runstop              parse R/S signal on 2nd channel
+  -R  <float>,
+  --rsthreshold <float>      R/S signal threshold (default 0.01)
+  -V, --version              print version information and exit
+
+
+If both -s and -o are given, <path> is used a prefix:
+The filename will be <path>YYMMDD-HHMMSS.tme.XXXXX .
+If only -o is set, <path> is as filename.
+
+In 'signal' mode, the application starts in 'idle' state
+and won't record LTC until it receives SIGUSR1.
+
+The fps option is only needed to properly track the first LTC frame,
+and timecode discontinuity notification.
+The LTC-decoder detects and tracks the speed but it takes a few samples
+to establish initial synchronization. Setting fps to the expected fps
+speeds up the initial sync process. The default is 25/1.
+
+----
+
+Pretty cool, but this is working at the other end of the spectrum, so to speak. I need for the time being to generate timestamps, not yet to read them through the audio input.
+
+=== ltcgen: JACK audio client to generate linear time code in realtime.
+
+[source,bash]
+----
+jltcgen --help
+ltcgen - JACK audio client to generate linear time code in realtime.
+Usage: jltcgen [OPTION] [JACK-PORT-TO-CONNECT]*
+
+Options:
+ -d, --date datestring      set date, format is either DDMMYY or MM/DD/YY
+ -f, --fps fps              set frame-rate NUM[/DEN][ndf|df] default: 25/1ndf
+ -h, --help                 display this help and exit
+ -g, --volume float         set output level in dBFS default -18db
+ -l, --localtime            when using current time, do it in local TZ (not UTC)
+ -m, --timezone tz          set timezone in minutes-west of UTC
+ -r, --auto-resync          automatically resync if drift is more than 100ms
+ -t, --timecode time        specify start-time/timecode [[[HH:]MM:]SS:]FF
+ -u, --userbits bcd         specify fixed BCD user bits (max. 8 BCD digits)
+                            CAUTION: This ignores any date/timezone settings!
+ -w, --wait                 wait for a key-stroke before starting.
+ -V, --version              print version information and exit
+ -z, --timezone tz          set timezone +HHMM
+
+Unless a timecode (-t) is given, the current time/date are used.
+Date (-d) and timezone (-z, -m) are only used if a timecode is given.
+The timezome may be specified either as HHMM zone, or in minutes-west of UTC.
+
+SIGINT (CTRL+C) prints current clock-drift (audio-clock - system-clock).
+SIGQUIT (CTRL+\) terminates the program.
+SIGHUP initialize a re-sync to system clock (unless -t is given).
+
+----
+
+Yes, that's what I was looking for! Spoiler alert: it just won't work on my tiny machine because I haven't yet installed Jack, and because I haven't added the official Zero audio link:https://fr.aliexpress.com/item/32770665186.html?spm=a2g0o.store_pc_groupList.8148356.1.7f667fddpaPeIL[hat] yet on this machine...
+I will have to give it another try once I get everything installed (where the hell did I "store" that audio hat?).
+
+[source,bash]
+----
+jltcgen
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+exec of JACK server (command = "/usr/bin/jackd") failed: No such file or directory
+Cannot connect to server socket err = No such file or directory
+
+----
+
+You know what, the goal of this blog post was to install libltc, and we already succeeded, so let's call it a day, or close let's just explore the rest of the binaries before going to bed.
+
+=== jltcntp: JACK LTC parser with NTP SHM support.
+
+----
+jltcntp --help
+jltcntp - JACK LTC parser with NTP SHM support
+
+Usage: jltcntp [ options ] [ JACK-ports ]
+
+Options:
+  -f, --fps  <num>[/den]     set expected framerate (default 25/1)
+  -u, --unit <u>             send LTC to NTP SHM driver unit <u> (default none)
+  -n, --no-date              ignore date received via LTC
+  -v, --verbose              output data to stdout
+  -h, --help                 display this help and exit
+  -V, --version              print version information and exit
+
+
+----
+
+SHM: _shared memory driver_
+
+NTP: _Network Time Protocol_ 
+
+Not (yet?) what I'm looking for...
+
+=== jltctrigger: JACK app to trigger actions on given LTC.
+
+[source,bash]
+----
+jltctrigger --help
+jltctrigger - JACK app to trigger actions on given LTC.
+
+Usage: jltctrigger [ OPTIONS ] <cfg-file> ...
+
+Options:
+  -c, --connect <port>       auto-connect to given jack-port
+  -f, --fps <num>[/den]      set expected [initial] framerate (default 25/1)
+  -F, --detectfps            autodetect framerate from LTC
+  -h, --help                 display this help and exit
+  -p, --print                output decoded LTC (live)
+  -v, --verbose              be verbose
+  -V, --version              print version information and exit
+
+
+
+Actions are defined in a config file, one per line.
+  Timecode <Space> Command
+Multiple config files can be given.
+The fps parameter is used when parsing the config file,
+...
+The fps option is also used properly track the first LTC frame,
+and timecode discontinuity notification.
+The LTC-decoder detects and tracks the speed but it takes a few samples
+to establish initial synchronization. Setting fps to the expected fps
+speeds up the initial sync process. The default is 25/1.
+
+----
+
+Wow, pretty cool, you can set up an action where "hearing" a specific timestamp... What about getting a `crontab` this way? ;-) Okay, that would work only once...
+
+=== ltcdump: parse linear time code from a audio-file.
+
+[source,bash]
+----
+ltcdump --help
+ltcdump - parse linear time code from a audio-file.
+
+Usage: ltcdump [ OPTIONS ] <filename>
+
+Options:
+  -a                         write audacity label file-format
+  -c, --channel <num>        decode LTC from given audio-channel (first = 1)
+  -d, --decodedate           decode date from LTC frame
+  -f, --fps  <num>[/den]     set expected [initial] framerate
+  -F, --detectfps            autodetect framerate from LTC (recommended)
+  -h, --help                 display this help and exit
+  -V, --version              print version information and exit
+
+
+Channel count starts at '1', which is also the default channel to analyze.
+
+The fps option is only needed to properly track the first LTC frame,
+and timecode discontinuity notification.
+The LTC-decoder detects and tracks the speed but it takes a few samples
+to establish initial synchronization. Setting fps to the expected fps
+speeds up the initial sync process. The default is 25/1.
+
+----
+
+As I'm not yet able to generate analog audio with the Zero, that could prove handy if I find another util that could generate an LTC audio file. Could that be the very last util?
+
+=== ltcgen: generate linear time code audio-file.
+
+Yes, we got this!
+
+[source,bash]
+----
+ltcgen --help
+ltcgen - generate linear time code audio-file.
+Usage: ltcgen [OPTION] <output-file>
+
+Options:
+ -d, --date datestring      set date, format is either DDMMYY or MM/DD/YY
+ -f, --fps fps              set frame-rate NUM[/DEN][ndf|df] default: 25/1ndf
+ -g, --volume float         set output level in dBFS default -18db
+ -h, --help                 display this help and exit
+ -l, --duration time        set duration of file to encode [[[HH:]MM:]SS:]FF.
+ -m, --timezone tz          set timezone in minutes-west of UTC
+ -r, --reverse              encode backwards from start-time
+ -s, --samplerate sr        specify samplerate (default 48000)
+ -t, --timecode time        specify start-time/timecode [[[HH:]MM:]SS:]FF
+ -u, --userbits bcd         specify fixed BCD user bits (max. 8 BCD digits)
+                            CAUTION: This ignores any date/timezone settings!
+ -V, --version              print version information and exit
+ -z, --timezone tz          set timezone +HHMM
+
+Unless a timecode (-t) is given, the current time/date are used.
+Date (-d) and timezone (-z, -m) are only used if a timecode is given.
+The timezome may be specified either as HHMM zone, or in minutes-west of UTC.
+
+If the duration is <=0, ltcgen write until it receives SIGINT.
+
+The output file-format is WAV, signed 16 bit, mono.
+
+----
+
+Let's see if my machine has an almost correct time, despite not having any RTC yet:
+
+[source,bash]
+----
+date
+lundi 6 septembre 2021, 18:50:33 (UTC+0200)
+
+----
+
+My PC is at the same time as the Zero, so all is good (thank you NTP I guess).
+
+[source,bash]
+----
+ltcgen timecoded-audio.wav
+writing to 'timecoded-audio.wav'
+samplerate: 48000, duration 60000.0 ms
+cfg LTC:   06/09/21 (DD/MM/YY) 16:52:34:03 +0000
+wrote 2880192 audio-samples
+
+----
+
+Let's decode the encoded audio now:
+
+image::/assets/images/2021/09/01/ltc-tools-decode-audio.cast.svg[ltc-tools-decode-audio.cast]
+
+[source,bash]
+----
+ltcdump timecoded-audio.wav |more
+ltcdump timecoded-audio.wav |tail
+
+----
+
+We have one second of encoded timestamps. Nice!
+
+Want to hear it? link:/assets/sounds/2021/09/07/timecoded-audio.wav[Here] you go! Yes, you've heard better music in the past.
+
+== Bonus? Packaging the official libltc Debian version, but for armhf
+
+Should you make any change to the source code, it would come in handy to rebuild the Debian package. In order to build a libltc Debian package from source, we need to install necessary build tools:
+
+`debhelper dpkg-dev fakeroot`
+
+To install what's necessary, do 
+
+[source,bash]
+----
+sudo apt install debhelper dpkg-dev fakeroot
+
+----
+
+=== Enable source repositories
+
+Make sure you have enabled the source repositories.
+
+To do so, open _/etc/apt/sources.list_ file:
+
+[source,bash]
+----
+sudo vi /etc/apt/sources.list
+
+----
+
+You will see some lines in it like below:
+
+[source,bash]
+----
+deb http://deb.debian.org/debian buster main contrib non-free
+#deb-src http://deb.debian.org/debian buster main contrib non-free
+deb http://deb.debian.org/debian buster-updates main contrib non-free
+#deb-src http://deb.debian.org/debian buster-updates main contrib non-free
+[...]
+
+----
+
+In the above file, all the lines beginning with one or two hashes (#) are just comments, for information only. And the lines without hashes are the apt repositories.
+Uncomment the `"deb-src` lines by removing the hashes. Then, issue a `sudo apt update`.
+
+=== Install build dependencies for the package
+
+Next, we need to install the dependencies for that package as well. To do so, run:
+
+[source,bash]
+----
+sudo apt build-dep libltc11
+
+----
+
+image::/assets/images/2021/09/01/ltc-build-dep.cast.svg[ltc-build-dep.cast]
+
+=== Download source packages
+
+Download the source of the libltc package:
+
+[source,bash]
+----
+apt source libltc
+
+----
+
+image::/assets/images/2021/09/01/ltc-download-package-source.cast.svg[ltc-download-package-source.cast]
+
+=== Build the package
+
+[source,bash]
+----
+cd libltc-1.3.0/
+dpkg-buildpackage -rfakeroot -b -uc -us
+ll ../libltc*deb
+
+----
+
+image::/assets/images/2021/09/01/ltc-build-package-source.cast.svg[ltc-build-package-source.cast]
+
+[source,bash]
+----
+-rw-r--r-- 1 poddingue poddingue 12940 sept.  6 22:20 ../libltc11_1.3.0-1_armhf.deb
+-rw-r--r-- 1 poddingue poddingue 22020 sept.  6 22:20 ../libltc11-dbgsym_1.3.0-1_armhf.deb
+-rw-r--r-- 1 poddingue poddingue 13420 sept.  6 22:20 ../libltc-dev_1.3.0-1_armhf.deb
+-rw-r--r-- 1 poddingue poddingue 14468 sept.  6 22:20 ../libltc-doc_1.3.0-1_all.deb
+
+----
+

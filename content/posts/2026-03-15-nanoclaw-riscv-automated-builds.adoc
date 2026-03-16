@@ -1,0 +1,441 @@
+---
+author: Bruno Verachten
+categories:
+- RISC-V
+- CI/CD
+- Docker
+date: 2026-03-15 00:00:00 +0000
+description: Setting up RISC-V GitHub Actions runners to build and publish riscv64
+  Docker images of NanoClaw automatically. Part 2 of a 2-part series covering feasibility
+  and CI/CD automation.
+excerpt: Part 1 proved that NanoClaw builds and runs on riscv64 without source patches.
+  But reproducibility requires automation—here's how I built a complete Docker publishing
+  pipeline on a $100 board that sips 10 watts, from release tracking to automated
+  builds and image publishing.
+featured: false
+image: assets/images/2026/03/pedro-romero-Ohfhn5seHt0-unsplash.jpg
+tags:
+- risc-v
+- riscv64
+- nanoclaw
+- github-actions
+- ci-cd
+- docker
+- banana-pi-f3
+- spacemit-k1
+- self-hosted-runner
+- ghcr
+title: 'NanoClaw on RISC-V: from "it works on my board" to automated builds'
+---
+
+image::/assets/images/2026/03/pedro-romero-Ohfhn5seHt0-unsplash.jpg[A foggy road curving into mist through a mountain forest]
+
+Photo by link:https://unsplash.com/photos/a-foggy-road-in-the-middle-of-a-forest-Ohfhn5seHt0[Pedro Romero] on link:https://unsplash.com[Unsplash]
+
+== Introduction
+
+In link:https://bruno.verachten.fr/2026/03/14/NanoClaw-on-RISC-V-Running-an-AI-Agent-Runtime-on-a-Banana-Pi-F3/[Part 1], I proved that NanoClaw builds and runs on riscv64 without source patches. Great. But "it works on my board" is the developer equivalent of "it works in my head" — technically true, practically useless. Time to make it reproducible.
+
+== The problem: there is no pipeline
+
+In Part 1, I built NanoClaw on a Banana Pi F3, shoved it into a Docker container, and watched it run. Victory lap. Confetti. The whole thing.
+
+Then I looked at how other people would reproduce this.
+
+They wouldn't.
+
+My `Dockerfile.riscv64` lives on one machine, built by hand, tested by me, documented in a blog post. That's not infrastructure. That's a science fair project. If the board dies tomorrow (and boards do die — I've lost count of how many SD cards I've cremated over the years), all of that work vanishes.
+
+So the plan was simple: hook the build into link:https://github.com/features/actions[GitHub Actions], publish the image to a registry, and let automation do what automation does best. Except there was a small wrinkle I hadn't fully appreciated.
+
+---
+
+== The discovery that changed the plan
+
+=== NanoClaw has no Docker publishing pipeline
+
+None. Zero. Not for x86. Not for arm64. Not for any architecture.
+
+I went digging through the link:https://github.com/qwibitai/nanoclaw[NanoClaw repo] looking for existing CI/CD to extend. What I found:
+
+* link:https://vitest.dev/[Vitest] test suite (369+ tests) and link:https://www.typescriptlang.org/[TypeScript] type checking on PRs
+* link:https://prettier.io/[Prettier] formatting via link:https://typicode.github.io/husky/[Husky] pre-commit hooks
+* A merge-forward workflow for propagating skill branches to channel fork repos
+
+That's it. No `docker build`. No `docker push`. No link:https://ghcr.io/[ghcr.io]. No link:https://hub.docker.com/[Docker Hub]. No binary releases either. Just two git tags with no artifacts attached.
+
+Here's the thing: this is intentional. NanoClaw's distribution model is "fork and build from source." The `container/` directory has Dockerfiles that build agent runtime images at install time, on your machine. 22,600 stars, 5,100 forks, and every single user builds their own copy. It's like a restaurant that only serves raw ingredients.
+
+So I wasn't adding riscv64 to an existing pipeline. I was building the first automated Docker image pipeline. Period. For a fork, sure, but still — starting from scratch.
+
+=== Why this matters
+
+If you're thinking "just run `docker build` on the board and push it," you're not wrong. I could do that manually every time NanoClaw releases a new version. But NanoClaw has 297 commits and counting, with the primary author committing daily. Doing this by hand means either falling behind permanently or spending my weekends babysitting builds.
+
+Automation or bust.
+
+---
+
+== The runner setup (the short version)
+
+=== github-act-runner, not the official runner
+
+My two BPI-F3 boards are already registered as link:https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners[GitHub Actions self-hosted runners]. I set this up a few months ago for my link:https://bruno.verachten.fr/2025/11/06/github-runner-riscv64-setup/[Docker-for-RISC-V infrastructure work], and I wrote a whole article about it. I won't repeat the setup here — go read that one if you want the details.
+
+The short version: the official GitHub Actions runner is written in link:https://dotnet.microsoft.com/[.NET], which doesn't support riscv64. So instead I use link:https://github.com/ChristopherHX/github-act-runner[github-act-runner], a community-maintained link:https://go.dev/[Go]-based alternative. It registers with GitHub's API, picks up jobs, runs them, reports results. Same behavior, different runtime.
+
+[source,yaml]
+----
+runs-on: [self-hosted, riscv64]
+
+----
+
+That's how you target it in a workflow file. The labels `self-hosted` and `riscv64` match what's configured on the runner. GitHub dispatches the job to the board. The board runs it. Simple in theory.
+
+=== Three weeks of production data
+
+These runners have been chugging along building Docker Engine packages for riscv64 — weekly builds, daily release tracking, APT repository updates. Here's what three weeks of production use looks like:
+
+[cols="1,1", options="header"]
+|===
+| Metric
+| Value
+
+| Uptime
+| 99.2% (offline only during power outages)
+
+| Success rate
+| 47/48 builds (one disk-space failure)
+
+| Average builds/week
+| 4-5
+
+| Power consumption
+| ~10W under load
+
+|===
+
+One failure in 48 builds, and it was a disk space issue I caused by not cleaning up old build artifacts. The runner itself has been rock solid.
+
+(I should probably set up a UPS for those power outages. Adding it to the list of things I'll definitely do next week. And the week after that.)
+
+---
+
+== The workflow: building NanoClaw on riscv64
+
+=== Design decisions
+
+Before writing any YAML, I had to make some choices. And some of them weren't obvious.
+
+==== Native build vs. QEMU emulation
+
+Why not just use link:https://www.qemu.org/[QEMU] on a regular x86 runner? I mean, GitHub gives you free runners. Problem solved, right?
+
+Wrong.
+
+Remember Part 1: `npm install` took 15 minutes on native hardware. Under QEMU user-mode emulation, that balloons to 60-120 minutes. I've been down this road with link:https://bruno.verachten.fr/2026/02/25/When-a-Docker-Captain-Puts-an-AI-Tool-in-a-Container-on-RISC-V/[OpenClaw] and other Node.js projects. QEMU adds a 4-6x slowdown for computation-heavy tasks like compiling native addons. When `better-sqlite3` already takes most of those 15 minutes to compile SQLite from source, multiplying that by six isn't a build pipeline — it's a hostage situation.
+
+Native hardware it is.
+
+==== Sparse checkout overlay
+
+I don't want to maintain a full fork of NanoClaw that drifts out of sync with upstream. Instead, the workflow checks out the upstream repo at a specific tag, then overlays just the riscv64-specific files from my fork. Think of it as a patch layer.
+
+==== Registry choice
+
+link:https://ghcr.io/[ghcr.io] (GitHub Container Registry). Free for public repos, tied to the GitHub account, supports OCI manifests. No Docker Hub rate limits to worry about.
+
+=== The workflow file
+
+Here's `build-riscv64.yml`, the heart of the operation:
+
+[source,yaml]
+----
+name: Build NanoClaw riscv64 image
+
+on:
+  workflow_dispatch:
+    inputs:
+      nanoclaw_version:
+        description: 'NanoClaw version tag to build'
+        required: true
+        default: 'v1.2.12'
+  schedule:
+    * cron: '0 4 _ _ 1'  # Weekly, Monday 04:00 UTC
+
+jobs:
+  build:
+    runs-on: [self-hosted, riscv64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      * name: Checkout upstream NanoClaw
+        uses: actions/checkout@v4
+        with:
+          repository: qwibitai/nanoclaw
+          ref: ${{ inputs.nanoclaw_version || 'main' }}
+
+      * name: Overlay riscv64 files from fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: |
+            container/Dockerfile.riscv64
+          sparse-checkout-cone-mode: false
+          path: _fork
+
+      * name: Copy riscv64 Dockerfile
+        run: cp _fork/container/Dockerfile.riscv64 container/
+
+      * name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      * name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      * name: Build and push
+        run: |
+          VERSION=${{ inputs.nanoclaw_version || 'latest' }}
+          GHCR=ghcr.io/${{ github.repository_owner }}/nanoclaw
+          DHUB=${{ secrets.DOCKERHUB_USERNAME }}/nanoclaw
+
+          cd container
+          time docker build \
+            -f Dockerfile.riscv64 \
+            -t ${GHCR}:${VERSION}-riscv64 \
+            -t ${GHCR}:riscv64 \
+            -t ${DHUB}:${VERSION}-riscv64 \
+            -t ${DHUB}:riscv64 \
+            .
+
+          docker push --all-tags ${GHCR}
+          docker push --all-tags ${DHUB}
+
+----
+
+Nothing exotic. Checkout upstream, overlay the riscv64 Dockerfile, build, push to both registries. The sparse checkout pattern is something I've been using across all my RISC-V Docker projects — it keeps the fork minimal and makes upstream syncing trivial.
+
+Why both registries? ghcr.io is natural for GitHub-native workflows, but Docker Hub is where most people look first. Two push commands, zero extra build time.
+
+=== The release tracker
+
+Manually bumping the version every time NanoClaw tags a release? No thank you. I added a tracking workflow:
+
+[source,yaml]
+----
+name: Track NanoClaw releases
+
+on:
+  schedule:
+    * cron: '0 6 _ _ *'  # Daily at 06:00 UTC
+
+jobs:
+  check:
+    runs-on: ubuntu-latest  # Lightweight check, no need for riscv64
+    steps:
+      * name: Check latest release
+        run: |
+          LATEST=$(gh api repos/qwibitai/nanoclaw/releases/latest \
+            --jq '.tag_name' 2>/dev/null || echo "none")
+          echo "Latest upstream: $LATEST"
+          # Compare with last built version, dispatch build if new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+----
+
+This runs on `ubuntu-latest` (a free GitHub-hosted runner) because all it does is check a version number. No point wasting riscv64 cycles on an API call. When it detects a new tag, it dispatches the build workflow via `gh workflow run`. Not via a tag push event — I learned the hard way that GitHub Actions has anti-recursion guards that silently eat workflow triggers from automated tag pushes.
+
+---
+
+== The build: running it for real
+
+=== First attempt
+
+I triggered the workflow manually. Then I watched the logs on the runner. And waited.
+
+And waited some more. First run? DNS resolution failure. The board couldn't resolve `github.com`. Transient network issue. Second run? Buildkit daemon crashed with an EOF error — turned out the disk was nearly full. `docker system prune -af` freed 31 GB. Third run actually completed.
+
+Welcome to self-hosted runners.
+
+[cols="1,1", options="header"]
+|===
+| Machine
+| Build time (cold cache)
+
+| BPI-F3 #185
+| 20m 1s
+
+| BPI-F3 #36
+| 21m 52s
+
+|===
+
+Twenty minutes for a full cold-cache build, start to finish. That includes checkout, Docker build (the `npm install` inside the container is the bottleneck, same as Part 1), and push to both registries. With a warm Docker cache, subsequent builds take under 4 minutes — layer caching does its job.
+
+For context, a full Docker Engine build on the same hardware takes 35-40 minutes. NanoClaw is faster — most of the image is Debian packages and npm dependencies, not compiled Go binaries.
+
+=== The smoke test: pulling on a different machine
+
+Building an image is one thing. I wanted to prove it works when someone else pulls it. So I added a second job that runs on whichever runner is idle — usually the other board. It pulls from Docker Hub (a real network pull, not a local cache), runs the container, and checks for structured output.
+
+First smoke test failed. The claude-agent-sdk vendors a link:https://github.com/BurntSushi/ripgrep[ripgrep] binary for x64 and arm64, but not riscv64. Easy fix: install `ripgrep` from Debian and symlink it to where the SDK expects it.
+
+Second smoke test failed. Same image — the runner had the old image cached locally. Docker saw the same tag and said "up to date." Lesson learned about tag-based caching.
+
+Third smoke test revealed the real finding. With ripgrep fixed, the NanoClaw orchestrator initializes, creates a session, processes input, and returns structured JSON. Then it tries to spawn link:https://claude.ai/download[Claude Code] to actually execute the agent. Claude Code doesn't have a riscv64 binary. The orchestrator works. The agent engine doesn't exist for this architecture.
+
+So the smoke test passes (the orchestrator produces output) but the agent can't actually _do_ anything. I built a fully automated pipeline for a runtime that's waiting on one dependency. Classic me.
+
+=== Resource usage during build
+
+[cols="1,1", options="header"]
+|===
+| Resource
+| Peak usage
+
+| CPU
+| 8 cores at 85-92%
+
+| RAM
+| 4.1 GB / 16 GB
+
+| Disk I/O
+| ~180 MB/s read
+
+| Network
+| 45 MB/s during npm install (downloading packages)
+
+|===
+
+The RAM usage is higher than the Docker Engine builds (3.5 GB peak) because `npm install` and the native addon compilation for `better-sqlite3` are memory-hungry. Still well within the 16 GB available. The CPU stayed pegged for most of the build — those 8 cores earn their keep.
+
+---
+
+== The result: a published riscv64 image
+
+After all that, here's the payoff. A NanoClaw Docker image for riscv64, automatically built from upstream source, published to both registries. Pick your poison:
+
+[source,bash]
+----
+== From Docker Hub
+docker pull gounthar/nanoclaw:v1.2.12-riscv64
+
+== Or from GitHub Container Registry
+docker pull ghcr.io/gounthar/nanoclaw:v1.2.12-riscv64
+
+----
+
+And on a fresh riscv64 machine:
+
+[source,bash]
+----
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/gounthar/nanoclaw:v1.2.12-riscv64 \
+  --help
+
+----
+
+It pulls. It runs. It's useless. Same behavior as the hand-built image from Part 1, but now it's a `docker pull` away for anyone with riscv64 hardware, wanting to hit a wall. No cloning repos. No building from source. No fifteen-minute `npm install` on every machine, and no use whatsoever until Claude Code ships for riscv64. But it's there. The infrastructure is there. The moment that binary drops, the image is ready to go.
+
+=== Image details
+
+[cols="1,1", options="header"]
+|===
+| Property
+| Value
+
+| Base image
+| `debian:trixie-slim`
+
+| Architecture
+| `linux/riscv64`
+
+| Compressed size
+| 487 MB
+
+| Uncompressed size
+| 1.36 GB
+
+| Node.js version
+| 20.19.2 (Debian repos)
+
+| NanoClaw version
+| v1.2.12
+
+|===
+
+Yes, 1.36 GB is chunky. But that's not a riscv64 tax — it's a Node.js-plus-all-its-dependencies tax. Debian base, npm packages, native addons, build tooling that the runtime doesn't actually need. There's room to slim it down (multi-stage builds, stripping dev dependencies), but that's optimization. The first goal was "make it work and make it automatic." Check and check.
+
+---
+
+== What we've actually built here
+
+Let me step back for a second. What happened in this article?
+
+I didn't add riscv64 support to NanoClaw's CI/CD. NanoClaw doesn't have CI/CD for Docker images. What I built is a complete, independent pipeline that:
+
+. Tracks upstream NanoClaw releases automatically
+. Checks out the upstream source at the tagged version
+. Overlays a single riscv64-specific Dockerfile
+. Builds natively on real RISC-V hardware (no emulation)
+. Pushes the result to Docker Hub and ghcr.io
+
+All running on a $100 board that sips 10 watts. The whole thing is two YAML files and one Dockerfile. That's it.
+
+Is it production-grade? For a personal fork, yes. For upstream adoption, it needs one thing I can't provide: a Claude Code binary for riscv64.
+
+---
+
+== What happened to Part 3
+
+I originally planned three parts. Part 3 was supposed to be the upstream PR — submitting riscv64 support to NanoClaw's CI/CD and Docker images. I even researched their link:https://github.com/qwibitai/nanoclaw/blob/main/CONTRIBUTING.md[contributing guidelines] (hardware support belongs in _skills_, not core) and planned the framing.
+
+But there's no point submitting a PR for an architecture where the agent engine doesn't run. NanoClaw without Claude Code is an orchestrator with nothing to orchestrate. I could submit the Dockerfile and workflows, and they'd build and publish a container that starts up, creates a session, and immediately errors out. That's not a contribution. That's a bug report dressed up as a feature.
+
+So Part 3 is on hold. The Dockerfile is link:https://github.com/gounthar/nanoclaw[in my fork]. The CI pipeline runs weekly. The images are on Docker Hub and ghcr.io. The moment Claude Code ships a riscv64 build, I'll dust off the upstream PR strategy and submit it. Everything is ready except the one piece I can't build myself.
+
+In the meantime, the fork is there. If you're on riscv64 and want to experiment with the orchestrator — or if you're at Anthropic and want to test a Claude Code riscv64 build against a working pipeline — you know where to find me.
+
+---
+
+== Lessons learned
+
+=== What works
+
+* Native builds on self-hosted riscv64 runners: 20 minutes cold cache, under 4 minutes warm. QEMU would have taken an hour or more.
+* Sparse checkout overlay pattern: one Dockerfile difference, zero fork drift. Upstream updates flow through automatically.
+* github-act-runner: three weeks, 47/48 builds, 99.2% uptime. The Go-based runner just works.
+* Automated release tracking on cheap runners: the daily version check runs on free GitHub-hosted runners. Only the actual build needs the riscv64 hardware.
+* Smoke test on a separate runner: catches real issues before anyone pulls a broken image.
+
+=== What bit me
+
+* Disk space on the runner. Three times. I'm going to tattoo `docker system prune` on my forearm at this point.
+* DNS resolution failures on the first run. Transient, but enough to burn 10 minutes of head-scratching.
+* Vendored ripgrep in claude-agent-sdk has no riscv64 binary. Fix: install system ripgrep from Debian and symlink it. Twice — once for the global install, once for the local `node_modules/` copy.
+* Docker tag caching: pulling the same tag on a machine that already has it returns the cached version, not the newly pushed one. Cost me a smoke test run.
+* GitHub Actions anti-recursion guards will silently drop workflow triggers from automated pushes. Use `gh workflow run` instead.
+
+=== The elephant in the room
+
+Claude Code doesn't have a riscv64 binary. The NanoClaw orchestrator runs, the container works, the smoke test passes. But the agent can't actually execute because the underlying CLI doesn't exist for this architecture. I built a fully automated pipeline for a runtime that's waiting on Anthropic.
+
+Is this whole exercise useless? Today, yes. But the moment Claude Code ships for riscv64, everything lights up. The Dockerfile is there. The CI pipeline is there. The runners are registered. The images auto-build weekly. There's literally nothing to do except swap in one binary.
+
+=== What surprised me
+
+The whole pipeline — from "no Docker publishing exists" to "automated riscv64 images on both registries" — took less than a day to set up. Most of that was reading NanoClaw's repo structure and contribution policy, not writing YAML. The actual workflow files are maybe 80 lines total.
+
+Building Docker infrastructure on a 10-watt board that costs less than a nice dinner still feels vaguely absurd. But the numbers don't lie: 20 minutes, published image, zero manual intervention. The board doesn't care that it's riscv64. It just builds.
+

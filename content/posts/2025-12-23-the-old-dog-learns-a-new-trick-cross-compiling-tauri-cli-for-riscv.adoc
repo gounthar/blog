@@ -1,0 +1,319 @@
+---
+author: Bruno Verachten
+categories:
+- Development
+- Cross-Platform
+date: 2025-12-23 00:00:00 +0100
+description: How a simple maintainer suggestion led to discovering cross-rs and cutting
+  RISC-V build times from 63 minutes to 4 minutes. A lesson in humility after a decade
+  of cross-compilation experience.
+excerpt: 'Remember that cliffhanger from my previous article? ''Go upstream to Tauri,''
+  I said. ''Submit a PR,'' I said. What followed was a lesson in humility: after a
+  decade of cross-compilation work, a single comment from a maintainer introduced
+  me to a tool I''d never heard of.'
+image: assets/images/2025-12-23-tauri-cross-header.jpg
+tags:
+- risc-v
+- riscv64
+- tauri
+- rust
+- cross-rs
+- cross-compilation
+- github-actions
+- armbian
+title: 'The Old Dog Learns a New Trick: Cross-Compiling Tauri CLI for RISC-V'
+---
+
+image::/assets/images/2025-12-23-tauri-cross-header.jpg[Green grass field with trees - a path through the landscape]
+_Photo by link:https://unsplash.com/@dariuszpiosik[Dariusz Piosik] on Unsplash_
+
+== Previously, on "Bruno Fights RISC-V"
+
+If you missed the first episode (link:https://bruno.verachten.fr/2025/12/22/adding-riscv-support-to-armbian-imager/[available here]), here's the recap: I tried adding RISC-V builds to Armbian Imager (a Tauri app), hit a wall with 6+ hour QEMU emulation times, and realized the real fix was upstream. Tauri CLI ships pre-built binaries for x64, ARM64, macOS, Windows... but not RISC-V.
+
+My plan was simple: use my physical Banana Pi F3 as a self-hosted GitHub runner. Native RISC-V compilation. No emulation overhead. I'd done this before with Docker builds. Easy.
+
+Famous last words. Again.
+
+=== _🚀 The Self-Hosted Runner Approach_
+
+I wasn't walking into this blind. I already had working RISC-V runners from my Docker-for-RISC-V project:
+
+[source,yaml]
+----
+jobs:
+  build:
+    runs-on: [self-hosted, riscv64]
+    steps:
+      * uses: actions/checkout@v4
+      * name: Build
+        run: cargo build --release
+
+----
+
+Two machines at home (192.168.1.185 and 192.168.1.36), both Banana Pi F3 boards, both registered as GitHub runners. They've been churning out Docker engine builds for months. Adding Tauri CLI to the mix seemed natural.
+
+And you know what? _It worked._
+
+== The Working Solution (That Got Replaced)
+
+=== _✅ First Blood_
+
+The self-hosted runner approach actually succeeded. Full workflow run, actual binary produced:
+
+[cols="1,1", options="header"]
+|===
+| Metric
+| Value
+
+| Build time
+| _1h 2m 28s_
+
+| Binary
+| ELF 64-bit RISC-V, RVC, double-float ABI
+
+| Size
+| 16 MB (stripped)
+
+| Version
+| tauri-cli 2.9.6
+
+|===
+
+Proof: link:https://github.com/gounthar/tauri/releases/tag/tauri-cli-v2.9.6[actual release with actual binary].
+
+I was ready to submit the PR. Self-hosted runners, conditional logic to skip them if not available, fallback to QEMU for the brave souls with 6 hours to spare. A complete solution.
+
+Then FabianLars left a comment on my PR.
+
+=== _🤔 "Have you considered cross?"_
+
+I stared at the screen. Cross? Cross-compilation? I'd just spent an hour in the previous session explaining why cross-compilation was a nightmare for WebKit-dependent projects. Sysroots, symlink hell, version mismatches. I'd tried it. I'd abandoned it.
+
+But FabianLars wasn't talking about manual cross-compilation. He was talking about link:https://github.com/cross-rs/cross[cross-rs].
+
+[quote]
+____
+cross should work pretty well for the tauri cli
+
+— FabianLars, GitHub PR comment
+____
+
+I had never heard of cross-rs.
+
+Let me say that again, because it bears repeating: I've been doing ARM32 cross-compilation since 2013. I've set up sysroots. I've dealt with qemu-user-static. I've maintained unofficial Node.js builds for exotic architectures. I've built Docker images on physical RISC-V hardware. _Twelve years_ of this.
+
+And I had never heard of cross-rs.
+
+== What Is Cross-rs?
+
+=== _📦 The Tool I Should Have Known About_
+
+Cross is a "zero setup" cross compilation tool for Rust. Instead of manually setting up toolchains and sysroots, it uses pre-built Docker containers with everything already configured.
+
+[source,bash]
+----
+== Install it
+cargo install cross
+
+== Use it exactly like cargo
+cross build --target riscv64gc-unknown-linux-gnu --release
+
+----
+
+That's it. No sysroot configuration. No toolchain setup. No symlink archaeology. It just... works.
+
+The magic is Docker containers maintained by the cross-rs team. For RISC-V, you get:
+
+* The GNU toolchain (`riscv64-unknown-linux-gnu-gcc`)
+* Proper sysroot with glibc
+* QEMU for running test binaries
+* All the standard Rust cross-compilation targets
+
+When I ran `cross build` for the first time, I expected it to fail spectacularly. WebKit dependencies! Linker errors! Missing symbols! The usual cross-compilation dance of despair.
+
+Instead:
+
+[source,text]
+----
+$ time cross build --manifest-path ./crates/tauri-cli/Cargo.toml \
+    --target riscv64gc-unknown-linux-gnu --profile release-size-optimized
+
+   Compiling tauri-cli v2.9.6
+    Finished `release-size-optimized` profile [optimized] target(s) in 4m 27s
+
+real    4m27.235s
+
+----
+
+Four minutes and twenty-seven seconds.
+
+=== _📊 The Numbers Don't Lie_
+
+[cols="1,1,1", options="header"]
+|===
+| Method
+| Time
+| Relative Speed
+
+| QEMU emulation (Docker buildx)
+| 6+ hours (killed)
+| Baseline of pain
+
+| Native RISC-V (Banana Pi F3)
+| 63 minutes
+| ~6x faster than QEMU
+
+| Cross-rs on x64
+| _4m 27s_
+| _~90x faster than QEMU_
+
+|===
+
+I sat there looking at my terminal. Sixty-three minutes of native compilation. Four and a half minutes with cross. Fourteen times faster. On the same code. Same binary output.
+
+=== _🧠 Why Cross Works Here_
+
+Here's what I got wrong in my previous article: I assumed Tauri CLI had the same WebKit dependencies as Tauri apps.
+
+It doesn't.
+
+Tauri CLI is a _build tool_. It orchestrates the build process, invokes cargo, bundles assets. It doesn't link against WebKit2GTK. That's what the _app_ does at runtime. The CLI is just orchestration code.
+
+No WebKit dependency means no sysroot nightmare. No sysroot nightmare means cross-compilation is trivial.
+
+I spent an hour in my previous session explaining why cross-compilation was impossible. Turns out I was solving the wrong problem.
+
+== The New Implementation
+
+=== _🔧 Simpler Is Better_
+
+The updated workflow replaces self-hosted runners with cross:
+
+[source,yaml]
+----
+build:
+  runs-on: ${{ matrix.config.os }}
+  strategy:
+    matrix:
+      config:
+        # ... existing x64, ARM64, macOS, Windows targets ...
+
+        * os: ubuntu-22.04
+          rust_target: riscv64gc-unknown-linux-gnu
+          ext: ''
+          args: ''
+          cross: true
+
+  steps:
+    * uses: actions/checkout@v4
+
+    * name: 'Setup Rust'
+      if: ${{ !matrix.config.cross }}
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.config.rust_target }}
+
+    * name: Install cross
+      if: ${{ matrix.config.cross }}
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cross@0.2.5
+
+    * name: Build CLI (cross)
+      if: ${{ matrix.config.cross }}
+      run: cross build --manifest-path ./crates/tauri-cli/Cargo.toml \
+           --target ${{ matrix.config.rust_target }} \
+           --profile release-size-optimized
+
+----
+
+Changes from the self-hosted runner approach:
+
+. _Runs on GitHub's ubuntu-22.04_, not external hardware
+. _Uses `cross@0.2.5`_ (pinned version for reproducibility)
+. _Skips unnecessary steps_ (Rust cache, Linux dependencies - cross handles these)
+. _Different artifact path_ (`target/{target}/` instead of `target/`)
+
+No self-hosted runners to maintain. No physical hardware to keep online. No network connectivity issues. Just a matrix entry that happens to use cross instead of cargo.
+
+== The Humility Lesson
+
+=== _🎓 You Don't Know What You Don't Know_
+
+Here's the uncomfortable truth: I had _opinions_ about cross-compilation. Strong ones. Formed over a decade of wrestling with toolchains and sysroots. Those opinions were... not wrong, exactly. Cross-compiling WebKit apps _is_ a nightmare. Setting up manual sysroots _is_ fragile.
+
+But cross-rs exists. Has existed since 2016. Nine years of development. Excellent RISC-V support. And I'd never encountered it because I was busy doing things the hard way.
+
+This is the curse of experience: you learn patterns that work, and you stop exploring alternatives. "I know how to do this" becomes "I know how this is done" becomes "this is how it's done." Except sometimes a tool comes along that makes your carefully accumulated knowledge... obsolete? Not quite. But certainly less essential.
+
+The gray hairs from ARM32 era taught me _a_ way. Not _the_ way.
+
+=== _🔁 The Pattern Repeats_
+
+2013: "Cross-compiling for ARM32 requires a full sysroot setup."
+2016: cross-rs releases, nobody tells me.
+2025: "Cross-compiling for RISC-V is impossible because WebKit."
+Also 2025: "Have you considered cross?"
+
+I should probably set up an RSS feed for Rust tooling. Or just... ask people before assuming I know the answer.
+
+== What's Next
+
+=== _🎯 PR Status_
+
+The PR is submitted: link:https://github.com/tauri-apps/tauri/pull/14685[https://github.com/tauri-apps/tauri/pull/14685]
+
+Current state:
+
+* [x] Cross-rs implementation complete
+* [x] Build time: ~4 minutes (down from 63 minutes native, 6+ hours QEMU)
+* [x] CodeRabbit feedback addressed
+* [x] _Merged!_ 🎉
+
+Every Tauri CLI release now includes a RISC-V binary. Anyone on a RISC-V system can `cargo install tauri-cli` and get a pre-built binary in seconds instead of compiling 600+ crates.
+
+=== _🚀 The Bigger Picture_
+
+This matters beyond Tauri. The RISC-V ecosystem is at that inflection point I keep mentioning. Hardware exists. Kernels boot. Distributions ship packages. But every missing binary is a barrier.
+
+Framework 13 with DC-ROMA RISC-V mainboard? You'll want GUI apps. Banana Pi F3 running Armbian? You'll want to flash images without `dd`. Pine64 boards? Same story.
+
+Pre-built binaries are the difference between "works out of the box" and "come back in 6 hours." Cross-rs makes pre-built binaries trivial to produce.
+
+I'll probably be using cross for everything RISC-V from now on. Assuming the binary doesn't need runtime system libraries. For those cases... well, there's always the Banana Pi.
+
+== Lessons Learned
+
+=== _💡 Takeaways_
+
+* _Ask before assuming_. A decade of experience doesn't mean you've seen everything. The maintainer's one-line suggestion saved hours of CI time.
+
+* _Cross-rs exists_. For pure Rust binaries without system library dependencies, it's the obvious choice. Zero setup, fast builds, maintained Docker images.
+
+* _Know your dependencies_. I assumed Tauri CLI had the same requirements as Tauri apps. It doesn't. CLI is a build tool, not a WebKit consumer.
+
+* _Self-hosted runners still have their place_. For projects that _do_ need system libraries (like the actual Armbian Imager), native hardware remains the answer. But for build tools and pure-Rust code? Cross wins.
+
+* _Pin your versions_. `cross@0.2.5` is reproducible. `cross` is not. CI is not the place for floating versions.
+
+* _The hard way isn't always the right way_. Sometimes the clever solution you've perfected over years gets replaced by a tool that just... does it better.
+
+I've been building for exotic architectures since ARM32 was exotic. Gray hairs and all. And today I learned something new.
+
+That's not embarrassing. That's the job.
+
+---
+
+== Resources
+
+* link:https://github.com/cross-rs/cross[cross-rs]: Zero setup cross compilation for Rust
+* link:https://github.com/tauri-apps/tauri/pull/14685[Tauri PR #14685]: The RISC-V CLI support PR
+* link:https://github.com/gounthar/tauri/releases/tag/tauri-cli-v2.9.6[Proof of concept release]: Working RISC-V binary (self-hosted runner build)
+* link:https://tauri.app/[Tauri]: The framework this is all about
+* link:https://www.armbian.com/download/?arch=riscv64[Armbian RISC-V]: The boards that need this software
+* link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[Banana Pi BPI-F3]: The little board that could (in 63 minutes)
+
+The code is submitted. The binary works. And I have a new tool in my belt.
+
+Twelve years late, but who's counting?

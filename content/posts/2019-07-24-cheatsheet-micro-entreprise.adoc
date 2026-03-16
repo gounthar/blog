@@ -1,0 +1,183 @@
+---
+author: Brah
+categories:
+- Financial
+description: Petite synthèse du status d'auto-entrepreneur en 2019
+draft: true
+featured: true
+hidden: true
+image: assets/images/2019-07-24-1.png
+tags:
+- BNC
+- Freelance
+title: Cheat sheet de la micro-entreprise pour developpeurs freelance (2019)
+---
+
+== Principes
+
+* link:https://www.autoentrepreneur.urssaf.fr/portail/accueil/creer-mon-auto-entreprise.html[Inscription]
+* link:https://itunes.apple.com/fr/app/autoentrepreneur-urssaf/id1367434630[Appli]
+* S’immatriculer au Registre du commerce et des sociétés (RCS) pour les commerçants ou au Répertoire des métiers (RM) 
+* Souscrire une assurance responsabilité civile professionnelle (optionnel)
+* Ouvrir un compte bancaire dédié
+* Obligation de déclarer votre chiffre d’affaires, chaque mois ou chaque trimestre, même si celui-ci est nul.
+* Premiere declaration après 90 jours ( Pour un creation Du 1er au 30 septembre, premiere declaration entre début janvier de l’année suivante  au	31 janvier)
+* Sécurité du patrimoine, possibilité de choisir l’option Entrepreneur Individuel à Responsabilité Limitée (EIRL)
+  
+[quote]
+____
+Max : 70 000€ de CA pour les BNC (montant total des factures clients 
+____
+encaissées au cours de l’année pour les prestations de services
+sur une année civile (1er Janvier au 31 décembre). 
+
+[quote]
+____
+_NB : début d’activité le 1er septembre 2018 : 122 Jours donc 70 000 € x 122 / 365 = 23 397€_
+____
+
+
+== TVA
+
+[quote]
+____
+< 35200 
+____
+    ni facturer la TVA à votre client, ni la récupérer sur vos achats
+
+[quote]
+____
+\> 35200 ou > (33200 pendant 2 ans)
+____
+    assujetti à la TVA
+    facturer la TVA dès le mois de dépassement 
+    contacter le service des impôts  afin d’obtenir un numéro de TVA intracommunautaire 
+    et connaître le taux de TVA applicable
+    TVA due = TVA collectée – TVA déductible
+
+_NB : les factures doivent porter la mention « TVA non applicable - article 293 B du CGI »_
+
+== Impôts sur le revenu et cotisation
+
+=== Versement libératoire de l’impôt sur le revenu
+   * à l'ouverture ou les 3 premiers mois
+   * Bénéficier ou sortir du versement libératoire une fois par an (jusqu’au 30/09)
+   * Payé en même temps que vos cotisations (au mois ou au trimestre)
+   * chiffre d’affaires ne sera pas pris en compte pour le calcul de l’impôt sur le revenu, 
+     mais uniquement pour établir le taux d’imposition de votre foyer fiscal.
+
+   > Avis d'impot 80 454 € pour un couple avec deux enfants (3 parts)
+
+   > cotisations de 2,2 % pour les BNC 
+
+   >  Contributions sociales (BNC) 	22,00 %
+
+   >  Contribution à la formation professionnelle 0,2 % 
+
+   > CFP : Cotisation Foncière des Entreprises : exonéré la premiere année 
+
+[cols="1,1,1", options="header"]
+|===
+| Chiffre d’affaires ou recettes
+| Base minimale (CFE due au titre de 2017)
+| Base minimale (CFE due au titre de 2018)
+
+| Jusqu’à 10 000 €
+| Entre 216 € et 514 €
+| Entre 218 € et 519 €
+
+| Entre 10 001 € et 32 600 €
+| Entre 216 € et 1 027 €
+| Entre 218 € et 1 037 €
+
+| Entre 32 601 € et 100 000 €
+| Entre 216 € et 2 157 €
+| Entre 218 € et 2 179 €
+
+| Entre 100 001 € et 250 000 €
+| Entre 216 € et 3 596 €
+| Entre 218 € et 3 632 €
+
+|===
+    
+_NB: Les entreprises seront exonérées de CFE si leur chiffre d’affaires de l’avant dernière année est inférieur à 5 000 €._
+
+
+=== Si vous n’avez pas opté pour le versement libératoire,
+
+[quote]
+____
+pour le calcul de l’impôt, taux d'abattement 34 % pour les BNC
+____
+
+Votre chiffre d’affaires sera intégré aux revenus de votre foyer fiscal 
+
+== l'ACRE : Exonération de début d’activité
+
+* Une exonération partielle et progressive de l’ensemble des charges sociales sur 3 ans :
+* S’applique automatiquement
+* En cas de dépassement des seuils de chiffre d’affaires, vous perdez définitivement le bénéfice 
+* Cette mesure s'applique dans la limite du chiffre d'affaires du régime de la micro-entreprise qui correspond à un revenu égal à la valeur du plafond annuel de la sécurité sociale.link:https://www.ameli.fr/lille-douai/entreprise/vos-salaries/montants-reference/plafond-securite-sociale[(40524€)]
+
+[cols="1,1,1,1,1", options="header"]
+|===
+| Activité
+| fin 3eme trimestre (année 1)
+| 4 trimestres (année 2)
+| 4 trimestres (année 3)
+
+| Taux de cotisations
+| BNC
+| 5,50 %
+| 11,00 %
+| 16,50 %
+
+|===
+
+
+
+== Protection sociale
+
+Les auto-entrepreneurs exerçant une activité libérale réglementée sont 
+affiliés à la _Cipav_ pour leur assurance retraite et à la _Sécurité sociale pour les Indépendants_ 
+pour leur assurance maladie.
+
+
+[cols="1,1,1,1,1", options="header"]
+|===
+| 
+| Trimestre 1
+| Trimestre 2
+| Trimestre 3
+| Trimestre 4
+
+| SS
+| 2 425 €
+| 4 320 €
+| 6 265 €
+| 8 980 €
+
+| Cipav
+| 2 246 €
+| 4 491 €
+| 6 737 €
+| 8 892 €
+
+|===
+
+
+== Maladie
+* Bénéficier des indemnités journalières maladie, Sécurité sociale pour les indépendants  depuis au moins un an
+* Montant de l’indemnité journalière est égal à 1/730 du revenu d’activité annuel moyen des 3 dernières années civiles
+
+[quote]
+____
+Si > 3 862,80 €, l’indemnité journalière est comprise entre 5,29 € et 54,43 €
+Si < 3 862,80 €, 0€
+____
+
+== Retraite
+
+Si vous êtes salarié et que vous validez 4 trimestres de retraite par an, le 
+chiffre d'affaires de votre activité d'auto-entrepreneur vous permettra d'acquérir des droits supplémentaires mais 
+pas de trimestre supplémentaire (le maximum étant de 4 trimestres validés par année civile). 

@@ -1,0 +1,115 @@
+---
+author: Poddingue
+categories:
+- XU4
+- Armbian
+- h.264
+- ODroid
+- ffmpeg
+description: Compile FFmpeg on the Odroid XU4 to get hardware acceleration
+featured: true
+hidden: false
+image: assets/images/2019/11/28/ODROID_XU4_001_1_.png
+tags:
+- XU4
+- Armbian
+- h.264
+- ODroid
+- ffmpeg
+title: Compile FFmpeg on the Odroid XU4 to get hardware acceleration
+---
+
+[source,bash]
+----
+sudo apt-get build-dep ffmpeg
+
+sudo apt install debhelper libchromaprint-dev frei0r-plugins-dev libgnutls28-dev libx265-dev ladspa-sdk libaom-dev libserd-dev libsord-dev libsratom-dev libsndfile1-dev libiec61883-dev libavc1394-dev libavc1394-0 libass-dev libbluray-dev libbs2b-dev libcaca-dev
+
+ mkdir ffmpeg_sources
+   36  cd ffmpeg_sources
+   37  wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4.orig.tar.xz
+   38  xz -d ffmpeg_4.1.4.orig.tar.xz
+   39  tar -xf ffmpeg_4.1.4.orig.tar
+   40  wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4.orig.tar.xz
+   41  ll
+   42  cd ffmpeg-4.1.4/
+   43  wget http://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_4.1.4-1~deb10u1.debian.tar.xz
+   44  xz -d ffmpeg_4.1.4-1~deb10u1.debian.tar.xz
+   45  ll
+   46  tar -xf ffmpeg_4.1.4-1~deb10u1.debian.tar
+   47  ll
+   48  rm ffmpeg_4.1.4-1~deb10u1.debian.tar
+
+sudo -E dpkg-buildpackage -us -uc -d
+
+ffmpeg -i bbb_sunflower_1080p_30fps_stereo_abl.mp4 -an -vcodec h264_v4l2m2m -b:v 2M -pix_fmt nv21 output.mp4
+ffmpeg version 4.1.4-1~deb10u1 Copyright (c) 2000-2019 the FFmpeg developers
+  built with gcc 8 (Debian 8.3.0-6)
+  configuration: --prefix=/usr --extra-version='1~deb10u1' --toolchain=hardened --libdir=/usr/lib/arm-linux-gnueabihf --incdir=/usr/include/arm-linux-gnueabihf --arch=arm --enable-gpl --disable-stripping --enable-avresample --disable-filter=resample --enable-avisynth --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librsvg --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opengl --enable-sdl2 --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 22.100 / 56. 22.100
+  libavcodec     58. 35.100 / 58. 35.100
+  libavformat    58. 20.100 / 58. 20.100
+  libavdevice    58.  5.100 / 58.  5.100
+  libavfilter     7. 40.101 /  7. 40.101
+  libavresample   4.  0.  0 /  4.  0.  0
+  libswscale      5.  3.100 /  5.  3.100
+  libswresample   3.  3.100 /  3.  3.100
+  libpostproc    55.  3.100 / 55.  3.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'bbb_sunflower_1080p_30fps_stereo_abl.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 1
+    compatible_brands: isomavc1
+    creation_time   : 2013-12-16T17:46:34.000000Z
+    title           : Big Buck Bunny, Sunflower version
+    artist          : Blender Foundation 2008, Janus Bager Kristensen 2013
+    comment         : Creative Commons Attribution 3.0 - http://bbb3d.renderfarming.net
+    genre           : Animation
+    composer        : Sacha Goedegebure
+  Duration: 00:10:34.53, start: 0.000000, bitrate: 5482 kb/s
+    Stream #0:0(und): Video: h264 (High) (avc1 / 0x31637661), yuv420p, 1920x2160 [SAR 1:1 DAR 8:9], 4999 kb/s, 30 fps, 30 tbr, 30k tbn, 60 tbc (default)
+    Metadata:
+      creation_time   : 2013-12-16T17:46:34.000000Z
+      handler_name    : GPAC ISO Video Handler
+    Stream #0:1(und): Audio: mp3 (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 160 kb/s (default)
+    Metadata:
+      creation_time   : 2013-12-16T17:46:41.000000Z
+      handler_name    : GPAC ISO Audio Handler
+    Stream #0:2(und): Audio: ac3 (ac-3 / 0x332D6361), 48000 Hz, 5.1(side), fltp, 320 kb/s (default)
+    Metadata:
+      creation_time   : 2013-12-16T17:46:41.000000Z
+      handler_name    : GPAC ISO Audio Handler
+    Side data:
+      audio service type: main
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> h264 (h264_v4l2m2m))
+Press [q] to stop, [?] for help
+[h264_v4l2m2m @ 0x575a90] driver 'exynos-gsc' on card 'exynos-gsc gscaler'
+    Last message repeated 1 times
+[h264_v4l2m2m @ 0x575a90] driver 's5p-mfc' on card 's5p-mfc-enc'
+[h264_v4l2m2m @ 0x575a90] Using device /dev/video11
+[h264_v4l2m2m @ 0x575a90] driver 's5p-mfc' on card 's5p-mfc-enc'
+[h264_v4l2m2m @ 0x575a90] h264 profile not found
+[h264_v4l2m2m @ 0x575a90] Encoder adjusted: qmin (0), qmax (51)
+Output #0, mp4, to 'output.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 1
+    compatible_brands: isomavc1
+    composer        : Sacha Goedegebure
+    title           : Big Buck Bunny, Sunflower version
+    artist          : Blender Foundation 2008, Janus Bager Kristensen 2013
+    comment         : Creative Commons Attribution 3.0 - http://bbb3d.renderfarming.net
+    genre           : Animation
+    encoder         : Lavf58.20.100
+    Stream #0:0(und): Video: h264 (h264_v4l2m2m) (avc1 / 0x31637661), nv21, 1920x2160 [SAR 1:1 DAR 8:9], q=2-31, 2000 kb/s, 30 fps, 15360 tbn, 30 tbc (default)
+    Metadata:
+      creation_time   : 2013-12-16T17:46:34.000000Z
+      handler_name    : GPAC ISO Video Handler
+      encoder         : Lavc58.35.100 h264_v4l2m2m
+[mp4 @ 0x5695f0] Non-monotonous DTS in output stream 0:0; previous: 0, current: 0; changing to 1. This may result in incorrect timestamps in the output file.
+[mp4 @ 0x5695f0] Non-monotonous DTS in output stream 0:0; previous: 832000, current: 0; changing to 832001. This may result in incorrect timestamps in the output file.
+
+
+
+----

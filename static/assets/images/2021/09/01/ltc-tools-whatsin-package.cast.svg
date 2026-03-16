@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="terminal" baseProfile="full" viewBox="0 0 1600 1022" width="1600" version="1.1">
+    <defs>
+        <termtosvg:template_settings xmlns:termtosvg="https://github.com/nbedos/termtosvg">
+            <termtosvg:screen_geometry columns="200" rows="60"/>
+            <termtosvg:animation type="css"/>
+        </termtosvg:template_settings>
+        <style type="text/css" id="generated-style"><![CDATA[#screen {
+                font-family: 'DejaVu Sans Mono', monospace;
+                font-style: normal;
+                font-size: 14px;
+            }
+
+        text {
+            dominant-baseline: text-before-edge;
+            white-space: pre;
+        }
+    
+            :root {
+                --animation-duration: 7799ms;
+            }
+
+            @keyframes roll {
+                0.000%{transform:translateY(0px)}
+10.848%{transform:translateY(-1054px)}
+17.746%{transform:translateY(-2108px)}
+18.118%{transform:translateY(-3162px)}
+18.143%{transform:translateY(-4216px)}
+18.169%{transform:translateY(-5270px)}
+18.195%{transform:translateY(-6324px)}
+18.207%{transform:translateY(-7378px)}
+18.233%{transform:translateY(-8432px)}
+18.246%{transform:translateY(-9486px)}
+18.284%{transform:translateY(-10540px)}
+87.178%{transform:translateY(-11594px)}
+100.000%{transform:translateY(-11594px)}
+            }
+
+            #screen_view {
+                animation-duration: 7799ms;
+                animation-iteration-count:infinite;
+                animation-name:roll;
+                animation-timing-function: steps(1,end);
+                animation-fill-mode: forwards;
+            }
+        ]]></style>
+        <style type="text/css" id="user-style">
+            /* The colors defined below are the default 16 colors used for rendering text of the terminal. Adjust
+               them as needed.
+               PowerShell colors based on https://en.wikipedia.org/wiki/ANSI_escape_code#Colors */
+            .foreground {fill: #cccccc;}
+            .background {fill: #0c0c0c;}
+            .color0 {fill: #0c0c0c;}
+            .color1 {fill: #c50f1f;}
+            .color2 {fill: #13a10e;}
+            .color3 {fill: #c19c00;}
+            .color4 {fill: #0037da;}
+            .color5 {fill: #881798;}
+            .color6 {fill: #3a96dd;}
+            .color7 {fill: #cccccc;}
+            .color8 {fill: #767676;}
+            .color9 {fill: #e74856;}
+            .color10 {fill: #16c60c;}
+            .color11 {fill: #f9f1a5;}
+            .color12 {fill: #3b78ff;}
+            .color13 {fill: #b4009e;}
+            .color14 {fill: #61d6d6;}
+            .color15 {fill: #f2f2f2;}
+        </style>
+    </defs>
+    <svg id="screen" width="1600" height="1020" viewBox="0 0 1600 1020" preserveAspectRatio="xMidYMin slice">
+    <rect class="background" height="100%" width="100%" x="0" y="0"/><defs><g id="g1"><text x="0" textLength="296" font-weight="bold" class="color10">poddingue@orangepi-zero-gitlab-runner</text><text x="296" textLength="8" class="foreground">:</text><text x="304" textLength="88" font-weight="bold" class="color12">~/ltc-tools</text><text x="392" textLength="16" class="foreground">$ </text><text x="408" textLength="8" class="background"> </text></g><g id="g2"><text x="0" textLength="296" font-weight="bold" class="color10">poddingue@orangepi-zero-gitlab-runner</text><text x="296" textLength="8" class="foreground">:</text><text x="304" textLength="88" font-weight="bold" class="color12">~/ltc-tools</text><text x="392" textLength="320" class="foreground">$ dpkg -c ../ltc-tools_0.7.0-1_armhf.deb</text><text x="712" textLength="8" class="background"> </text></g><g id="g3"><text x="0" textLength="296" font-weight="bold" class="color10">poddingue@orangepi-zero-gitlab-runner</text><text x="296" textLength="8" class="foreground">:</text><text x="304" textLength="88" font-weight="bold" class="color12">~/ltc-tools</text><text x="392" textLength="320" class="foreground">$ dpkg -c ../ltc-tools_0.7.0-1_armhf.deb</text></g><g id="g4"><text x="0" textLength="8" class="background"> </text></g><g id="g5"><text x="0" textLength="400" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./</text></g><g id="g6"><text x="0" textLength="432" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/</text></g><g id="g7"><text x="0" textLength="464" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/bin/</text></g><g id="g8"><text x="0" textLength="528" class="foreground">-rwxr-xr-x root/root     18128 2019-02-17 17:02 ./usr/bin/jltc2mtc</text></g><g id="g9"><text x="0" textLength="528" class="foreground">-rwxr-xr-x root/root     22368 2019-02-17 17:02 ./usr/bin/jltcdump</text></g><g id="g10"><text x="0" textLength="520" class="foreground">-rwxr-xr-x root/root     22380 2019-02-17 17:02 ./usr/bin/jltcgen</text></g><g id="g11"><text x="0" textLength="520" class="foreground">-rwxr-xr-x root/root     14052 2019-02-17 17:02 ./usr/bin/jltcntp</text></g><g id="g12"><text x="0" textLength="552" class="foreground">-rwxr-xr-x root/root     18160 2019-02-17 17:02 ./usr/bin/jltctrigger</text></g><g id="g13"><text x="0" textLength="520" class="foreground">-rwxr-xr-x root/root     13968 2019-02-17 17:02 ./usr/bin/ltcdump</text></g><g id="g14"><text x="0" textLength="512" class="foreground">-rwxr-xr-x root/root     18172 2019-02-17 17:02 ./usr/bin/ltcgen</text></g><g id="g15"><text x="0" textLength="480" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/share/</text></g><g id="g16"><text x="0" textLength="512" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/share/doc/</text></g><g id="g17"><text x="0" textLength="592" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/share/doc/ltc-tools/</text></g><g id="g18"><text x="0" textLength="744" class="foreground">-rw-r--r-- root/root      1594 2019-02-17 17:02 ./usr/share/doc/ltc-tools/changelog.Debian.gz</text></g><g id="g19"><text x="0" textLength="664" class="foreground">-rw-r--r-- root/root      1122 2019-02-17 17:02 ./usr/share/doc/ltc-tools/copyright</text></g><g id="g20"><text x="0" textLength="512" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/share/man/</text></g><g id="g21"><text x="0" textLength="552" class="foreground">drwxr-xr-x root/root         0 2019-02-17 17:02 ./usr/share/man/man1/</text></g><g id="g22"><text x="0" textLength="656" class="foreground">-rw-r--r-- root/root       980 2019-02-17 17:02 ./usr/share/man/man1/jltc2mtc.1.gz</text></g><g id="g23"><text x="0" textLength="656" class="foreground">-rw-r--r-- root/root       985 2019-02-17 17:02 ./usr/share/man/man1/jltcdump.1.gz</text></g><g id="g24"><text x="0" textLength="648" class="foreground">-rw-r--r-- root/root      1153 2019-02-17 17:02 ./usr/share/man/man1/jltcgen.1.gz</text></g><g id="g25"><text x="0" textLength="648" class="foreground">-rw-r--r-- root/root       788 2019-02-17 17:02 ./usr/share/man/man1/ltcdump.1.gz</text></g><g id="g26"><text x="0" textLength="640" class="foreground">-rw-r--r-- root/root      1059 2019-02-17 17:02 ./usr/share/man/man1/ltcgen.1.gz</text></g><g id="g27"><text x="0" textLength="296" font-weight="bold" class="color10">poddingue@orangepi-zero-gitlab-runner</text><text x="296" textLength="8" class="foreground">:</text><text x="304" textLength="88" font-weight="bold" class="color12">~/ltc-tools</text><text x="392" textLength="48" class="foreground">$ exit</text></g></defs><g id="screen_view"><g><rect x="408" y="0" width="8" height="17" class="foreground"/><use xlink:href="#g1" y="0"/></g><g><rect x="712" y="1054" width="8" height="17" class="foreground"/><use xlink:href="#g2" y="1054"/></g><g><use xlink:href="#g3" y="2108"/><rect x="0" y="2125" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="2125"/></g><g><use xlink:href="#g3" y="3162"/><use xlink:href="#g5" y="3179"/><use xlink:href="#g6" y="3196"/><use xlink:href="#g7" y="3213"/><use xlink:href="#g8" y="3230"/><use xlink:href="#g9" y="3247"/><use xlink:href="#g10" y="3264"/><rect x="0" y="3281" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="3281"/></g><g><use xlink:href="#g3" y="4216"/><use xlink:href="#g5" y="4233"/><use xlink:href="#g6" y="4250"/><use xlink:href="#g7" y="4267"/><use xlink:href="#g8" y="4284"/><use xlink:href="#g9" y="4301"/><use xlink:href="#g10" y="4318"/><use xlink:href="#g11" y="4335"/><use xlink:href="#g12" y="4352"/><rect x="0" y="4369" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="4369"/></g><g><use xlink:href="#g3" y="5270"/><use xlink:href="#g5" y="5287"/><use xlink:href="#g6" y="5304"/><use xlink:href="#g7" y="5321"/><use xlink:href="#g8" y="5338"/><use xlink:href="#g9" y="5355"/><use xlink:href="#g10" y="5372"/><use xlink:href="#g11" y="5389"/><use xlink:href="#g12" y="5406"/><use xlink:href="#g13" y="5423"/><rect x="0" y="5440" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="5440"/></g><g><use xlink:href="#g3" y="6324"/><use xlink:href="#g5" y="6341"/><use xlink:href="#g6" y="6358"/><use xlink:href="#g7" y="6375"/><use xlink:href="#g8" y="6392"/><use xlink:href="#g9" y="6409"/><use xlink:href="#g10" y="6426"/><use xlink:href="#g11" y="6443"/><use xlink:href="#g12" y="6460"/><use xlink:href="#g13" y="6477"/><use xlink:href="#g14" y="6494"/><rect x="0" y="6511" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="6511"/></g><g><use xlink:href="#g3" y="7378"/><use xlink:href="#g5" y="7395"/><use xlink:href="#g6" y="7412"/><use xlink:href="#g7" y="7429"/><use xlink:href="#g8" y="7446"/><use xlink:href="#g9" y="7463"/><use xlink:href="#g10" y="7480"/><use xlink:href="#g11" y="7497"/><use xlink:href="#g12" y="7514"/><use xlink:href="#g13" y="7531"/><use xlink:href="#g14" y="7548"/><use xlink:href="#g15" y="7565"/><use xlink:href="#g16" y="7582"/><use xlink:href="#g17" y="7599"/><use xlink:href="#g18" y="7616"/><use xlink:href="#g19" y="7633"/><use xlink:href="#g20" y="7650"/><use xlink:href="#g21" y="7667"/><use xlink:href="#g22" y="7684"/><use xlink:href="#g23" y="7701"/><rect x="0" y="7718" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="7718"/></g><g><use xlink:href="#g3" y="8432"/><use xlink:href="#g5" y="8449"/><use xlink:href="#g6" y="8466"/><use xlink:href="#g7" y="8483"/><use xlink:href="#g8" y="8500"/><use xlink:href="#g9" y="8517"/><use xlink:href="#g10" y="8534"/><use xlink:href="#g11" y="8551"/><use xlink:href="#g12" y="8568"/><use xlink:href="#g13" y="8585"/><use xlink:href="#g14" y="8602"/><use xlink:href="#g15" y="8619"/><use xlink:href="#g16" y="8636"/><use xlink:href="#g17" y="8653"/><use xlink:href="#g18" y="8670"/><use xlink:href="#g19" y="8687"/><use xlink:href="#g20" y="8704"/><use xlink:href="#g21" y="8721"/><use xlink:href="#g22" y="8738"/><use xlink:href="#g23" y="8755"/><use xlink:href="#g24" y="8772"/><rect x="0" y="8789" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="8789"/></g><g><use xlink:href="#g3" y="9486"/><use xlink:href="#g5" y="9503"/><use xlink:href="#g6" y="9520"/><use xlink:href="#g7" y="9537"/><use xlink:href="#g8" y="9554"/><use xlink:href="#g9" y="9571"/><use xlink:href="#g10" y="9588"/><use xlink:href="#g11" y="9605"/><use xlink:href="#g12" y="9622"/><use xlink:href="#g13" y="9639"/><use xlink:href="#g14" y="9656"/><use xlink:href="#g15" y="9673"/><use xlink:href="#g16" y="9690"/><use xlink:href="#g17" y="9707"/><use xlink:href="#g18" y="9724"/><use xlink:href="#g19" y="9741"/><use xlink:href="#g20" y="9758"/><use xlink:href="#g21" y="9775"/><use xlink:href="#g22" y="9792"/><use xlink:href="#g23" y="9809"/><use xlink:href="#g24" y="9826"/><use xlink:href="#g25" y="9843"/><use xlink:href="#g26" y="9860"/><rect x="0" y="9877" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="9877"/></g><g><use xlink:href="#g3" y="10540"/><use xlink:href="#g5" y="10557"/><use xlink:href="#g6" y="10574"/><use xlink:href="#g7" y="10591"/><use xlink:href="#g8" y="10608"/><use xlink:href="#g9" y="10625"/><use xlink:href="#g10" y="10642"/><use xlink:href="#g11" y="10659"/><use xlink:href="#g12" y="10676"/><use xlink:href="#g13" y="10693"/><use xlink:href="#g14" y="10710"/><use xlink:href="#g15" y="10727"/><use xlink:href="#g16" y="10744"/><use xlink:href="#g17" y="10761"/><use xlink:href="#g18" y="10778"/><use xlink:href="#g19" y="10795"/><use xlink:href="#g20" y="10812"/><use xlink:href="#g21" y="10829"/><use xlink:href="#g22" y="10846"/><use xlink:href="#g23" y="10863"/><use xlink:href="#g24" y="10880"/><use xlink:href="#g25" y="10897"/><use xlink:href="#g26" y="10914"/><rect x="408" y="10931" width="8" height="17" class="foreground"/><use xlink:href="#g1" y="10931"/></g><g><use xlink:href="#g3" y="11594"/><use xlink:href="#g5" y="11611"/><use xlink:href="#g6" y="11628"/><use xlink:href="#g7" y="11645"/><use xlink:href="#g8" y="11662"/><use xlink:href="#g9" y="11679"/><use xlink:href="#g10" y="11696"/><use xlink:href="#g11" y="11713"/><use xlink:href="#g12" y="11730"/><use xlink:href="#g13" y="11747"/><use xlink:href="#g14" y="11764"/><use xlink:href="#g15" y="11781"/><use xlink:href="#g16" y="11798"/><use xlink:href="#g17" y="11815"/><use xlink:href="#g18" y="11832"/><use xlink:href="#g19" y="11849"/><use xlink:href="#g20" y="11866"/><use xlink:href="#g21" y="11883"/><use xlink:href="#g22" y="11900"/><use xlink:href="#g23" y="11917"/><use xlink:href="#g24" y="11934"/><use xlink:href="#g25" y="11951"/><use xlink:href="#g26" y="11968"/><use xlink:href="#g27" y="11985"/><rect x="0" y="12002" width="8" height="17" class="foreground"/><use xlink:href="#g4" y="12002"/></g></g></svg>
+</svg>

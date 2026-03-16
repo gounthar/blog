@@ -1,0 +1,248 @@
+---
+author: gounthar
+categories:
+- aarch64
+- sound
+description: How to generate a timecoded soundtrack
+draft: true
+featured: true
+hidden: true
+image: assets/images/2021-08-20-1.png
+tags:
+- aarch64
+- sound
+title: Installing libltc on aarch64 Debian
+toc: true
+---
+
+== Installing libltc on aarch64 Debian
+
+One of my (way too many) current projects is to create a device that would mimic link:https://dish.tc/faq/[dish.tc].
+I have created a link:https://gitlab.com/gounthar/time-whisperer[repository] at Gitlab so that anyone can help make this idea come true.
+
+To sum up, we would add an audio track to every recording we make (be it audio or video or both) so that link:https://www.youtube.com/watch?v=9qjrMeCW1-c[video editing software] would then be able to synchronize everything without any human intervention.
+
+I'm not sure yet of the SBC I will use for that job. For sure, I would like to use the link:http://www.orangepi.org/orangepizero/[OrangePi Zero], as it is link:https://www.aliexpress.com/item/1005001688034180.html?spm=a2g0o.store_pc_groupList.8148356.5.21c594fblAa9xq[cheap] (well, it used to be $10, but with the chip crisis, the price has gone wayyy up), or any other SBC, as long as it is handled by link:https://www.armbian.com/download/?device_support=Supported[Armbian] and has good audio features (yes, I know the Zero doesn't have great link:https://www.aliexpress.com/item/32770665186.html?spm=a2g0o.store_pc_groupList.8148356.1.7cad7fdd4Eu7Uf[audio features] nor link:https://forum.armbian.com/topic/6021-orange-pi-zero-i2s/?do=findComment&comment=52342[I2S], but I already have it, so...).
+
+For the time being, I have a very well working aarch64 board, the link:http://bruno.verachten.fr/2021/02/18/How-to-Install-Armbian-on-the-Station-P1/[Station P1]. The sound is good (to me at least), so let's give it a try.
+
+The first step to make a link:https://en.wikipedia.org/wiki/SMPTE_timecode[SMTPE] generator with this device is to install link:https://github.com/x42/libltc[libltc] which is not yet part of Debian for ARM.
+
+== Grabbing the source, compiling and installing
+
+=== Getting the source and configuring for the target machine
+
+[source,bash]
+----
+git clone https://github.com/x42/libltc.git
+cd libltc/
+aclocal; autoheader; libtoolize --copy; autoconf; automake --gnu --add-missing --copy
+./configure
+
+----
+
+
+
+[source,bash]
+----
+ [...]
+ -----------------------
+
+libltc configured:
+ -----------------------
+
+  version:             1.3.1
+  interface revision:  12:0:1
+
+  doxygen:             no
+  installation prefix: /usr/local
+
+ type "make" followed my "make install" as root.
+ run "make check" to perform selftests.
+
+----
+
+The automatic configuration went fine, let's compile libltc now.
+
+=== Compiling on the machine
+
+As proposed by the configuration step, let's simply use `make`
+
+[source,bash]
+----
+make && make check
+
+----
+
+which will give us this result:
+
+[source,bash]
+----
+[...]
+
+Linux orangepi-zero-gitlab-runner 5.10.60-sunxi #trunk.125 SMP Tue Aug 24 07:52:44 UTC 2021 armv7l GNU/Linux
+
+./ltcencode output.raw
+sample rate: 48000.00
+frames/sec: 25.00
+secs to write: 2.00
+sample format: 8bit unsigned mono
+Done: wrote 96000 samples to 'output.raw'
+./ltcdecode output.raw | diff -q ./expect_48k_2sec.txt -
+
+* reading from: output.raw
+./ltcencode output.raw 192000
+sample rate: 192000.00
+frames/sec: 25.00
+secs to write: 2.00
+sample format: 8bit unsigned mono
+Done: wrote 384000 samples to 'output.raw'
+./ltcdecode output.raw 7680 | diff -q ./expect_96k_2sec.txt -
+
+* reading from: output.raw
+
+-----------------------------------------------------------------
+
+./ltcdecode ./timecode.raw 882 | diff -q ./timecode.txt -
+
+* reading from: ./timecode.raw
+libltc-1.3.1 passed all tests.
+
+----
+
+=== Installation
+
+-----------------------------------------------------------------
+Let's issue a `make install`command as root, so that everyone can use it afterwards:
+
+-----------------------------------------------------------------
+[source,bash]
+----
+sudo make install
+
+----
+
+Installing tools that depend on libltc
+-----------------------------------------------------------------
+
+ 
+
+[source,bash]
+----
+cd
+poddingue@station-p1:~$ git clone https://github.com/x42/ltc-tools.git
+Cloning into 'ltc-tools'...
+remote: Enumerating objects: 826, done.
+remote: Counting objects: 100% (21/21), done.
+remote: Compressing objects: 100% (12/12), done.
+remote: Total 826 (delta 12), reused 17 (delta 9), pack-reused 805
+Receiving objects: 100% (826/826), 173.36 KiB | 3.69 MiB/s, done.
+Resolving deltas: 100% (567/567), done.
+poddingue@station-p1:~$ cd ltc-tools/
+poddingue@station-p1:~/ltc-tools$
+
+----
+
+
+
+ sudo apt install libjack-jackd2-dev libltc-dev libsndfile1-dev as dependencies
+
+poddingue@station-p1:~/ltc-tools$ dpkg-buildpackage -rfakeroot -b -uc -us
+
+ ll ../*deb
+-rw-r--r-- 1 poddingue poddingue  13492 Sep  1 21:22 ../libltc11_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue  19268 Sep  1 21:22 ../libltc11-dbgsym_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue  13904 Sep  1 21:22 ../libltc-dev_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue  15012 Sep  1 21:22 ../libltc-doc_1.3.1-1_all.deb
+-rw-r--r-- 1 poddingue poddingue  41472 Sep  1 21:33 ../ltc-tools_0.7.0-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue 107180 Sep  1 21:33 ../ltc-tools-dbgsym_0.7.0-1_arm64.deb
+
+ sudo apt install -f ../ltc-tools*deb
+
+
+
+ jltcgen
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+exec of JACK server (command = "/usr/bin/jackd") failed: No such file or directory
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+jack_client_open() failed, status = 0x11
+Unable to connect to JACK server
+
+== Packaging the official Debian version, but for aarch64
+
+In order to build a binary package from source, first we need to  install necessary build tools. Depending upon the command line tool to  build the binary package, you may need to install any one of the  following packages:
+
+. dpkg-dev
+. devscripts
+
+These packages provides numerous tools to build binary packages from source code.
+
+To install "dpkg-dev", run:
+
+----
+$ sudo apt install dpkg-dev
+
+----
+
+To Install "devscripts" package, the command would be:
+
+----
+$ sudo apt install devscripts
+
+----
+
+=== Enable source repositories
+
+Make sure you have enabled the source repositories.
+
+To do so, open _/etc/apt/sources.list_ file:
+
+----
+$ sudo vim /etc/apt/sources.list
+
+----
+
+You will see some lines in it like below:
+
+----
+== See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
+== newer versions of the distribution.
+deb http://in.archive.ubuntu.com/ubuntu focal main restricted
+== deb-src http://in.archive.ubuntu.com/ubuntu focal main restricted
+[...]
+
+----
+
+In the above file, all the lines beginning with one or  two hashes (#) are just comments, for information only. And the lines  without hashes are the _apt repositories_.
+
+=== Install build dependencies for the package
+
+Next, we need to install the dependencies for that package as well. To do so, run:
+
+----
+$ sudo apt build-dep libltc11
+
+----
+
+cd libltc-1.3.1/
+poddingue@station-p1:~/libltc-1.3.1$ dpkg-buildpackage -rfakeroot -b -uc -us
+dpkg-buildpackage: info: source package libltc
+
+cd .. && ll *deb
+-rw-r--r-- 1 poddingue poddingue 13492 Sep  1 21:22 libltc11_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue 19268 Sep  1 21:22 libltc11-dbgsym_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue 13904 Sep  1 21:22 libltc-dev_1.3.1-1_arm64.deb
+-rw-r--r-- 1 poddingue poddingue 15012 Sep  1 21:22 libltc-doc_1.3.1-1_all.deb

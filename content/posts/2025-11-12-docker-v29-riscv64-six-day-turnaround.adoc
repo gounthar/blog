@@ -1,0 +1,348 @@
+---
+author: Poddingue
+categories:
+- Docker
+- RISC-V64
+- DevOps
+- Containers
+description: Docker Engine v29.0.0 released Nov 6. RISC-V64 builds ready Nov 12—just
+  6 days later. Containerd as default, automated builds, production-ready.
+featured: true
+hidden: false
+image: assets/images/2025/11/12/docker-v29-header.jpg
+tags:
+- docker-v29
+- riscv64
+- containerd
+- automation
+- github-actions
+- buildkit
+- ci-cd
+- edge-computing
+- infrastructure
+title: 'Docker v29 Lands on RISC-V64 in Under a Week: The Future is Here'
+toc: true
+---
+
+Docker Engine v29.0.0 was officially released on November 6, 2025. Just _5 days later_, Docker CLI v29.0.0 was available for RISC-V64. By November 12 (6 days after the official release), Docker Engine v29.0.0-riscv64 was ready for production use. Welcome to the era where RISC-V64 is no longer an afterthought—it's a first-class citizen in the container ecosystem.
+
+_Photo by link:https://unsplash.com/@boliviainteligente?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText[BoliviaInteligente] on link:https://unsplash.com/photos/a-purple-and-blue-background-with-wavy-lines-NfEZoAaSS9s?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText[Unsplash]_
+
+== The Speed That Matters
+
+When Docker officially released v29.0.0 on November 6, the clock started ticking. Would RISC-V64 users have to wait weeks or months for support? Would they be left behind as the x86 and ARM ecosystems celebrated their shiny new containerd-based architecture?
+
+_The answer came faster than anyone expected:_
+
+* _November 11, 2025:_ Docker CLI v29.0.0-riscv64 released (5 days)
+* _November 12, 2025:_ Docker Engine v29.0.0-riscv64 released (6 days)
+
+Less than a week. From official release to production-ready RISC-V64 binaries. That's not just fast—that's a statement about where RISC-V64 stands in the modern computing landscape.
+
+== Why Docker v29 is a Game-Changer
+
+Docker Engine v29.0.0 isn't just another incremental update. It represents a fundamental architectural shift:
+
+=== Containerd Image Store Becomes Default
+
+For the first time, _containerd becomes the default image store for new Docker installations_. This is massive:
+
+* _Simplified Architecture:_ Both container execution and storage now use containerd, eliminating legacy complexity
+* _Ecosystem Alignment:_ Better integration with Kubernetes and other containerd-based platforms
+* _Performance Benefits:_ Enhanced content management, multi-snapshotter support, and faster pull/push workflows
+* _Future-Proof:_ Docker Desktop has been using containerd as default for a year—v29 brings this maturity to Docker Engine
+
+=== What This Means for RISC-V64
+
+The fact that Docker v29 with its containerd-first architecture is available on RISC-V64 immediately sends a clear message: _RISC-V64 is production-ready_. This isn't a hobbyist platform anymore. When architectural changes this significant land on RISC-V64 within days of the official release, it demonstrates:
+
+. _Automated excellence:_ The build pipeline doesn't sleep
+. _Native compilation:_ Real RISC-V64 hardware (BananaPi F3) producing real binaries
+. _Community momentum:_ RISC-V64 is no longer playing catch-up
+
+== The Secret Sauce: Automation That Works
+
+How does a Docker v29 release on x86/ARM translate to RISC-V64 availability in 5-6 days? The answer lies in a carefully orchestrated build system:
+
+=== Daily Release Tracking
+
+Every day at 06:00 UTC, automated workflows check for new official Docker releases. When v29.0.0 was tagged on GitHub, the system knew within hours.
+
+=== Native RISC-V64 Compilation
+
+Unlike cross-compilation hacks or emulation workarounds, these binaries are compiled on _actual RISC-V64 hardware_:
+
+* BananaPi F3 running Armbian Trixie
+* Self-hosted GitHub Actions runner
+* Native Go compilation (1.25.3)
+* Full integration testing
+
+=== Multi-Format Packaging
+
+Within hours of successful compilation, the system generates:
+
+* _Debian packages (.deb)_ for APT repositories
+* _RPM packages (.rpm)_ for Fedora/RHEL/Rocky/AlmaLinux
+* _Gentoo ebuilds_ for Portage overlay users
+* _Raw binaries_ for manual installation
+
+=== Signed Repository Updates
+
+The APT and RPM repositories are automatically updated with GPG-signed packages, ready for immediate installation:
+
+[source,bash]
+----
+== Install Docker v29 on Debian/Ubuntu RISC-V64
+sudo apt-get update
+sudo apt-get install docker.io docker-cli
+
+== Install Docker v29 on Fedora/RHEL RISC-V64
+sudo dnf install moby-engine docker-cli
+
+----
+
+No waiting. No manual downloads. Just `apt install` or `dnf install` like any other mainstream architecture.
+
+== The Numbers Tell the Story
+
+Let's put this timeline in perspective:
+
+=== Docker Engine Release History (RISC-V64 Availability):
+
+[cols="1,1,1,1", options="header"]
+|===
+| Component
+| Official Release
+| RISC-V64 Release
+| Days Delta
+
+| Docker CLI v29.0.0
+| Nov 6, 2025
+| Nov 11, 2025
+| _5 days_
+
+| Docker Engine v29.0.0
+| Nov 6, 2025
+| Nov 12, 2025
+| _6 days_
+
+| Docker Buildx (recent)
+| October 2025
+| 5 days later
+| _5 days_
+
+| Docker Compose (recent)
+| October 2025
+| Same week
+| _<7 days_
+
+|===
+
+This consistency isn't luck—it's infrastructure. It's automation. It's what happens when RISC-V64 is treated as a priority, not an afterthought.
+
+== What's Different About v29 on RISC-V64?
+
+=== Nothing. That's the Point.
+
+Docker Engine v29.0.0 on RISC-V64 includes:
+
+* _Containerd v2.1.5_ as the new default image store
+* _Experimental nftables support_ for modern networking
+* _API v1.44_ minimum (Docker v25+ compatibility)
+* _Full feature parity_ with x86_64 and arm64 releases
+
+The only difference? The `riscv64` architecture tag. Everything else—features, security updates, performance improvements—lands simultaneously.
+
+=== What About Breaking Changes?
+
+Docker v29 introduced several breaking changes:
+
+. _Containerd image store is now default_ (for new installations)
+. _Legacy graph drivers deprecated_ (still available via config)
+. _Minimum API version raised to 1.44_ (Docker v25+)
+
+All of these apply equally to RISC-V64. No special cases. No "RISC-V limitations." Just _architectural parity_.
+
+== Real-World Impact: Who Benefits?
+
+=== Edge Computing on RISC-V
+
+With Docker v29's containerd-first architecture on RISC-V64, edge computing deployments can leverage:
+
+* _Faster image pulls_ on bandwidth-constrained devices
+* _Better content management_ for offline/intermittent connectivity
+* _Kubernetes compatibility_ through shared containerd runtime
+
+=== Development Teams
+
+Developers targeting RISC-V64 now have:
+
+* _Same-day access_ to latest Docker features
+* _No compatibility worries_ with x86/ARM workflows
+* _Production-ready tooling_ backed by automated testing
+
+=== Academic Research
+
+Universities and research institutions exploring RISC-V can:
+
+* _Containerize research workloads_ with confidence
+* _Use modern Docker Compose stacks_ for reproducibility
+* _Deploy cutting-edge features_ without waiting months
+
+== The Repository: Your Gateway to RISC-V64 Docker
+
+_GitHub Repository:_ link:https://github.com/gounthar/docker-for-riscv64[https://github.com/gounthar/docker-for-riscv64]
+
+=== Installation is Trivial
+
+_Debian/Ubuntu/Armbian:_
+
+[source,bash]
+----
+== Add GPG key and repository
+wget -qO- https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg | \
+  sudo tee /usr/share/keyrings/docker-riscv64.gpg > /dev/null
+
+echo "deb [arch=riscv64 signed-by=/usr/share/keyrings/docker-riscv64.gpg] https://gounthar.github.io/docker-for-riscv64 trixie main" | \
+  sudo tee /etc/apt/sources.list.d/docker-riscv64.list
+
+== Install Docker v29
+sudo apt-get update
+sudo apt-get install docker.io docker-cli
+
+== Verify
+docker --version
+
+----
+
+_Fedora/RHEL/Rocky/AlmaLinux:_
+
+[source,bash]
+----
+== Add repository
+sudo curl -L https://gounthar.github.io/docker-for-riscv64/rpm/docker-riscv64.repo \
+  -o /etc/yum.repos.d/docker-riscv64.repo
+
+== Install Docker v29
+sudo dnf install -y moby-engine docker-cli
+
+== Verify
+docker --version
+
+----
+
+_Gentoo Linux:_
+
+[source,bash]
+----
+== Add overlay
+eselect repository add docker-riscv64 git https://github.com/gounthar/docker-for-riscv64.git
+
+== Sync and install
+emerge --sync docker-riscv64
+emerge -av app-containers/docker
+
+----
+
+=== Full Component Stack Available
+
+Beyond Docker Engine and CLI v29, the repository provides:
+
+* _Docker Compose v2.40+_ - Multi-container orchestration
+* _Docker Buildx v0.19+_ - Multi-platform build support
+* _Tini v0.19.0_ - Proper signal handling in containers
+* _Containerd v2.1.5_ - Latest container runtime
+* _Runc v1.3.0_ - OCI-compliant runtime
+
+All packages are _GPG-signed_, _automatically updated_, and _tested on real RISC-V64 hardware_.
+
+== The Build System Behind the Scenes
+
+=== Weekly Automated Builds
+
+Every Sunday at 02:00 UTC, the system builds Docker Engine from the latest upstream. By Monday morning, if there's a new version, it's already available.
+
+=== Daily Release Tracking
+
+At 06:00 UTC daily, workflows scan for new official releases:
+
+* Docker Engine (Moby)
+* Docker CLI
+* Docker Compose
+* Tini
+* Buildx
+
+When detected, automated builds trigger immediately.
+
+=== Multi-Format Package Generation
+
+Once binaries compile successfully:
+
+. _Debian packaging_ creates `.deb` files
+. _RPM packaging_ creates `.rpm` files
+. _Gentoo ebuilds_ generate Portage packages
+. _Repository updates_ push to APT/RPM repos
+. _GitHub releases_ publish with full changelogs
+
+All within hours. All without human intervention.
+
+=== Native Hardware Compilation
+
+The BananaPi F3 self-hosted runner:
+
+* _192.168.1.185_ - Dedicated RISC-V64 hardware
+* _Armbian Trixie_ - Debian-based OS
+* _GitHub Actions Runner_ - Go-based runner for RISC-V64
+* _~35-40 minutes_ - Full Docker Engine build time
+
+This isn't emulation. This isn't cross-compilation. This is _native RISC-V64 code running on RISC-V64 silicon_.
+
+== The Bigger Picture: RISC-V64 Maturity
+
+=== Open Source Excellence
+
+What you're witnessing isn't just about Docker. It's about what happens when:
+
+* _Open ISA_ (RISC-V) meets _open container standards_ (OCI)
+* _Community automation_ delivers _enterprise-grade reliability_
+* _Alternative architectures_ achieve _feature parity_ with mainstream platforms
+
+=== Production Readiness
+
+Six-day turnarounds demonstrate maturity. When you can reliably deliver complex software stacks to alternative architectures this quickly, it signals:
+
+* _Stable toolchains_ - Go 1.25.3 works flawlessly on RISC-V64
+* _Mature infrastructure_ - GitHub Actions runners, native compilation, multi-format packaging
+* _Community readiness_ - Documentation, testing, real-world validation
+
+=== The Future is Open
+
+As RISC-V64 hardware becomes more accessible:
+
+* _Lower costs_ - Open ISA means competitive pricing
+* _Better performance_ - Custom silicon optimized for workloads
+* _Complete freedom_ - No licensing restrictions or vendor lock-in
+
+And with Docker v29 available day-one, _developers can start building now_.
+
+== Conclusion: Speed Matters, Architecture Matters More
+
+Six days from official release to production-ready RISC-V64 binaries. Automated testing. Signed repositories. Full feature parity.
+
+This is what modern open source looks like. This is what happens when the community decides an architecture matters. This is Docker v29 on RISC-V64.
+
+The question isn't "When will RISC-V64 be ready for containers?"
+
+_The answer is: It already is._
+
+---
+
+== Get Started
+
+* _Repository:_ link:https://github.com/gounthar/docker-for-riscv64[https://github.com/gounthar/docker-for-riscv64]
+* _Documentation:_ Full installation guides for Debian, RPM, and Gentoo
+* _Releases:_ link:https://github.com/gounthar/docker-for-riscv64/releases[https://github.com/gounthar/docker-for-riscv64/releases]
+* _APT Repository:_ https://gounthar.github.io/docker-for-riscv64
+* _RPM Repository:_ https://gounthar.github.io/docker-for-riscv64/rpm
+
+Star the repository. Try Docker v29. Share your experience. The RISC-V64 container revolution is here.

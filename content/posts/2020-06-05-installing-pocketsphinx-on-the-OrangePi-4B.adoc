@@ -1,0 +1,366 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+description: How to compile and install pocketsphinx on the OrangePi 4B running Armbian
+  ?
+draft: true
+featured: true
+hidden: false
+image: assets/images/mintty_7BHuf1Bm0d.png
+tags:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+title: 'Sphinx: Installing pocketsphinx and sphinxtrain on the OrangePi 4B'
+---
+
+This post is the second one of a series regarding generating subtitles for videos with the link:http://www.orangepi.org/Orange%20Pi%204B/[OrangePi 4B] running link:https://www.armbian.com/orange-pi-4/[Armbian].
+We're not yet sure of what we'll use to generate those subtitles, so for the time being, we'll use link:https://cmusphinx.github.io/wiki/tutorialadapt/[Sphinx], and in the following months, we'll try to setup something that will take advantage of the link:https://drive.google.com/drive/folders/1QMU5n-7fCx28cQPH_lu2L0wrFWeC3G45[NPU].
+
+Today, we'll install PocketSphinx, SphinxTrain and adapt an existing model before testing it.
+
+[TOC]
+
+
+
+== PocketSphinx
+
+[source,bash]
+----
+git clone https://github.com/cmusphinx/pocketsphinx.git
+cd pocketsphinx/
+./autogen.sh
+[...]
+config.status: executing depfiles commands
+config.status: executing libtool commands
+Now type `make' to compile the package.
+
+----
+
+Bingo! Time for a good old
+
+[source,bash]
+----
+make -j6
+make check
+[...]
+Testsuite summary for pocketsphinx 5prealpha
+============================================================================
+== TOTAL: 5
+== PASS:  5
+== SKIP:  0
+== XFAIL: 0
+== FAIL:  0
+== XPASS: 0
+== ERROR: 0
+============================================================================
+make[4]: Leaving directory '/home/poddingue/pocketsphinx/test/regression'
+
+----
+
+All went fine.
+Let's install it then:
+
+[source,bash]
+----
+ sudo -E make install
+
+----
+
+Done. Next step, install Sphinx train.
+
+== SphinxTrain
+
+[source,bash]
+----
+git clone https://github.com/cmusphinx/sphinxtrain.git
+cd sphinxtrain/
+./autogen.sh
+make -j6
+make check
+sudo -E make install
+
+----
+
+----
+mkdir en-us
+poddingue@orangepi4-armbian:~$ cd !$
+
+wget https://iweb.dl.sourceforge.net/project/cmusphinx/Acoustic%20and%20Language%20Models/US%20English/cmusphinx-en-us-5.2.tar.gz
+
+tar -xvzf cmusphinx-en-us-5.2.tar.gz cmusphinx-en-us-5.2/
+cmusphinx-en-us-5.2/
+cmusphinx-en-us-5.2/variances
+cmusphinx-en-us-5.2/README
+cmusphinx-en-us-5.2/feature_transform
+cmusphinx-en-us-5.2/feat.params
+cmusphinx-en-us-5.2/mdef
+cmusphinx-en-us-5.2/noisedict
+cmusphinx-en-us-5.2/mixture_weights
+cmusphinx-en-us-5.2/transition_matrices
+cmusphinx-en-us-5.2/means
+poddingue@orangepi4-armbian:~/en-us$ file cmusphinx-en-us-5.2/mdef
+cmusphinx-en-us-5.2/mdef: ASCII text
+poddingue@orangepi4-armbian:~/en-us$
+
+----
+
+Now that SphinxTrain has been installed, and the model has been downloaded, let's tackle with samples. Not ours. Not yet. Samples that do work.
+
+== Creating an adaptation corpus
+
+As stated in this link:https://cmusphinx.github.io/wiki/tutorialadapt/#creating-an-adaptation-corpus[tutorial], you will find files needed to create an adaptation corpus there: http://festvox.org/cmu_arctic/packed/.
+
+=== Getting the audio and transcription files to adapt the acoustic model
+
+[source,bash]
+----
+wget http://festvox.org/cmu_arctic/packed/cmu_us_bdl_arctic.tar.bz2
+wget http://festvox.org/cmu_arctic/packed/cmu_us_rms_arctic.tar.bz2
+wget http://festvox.org/cmu_arctic/packed/cmu_us_clb_arctic.tar.bz2
+bunzip2 cmu_us_bdl_arctic.tar.bz2
+bunzip2 cmu_us_clb_arctic.tar.bz2
+bunzip2 cmu_us_rms_arctic.tar.bz2
+tar -xvf cmu_us_bdl_arctic.tar
+tar -xvf cmu_us_clb_arctic.tar
+tar -xvf cmu_us_rms_arctic.tar
+
+----
+
+As Sphinx does not want any accent, we have to clean them up. Why not with this short Python script?
+
+[source,python]
+----
+import sys
+import os
+
+if len(sys.argv) < 2:
+    print("Usage : python3 genFile.py filename")
+    sys.exit()
+
+newf = open("training.transcription","w")
+newt = open("trainingTitle.fileids","w")
+fichier = open(sys.argv[1], "r")
+nline = str()
+num = str()
+
+for line in fichier:
+    num = line[2:14]
+    nline = line[15:].replace(" )","").replace("\"","").replace(",","").replace(".","").replace(";","").replace("--","").replace("\n","")
+    newf.write("<s> {line} </s> ({nom})\n".format(line=nline.lower(),nom=num))
+    newt.write("{}\n".format(num))
+
+fichier.close()
+newf.close()
+newt.close()
+os.rename("training.transcription", num+".transcription")
+os.rename("training.fileids", num+".fileids")
+poddingue@orangepi4-armbian:~/en-us$ vi config-generation.py
+poddingue@orangepi4-armbian:~/en-us$ python3 config-generation.py cmu_us_bdl_arctic/etc/txt.done.data
+poddingue@orangepi4-armbian:~/en-us$ cat config-generation.py
+import sys
+import os
+
+if len(sys.argv) < 2:
+    print("Usage : python3 genFile.py filename")
+    sys.exit()
+
+newf = open("training.transcription","w")
+newt = open("training.fileids","w")
+fichier = open(sys.argv[1], "r")
+nline = str()
+num = str()
+
+for line in fichier:
+    num = line[2:14]
+    nline = line[15:].replace(" )","").replace("\"","").replace(",","").replace(".","").replace(";","").replace("--","").replace("\n","")
+    newf.write("<s> {line} </s> ({nom})\n".format(line=nline.lower(),nom=num))
+    newt.write("{}\n".format(num))
+
+fichier.close()
+newf.close()
+newt.close()
+os.rename("training.transcription", num+".transcription")
+os.rename("training.fileids", num+".fileids")
+
+----
+
+[source,bash]
+----
+python3 config-generation.py cmu_us_bdl_arctic/etc/txt.done.data
+
+----
+
+So I now have:
+
+[source,bash]
+----
+-rw-r--r--  1 poddingue poddingue     76958 Jun  8 13:10  txt.done.data
+-rw-r--r--  1 poddingue poddingue     14703 Jun  8 13:15  trainingTitle.fileids
+-rw-r--r--  1 poddingue poddingue       688 Jun  8 13:18  config-generation.py
+drwxr-xr-x 13 poddingue poddingue      4096 Jun  8 13:18  ..
+-rw-r--r--  1 poddingue poddingue     81004 Jun  8 13:18  arctic_b0539.transcription
+-rw-r--r--  1 poddingue poddingue     14703 Jun  8 13:18  arctic_b0539.fileids
+
+----
+
+In the `.fileids` we'll find the name of the files:
+
+[source,bash]
+----
+head trainingTitle.fileids
+arctic_a0001
+arctic_a0002
+arctic_a0003
+arctic_a0004
+arctic_a0005
+arctic_a0006
+[...]
+
+----
+
+And in the `.transcription`, we'll find the text corresponding to the pronounced sentence:
+
+[source,bash]
+----
+head arctic_b0539.transcription
+<s> author of the danger trail philip steels etc </s> (arctic_a0001)
+<s> not at this particular case tom apologized whittemore </s> (arctic_a0002)
+<s> for the twentieth time that evening the two men shook hands </s> (arctic_a0003)
+<s> lord but i'm glad to see you again phil </s> (arctic_a0004)
+<s> will we ever forget it </s> (arctic_a0005)
+<s> god bless 'em i hope i'll go on seeing them forever </s> (arctic_a0006)
+<s> and you always want to see it in the superlative degree </s> (arctic_a0007)
+<s> gad your letter came just in time </s> (arctic_a0008)
+<s> he turned sharply and faced gregson across the table </s> (arctic_a0009)
+<s> i'm playing a single hand in what looks like a losing game </s> (arctic_a0010)
+
+----
+
+=== Get the sample acoustic model
+
+Let's copy the dictionary and the language model for testing:
+
+[source,bash]
+----
+cp -a /usr/local/share/pocketsphinx/model/en-us/cmudict-en-us.dict .
+cp -a /usr/local/share/pocketsphinx/model/en-us/en-us.lm.bin .
+
+----
+
+Let's copy the wav files in the current directory:
+
+[source,bash]
+----
+cp -vraxu cmu_us_bdl_arctic/wav/arctic_* .
+
+----
+
+Now let's add sphinxtrain binaries directory in the path:
+
+[source,bash]
+----
+export PATH=/usr/local/libexec/sphinxtrain:$PATH
+
+----
+
+We now have everything we need to generate files used in the training.
+
+=== Generating acoustic feature files
+
+To run the adaptation tools, we have to generate a set of acoustic model features files from the wav recordings. 
+
+[source,bash]
+----
+sphinx_fe -argfile feat.params -samprate 16000 -c arctic_b0539.fileids -di . -do . -ei wav -eo mfc -mswav yes
+
+----
+
+=== Start the adaptation
+
+To start the adaptation, you have to launch this command, but pay attention to the generated file names in the last two lines :
+
+[source,bash]
+----
+bw  -hmmdir .  -moddeffn mdef  -ts2cbfn .ptm.  -feat 1s_c_d_dd  -svspec 0-12/13-25/26-38  -cmn current  -agc none  -dictfn cmudict-en-us.dict  -ctlfn arctic_b0539.fileids  -lsnfn arctic_b0539.transcription 
+
+----
+
+If you want to setup a new training with another dataset, you just have toSi on veut relancer l'entrainement avec un autre dataset, il suffit de refaire la partie où on génére les `.mfc` et la génération des fichiers avec le programme python.
+
+=== Generate the new adapted model
+
+First of all, we have to backup the model with the command`cp -a en-us en-us-adapt` and then launch this command :
+
+[source,bash]
+----
+bw  -hmmdir en-us  -moddeffn en-us/mdef  -ts2cbfn .cont. -feat 1s_c_d_dd  -cmn current  -agc none  -dictfn en-us/cmudict-en-us.dict  -ctlfn arctic_b0539.fileids  -lsnfn en-us/arctic_b0539.transcription
+
+----
+
+== Tester le nouveau modèle
+
+Pour tester le nouveau modèle il suffit de lancer une commande avec un fichier audio en paramètre et le retour ira dans un fichier txt. Il faut aussi avoir dans le dossier le fichier `en-us.lm.bin` correspondant au language model et `cmudict-en-us.dict` qui correspond au dictionnaire.
+
+* `pocketsphinx_continuous -hmm en-us-adapt -lm en-us.lm.bin -dict cmudict-en-us.dict -infile test.wav > test.txt`
+
+== Get the samples in the right format
+
+To know if Sphinx will be able to process our files in the future, we'll feed him with audio extracted from our previous videos.
+We've done it in two steps, but it could have been done in just one.
+First step is to ask ffmpeg to extract the audio from the videos. If you know your audio track is in wav format, then issue this command:
+
+[source,bash]
+----
+ffmpeg -i input-video.avi -vn -acodec copy output-audio.wav	
+
+----
+
+If you know all of your files contain mp3, just change wav into mp3 and do it on all the videos:
+
+----
+for i in _; do ffmpeg -i "$i" "${i%._}.mp3"; done
+
+----
+
+If you don't know which format your audio is, time to issue a `ffprobe`command:
+
+[source,bash]
+----
+ffprobe -show_streams -select_streams a yourvideofile.extension
+[...]
+Stream #0:1(fra): Audio: aac (LC), 44100 Hz, stereo, fltp (default)
+
+----
+
+Here for example, we have an AAC stream at 44KHz in stereo. We could then extract it as is with
+
+[source,bash]
+----
+ffmpeg -i input.mp4 -vn -c:a copy output.m4a
+
+----
+
+Got it? Great. Now, as you have extracted all the audio from your videos, it's time to convert them to the format Sphinx wants to use:
+
+[source,bash]
+----
+for f in *.mp3; do ffmpeg -i "$f" -acodec pcm_s16le -ac 1 -ar 16000 "${f%.mp3}.wav"; done
+
+----
+
+Push them on the OrangePi 4B with:
+
+[source,bash]
+----
+scp *wav poddingue@192.168.0.46:~/en-us/samples
+
+----
+
+Download working samples with  wget http://festvox.org/cmu_arctic/packed/cmu_us_bdl_arctic.tar.bz2
+

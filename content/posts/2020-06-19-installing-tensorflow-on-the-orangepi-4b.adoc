@@ -1,0 +1,235 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+- OrangePi
+- 4B
+description: How to install TensorFlow on the Orange Pi 4B running Armbian ?
+featured: true
+hidden: false
+image: assets/images/pu7JQ6ratm.png
+tags:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+- OrangePi
+- 4B
+title: Installing TensorFlow on the Orange Pi 4B
+---
+
+This quick howto is heavily based on Orange Pi's link:http://www.orangepi.org/downloadresources/OrangePi4B/2020-01-03/orangepi3_46708b05ab3339f316305414ee.html[documentation]. To this day, link:http://www.orangepi.org/[Orange Pi] recommended versions of link:https://www.tensorflow.org/[TensorFlow] and link:https://www.python.org/downloads/[Python] are quite old:
+
+_TensorFlow_：1.14.0
+_Python environment_：python2.7
+
+== Installation of Python environment and dependencies
+
+[source,bash]
+----
+sudo apt-get install python-pip python-dev libatlas-base-dev
+[sudo] password for poddingue:
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+python-dev is already the newest version (2.7.16-1).
+The following additional packages will be installed:
+  libatlas3-base python-pip-whl
+Suggested packages:
+  libatlas-doc liblapack-doc
+Recommended packages:
+  python-all-dev python-setuptools python-wheel
+The following NEW packages will be installed:
+  libatlas-base-dev libatlas3-base python-pip python-pip-whl                                                 
+Need to get 7,168 kB of archives.                                                                           
+After this operation, 40.1 MB of additional disk space will be used.                                        
+Do you want to continue? [Y/n]                                                                              
+Get:1 http://debian.proxad.net/debian buster/main arm64 libatlas3-base arm64 3.10.3-8 [2,409 kB]            
+Get:2 http://debian.proxad.net/debian buster/main arm64 libatlas-base-dev arm64 3.10.3-8 [2,954 kB]         
+Get:3 http://debian.proxad.net/debian buster/main arm64 python-pip-whl all 18.1-5 [1,591 kB]
+Get:4 http://debian.proxad.net/debian buster/main arm64 python-pip all 18.1-5 [215 kB]
+Fetched 7,168 kB in 1s (8,178 kB/s)
+Selecting previously unselected package libatlas3-base:arm64.
+(Reading database ... 112671 files and directories currently installed.)
+Preparing to unpack .../libatlas3-base_3.10.3-8_arm64.deb ...
+Unpacking libatlas3-base:arm64 (3.10.3-8) ...
+Selecting previously unselected package libatlas-base-dev:arm64.
+Preparing to unpack .../libatlas-base-dev_3.10.3-8_arm64.deb ...
+Unpacking libatlas-base-dev:arm64 (3.10.3-8) ...
+Selecting previously unselected package python-pip-whl.
+Preparing to unpack .../python-pip-whl_18.1-5_all.deb ...
+Unpacking python-pip-whl (18.1-5) ...
+Selecting previously unselected package python-pip.
+Preparing to unpack .../python-pip_18.1-5_all.deb ...
+Unpacking python-pip (18.1-5) ...
+Setting up libatlas3-base:arm64 (3.10.3-8) ...
+update-alternatives: using /usr/lib/aarch64-linux-gnu/atlas/libblas.so.3 to provide /usr/lib/aarch64-linux-gnu/libblas.so.3 (libblas.so.3-aarch64-linux-gnu) in auto mode
+update-alternatives: using /usr/lib/aarch64-linux-gnu/atlas/liblapack.so.3 to provide /usr/lib/aarch64-linux-gnu/liblapack.so.3 (liblapack.so.3-aarch64-linux-gnu) in auto mode
+Setting up libatlas-base-dev:arm64 (3.10.3-8) ...
+update-alternatives: using /usr/lib/aarch64-linux-gnu/atlas/libblas.so to provide /usr/lib/aarch64-linux-gnu/libblas.so (libblas.so-aarch64-linux-gnu) in auto mode
+update-alternatives: using /usr/lib/aarch64-linux-gnu/atlas/liblapack.so to provide /usr/lib/aarch64-linux-gnu/liblapack.so (liblapack.so-aarch64-linux-gnu) in auto mode
+Setting up python-pip-whl (18.1-5) ...
+Setting up python-pip (18.1-5) ...
+Processing triggers for man-db (2.8.5-2) ...
+Processing triggers for libc-bin (2.28-10) ...
+
+
+----
+
+== Install TensorFlow
+
+There are several ways to install TensorFlow, but here we will install if from a downloaded binary.
+Download the PIP installation package for TensorFlow from the following page: https://github.com/lhelontra/tensorflow-on-arm/releases/tag/v1.14.0 .
+
+This should give something like:
+
+[source,bash]
+----
+curl "https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.14.0/tensorflow-1.14.0-cp27-none-linux_aarch64.whl" --output tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+
+----
+
+Now, let's use PIP to install TensorFlow.
+
+[source,bash]
+----
+pip install tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+Processing ./tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+Collecting keras-preprocessing>=1.0.5 (from tensorflow==1.14.0)
+  Downloading https://files.pythonhosted.org/packages/79/4c/7c3275a01e12ef9368a892926ab932b33bb13d55794881e3573482b378a7/Keras_Preprocessing-1.1.2-py2.py3-none-any.whl (42kB)
+    100% |████████████████████████████████| 51kB 2.5MB/s
+Collecting enum34>=1.1.6 (from tensorflow==1.14.0)
+  Downloading https://files.pythonhosted.org/packages/6f/2c/a9386903ece2ea85e9807e0e062174dc26fdce8b05f216d00491be29fad5/enum34-1.1.10-py2-none-any.whl
+Collecting wheel (from tensorflow==1.14.0)
+  Downloading https://files.pythonhosted.org/packages/8c/23/848298cccf8e40f5bbb59009b32848a4c38f4e7f3364297ab3c3e2e2cd14/wheel-0.34.2-py2.py3-none-any.whl
+Collecting wrapt>=1.11.1 (from tensorflow==1.14.0)
+  Downloading https://files.pythonhosted.org/packages/82/f7/e43cefbe88c5fd371f4cf0cf5eb3feccd07515af9fd6cf7dbf1d1793a797/wrapt-1.12.1.tar.gz
+    Complete output from command python setup.py egg_info:
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ImportError: No module named setuptools
+----------------------------------------
+Command "python setup.py egg_info" failed with error code 1 in /tmp/pip-install-Dd0045/wrapt/
+
+----
+
+Of course...
+
+[source,bash]
+----
+sudo apt-get install -y python-setuptools
+[...]
+  error: invalid command 'bdist_wheel'
+
+----
+
+Damn!
+
+[source,bash]
+----
+pip install wheel
+
+----
+
+And 
+
+[source,bash]
+----
+export PATH=$PATH:/home/poddingue/.local/bin
+
+----
+
+ in `~/.bashrc`, because of 
+
+[source,bash]
+----
+pip install wheel
+Collecting wheel
+  Using cached https://files.pythonhosted.org/packages/8c/23/848298cccf8e40f5bbb59009b32848a4c38f4e7f3364297ab3c3e2e2cd14/wheel-0.34.2-py2.py3-none-any.whl
+Installing collected packages: wheel
+  The script wheel is installed in '/home/poddingue/.local/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+Successfully installed wheel-0.34.2
+
+----
+
+Let's issue once more `
+
+[source,bash]
+----
+pip install tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+
+​    error: libhdf5.so: cannot open shared object file: No such file or directory
+
+----
+
+Bad luck.
+
+[source,bash]
+----
+Command "/usr/bin/python -u -c "import setuptools, tokenize;__file__='/tmp/pip-install-irkqLB/h5py/setup.py';f=getattr(tokenize, 'open', open)(__file__);code=f.read().replace('\r\n', '\n');f.close();exec(compile(code, __file__, 'exec'))" install --record /tmp/pip-record-N9oIr_/install-record.txt --single-version-externally-managed --compile --user --prefix=" failed with error code 1 in /tmp/pip-install-irkqLB/h5py/
+
+----
+
+Something must be missing...
+
+[source,bash]
+----
+Command "/usr/bin/python -u -c "import setuptools, tokenize;__file__='/tmp/pip-install-irkqLB/h5py/setup.py';f=getattr(tokenize, 'open', open)(__file__);code=f.read().replace('\r\n', '\n');f.close();exec(compile(code, __file__, 'exec'))" install --record /tmp/pip-record-N9oIr_/install-record.txt --single-version-externally-managed --compile --user --prefix=" failed with error code 1 in /tmp/pip-install-irkqLB/h5py/
+
+----
+
+Not better...
+I think the machine is trying to tell me something... A missing library perhaps?
+
+[source,bash]
+----
+sudo apt install python-h5py
+pip install tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+[...]
+Successfully installed astor-0.8.1 backports.weakref-1.0.post1 funcsigs-1.0.2 gast-0.3.3 google-pasta-0.2.0 keras-applications-1.0.8 mock-3.0.5 tensorflow-1.14.0 tensorflow-estimator-1.14.0 termcolor-1.1.0
+rm tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+
+----
+
+It worked!
+
+Now, let's edit a test.py file:
+
+[source,python]
+----
+import tensorflow as tf
+hello = tf.constant('Hello, TensorFlow!')
+#sess = tf.Session()
+sess = tf.compat.v1.Session()
+print(sess.run(hello))
+
+----
+
+[source,bash]
+----
+python test.py
+Hello, TensorFlow!
+
+----
+
+We all have to start somewhere, don't we?
+
+== TL;DR
+
+[source,bash]
+----
+sudo apt-get install -y python-setuptools python-h5py python-pip python-dev libatlas-base-dev
+curl -L "https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.14.0/tensorflow-1.14.0-cp27-none-linux_aarch64.whl" --output tensorflow-1.14.0-cp27-none-linux_aarch64.whll
+pip install wheel
+pip install tensorflow-1.14.0-cp27-none-linux_aarch64.whl
+cat >> ~/.bashrc
+  export PATH=$PATH:/home/poddingue/.local/bin
+  CTRL+D
+source ~/.bashrc
+
+----
+

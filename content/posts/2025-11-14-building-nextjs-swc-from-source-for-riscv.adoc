@@ -1,0 +1,444 @@
+---
+author: Bruno Verachten
+categories:
+- riscv
+- nextjs
+- rust
+date: 2025-11-14 22:00:00 +0000
+description: How I built Next.js's native SWC compiler from source on riscv64 hardware,
+  navigated cryptography dependency nightmares, and discovered workarounds that actually
+  work
+excerpt: 'Picture this: You''ve got Next.js running on riscv64 architecture, but it''s
+  painfully slow because you''re stuck using Babel instead of the blazing-fast SWC
+  compiler. Why? Because nobody''s built the native binaries for your exotic architecture.
+  So you decide to build them yourself.'
+featured: true
+image: assets/images/2025/11/14/nextjs-swc-riscv-header.jpg
+tags:
+- risc-v
+- next.js
+- swc
+- rust
+- banana-pi-f3
+- native-compilation
+- ring-dependency
+- embedded-systems
+- compilation
+title: 'Building Next.js SWC from Source for RISC-V: A Journey Through the ring Dependency
+  Maze'
+---
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: /mnt/c/support/users/dev/riscv/nextjs-riscv64/journal/session_2025-11-14_2200.adoc
+Conversion date: 2025-11-24
+-->
+
+Picture this: You've got Next.js running on riscv64 architecture, but it's painfully slow because you're stuck using Babel instead of the blazing-fast SWC compiler. Why? Because nobody's built the native binaries for your exotic architecture. So you decide to build them yourself. Then you discover that a cryptography library called `ring` refuses to compile. This is that story—complete with workarounds, 4-hour compilation times, and the kind of technical detective work that makes embedded systems development both frustrating and deeply satisfying.
+
+== The Problem: When Fast Isn't Fast Enough
+
+Here's the thing: I got Next.js working on riscv64. Pages Router, API routes, static generation—the whole nine yards. It was a victory worth celebrating.
+
+But then I looked at the build times.
+
+Sixty seconds to compile a simple Next.js app. _Sixty seconds._ That's what happens when you're forced to use Babel as a fallback because the `@next/swc` native binaries don't exist for your architecture.
+
+For context, the same build with native SWC binaries on x64? Three to four seconds. That's a 15-20x performance difference. (If you're doing it for fun, there better be at least a 10x speed-up, right?)
+
+=== Why SWC Matters
+
+SWC (Speedy Web Compiler) is written in Rust and compiles JavaScript/TypeScript dramatically faster than Babel. It's not just faster—it's _necessary_ for modern Next.js:
+
+* _Next.js 13.5.6 and below_: Babel fallback works (barely)
+* _Next.js 14.x+_: SWC required, Babel fallback broken
+* _Next.js 15.x+_: SWC mandatory, no alternatives
+
+So if you want to use modern Next.js features—especially App Router—you absolutely need native SWC binaries for your architecture. No way around it.
+
+The only solution? Build them myself from source on actual riscv64 hardware.
+
+== The Build Environment: Real RISC-V Hardware
+
+Before we dive into the dependency nightmare, let me set the scene.
+
+_Hardware_: Banana Pi F3
+
+* _Architecture_: riscv64 (64-bit RISC-V)
+* _CPU_: 8 cores
+* _RAM_: 15GB
+* _OS_: Debian 13 (Trixie)
+* _gcc_: 14.2.0
+
+This isn't cross-compilation from an x64 machine. This is _native_ compilation on actual riscv64 hardware, which gives us the best compatibility and avoids the typical cross-compilation headaches. The tradeoff? Compilation is slower. Much slower.
+
+=== Software Stack
+
+* _Node.js_: v24.11.1 (from my link:https://github.com/gounthar/unofficial-builds[nodejs-unofficial-builds] project)
+* _Rust_: 1.91.1 (stable)
+* _Rust nightly_: nightly-2023-10-06-riscv64gc-unknown-linux-gnu (required by Next.js)
+* _pnpm_: 10.22.0
+* _Next.js source_: v13.5.6
+
+Why the specific nightly toolchain? Next.js's SWC package has a `rust-toolchain` file that pins the exact version needed. This ensures consistent builds across platforms.
+
+== The Initial Build Attempt: Too Easy to Be True
+
+Let's start with what _should_ have worked.
+
+=== Step 1: Install Rust
+
+[source,bash]
+----
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+rustc --version  # rust 1.91.1
+
+----
+
+Smooth sailing. Two minutes.
+
+=== Step 2: Install Build Dependencies
+
+[source,bash]
+----
+sudo apt-get update
+sudo apt-get install -y build-essential gcc g++ make pkg-config libssl-dev git
+
+----
+
+No issues. Standard stuff.
+
+=== Step 3: Clone Next.js
+
+[source,bash]
+----
+cd ~
+git clone https://github.com/vercel/next.js.git
+cd next.js
+git checkout v13.5.6
+
+----
+
+Five minutes to clone 25,901 files. My internet was feeling generous.
+
+=== Step 4: Install the Nightly Toolchain
+
+[source,bash]
+----
+rustup toolchain install nightly-2023-10-06-riscv64gc-unknown-linux-gnu
+
+----
+
+Three minutes. Rust's toolchain management is genuinely excellent.
+
+=== Step 5: Install Node Dependencies
+
+[source,bash]
+----
+cd ~/next.js
+pnpm install --ignore-scripts
+
+----
+
+One minute, but with warnings about `turbo` not supporting riscv64. Expected—Turbo is Next.js's build tool, and it doesn't have riscv64 binaries. But we're building SWC, not Turbo, so we can ignore this.
+
+=== Step 6: Build SWC
+
+This is where it should all come together.
+
+[source,bash]
+----
+cd ~/next.js/packages/next-swc
+pnpm build-native
+
+----
+
+And... failure.
+
+----
+Error: Cannot find module '@napi-rs/cli'
+
+----
+
+Huh. The `pnpm build-native` script depends on `@napi-rs/cli`, which apparently wasn't installed. I could track down why, but there's a simpler approach: use `cargo` directly.
+
+== The Ring Problem: When Cryptography Ruins Your Day
+
+Let's be honest: cryptography libraries are notoriously difficult to build. They have assembly optimizations, platform-specific code, and all kinds of assumptions about supported architectures.
+
+I tried building with Cargo:
+
+[source,bash]
+----
+cd ~/next.js/packages/next-swc
+cargo build --release
+
+----
+
+Progress! I watched as Cargo fetched dependencies and started compiling. It got through about 20 crates, then...
+
+----
+   Compiling ring v0.16.20
+error: called `Option::unwrap()` on a `None` value
+ --> /home/poddingue/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ring-0.16.20/build.rs:...
+
+----
+
+Ouch.
+
+=== What Is ring?
+
+The `ring` crate is a cryptography library written in Rust. It's used for TLS connections, encryption, and all manner of security-related functionality. Version 0.16.20 was released back when riscv64 was still experimental, and it simply doesn't have support for the architecture.
+
+Here's the dependency chain that brought it into the build:
+
+----
+ring v0.16.20
+  ← rustls
+    ← hyper-rustls
+      ← reqwest
+        ← turbo-tasks-fetch (part of Next.js's Turbopack)
+
+----
+
+So ring is a transitive dependency several levels deep. It's needed for `reqwest` (an HTTP client library) to support TLS connections.
+
+=== Why Can't We Just Update ring?
+
+Good question! ring v0.17+ has riscv64 support. But here's the problem: all the crates in the dependency chain would need to be updated together:
+
+. `rustls` would need to update to ring v0.17+
+. `hyper-rustls` would need to update to the new rustls
+. `reqwest` would need to update to the new hyper-rustls
+. Next.js would need to update its dependencies
+
+That's a multi-month effort involving coordination across multiple projects. Not exactly a quick fix.
+
+== The Workaround: Disable Default Features
+
+Now, before I sound too harsh on the ring crate, let's think about this logically.
+
+Do we _actually_ need TLS support to compile Next.js?
+
+TLS is for making HTTPS requests. Turbopack uses `reqwest` for fetching remote resources. But when we're compiling Next.js itself, we're not fetching anything over HTTPS—we already have all the source code locally.
+
+So what if we just... skip the TLS features?
+
+=== The Magic Flag
+
+[source,bash]
+----
+cargo build --release --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+Let's break this down:
+
+* `--manifest-path crates/napi/Cargo.toml`: Build only the NAPI bindings (the Node.js FFI layer)
+* `--no-default-features`: Skip default features—which includes `rustls-tls`
+
+By skipping default features, we avoid pulling in `rustls`, which avoids `ring`, which avoids the riscv64 compilation failure.
+
+Does this mean we lose functionality? Potentially—but only in Turbopack's HTTP client, which we're not using during the SWC compilation process. The SWC compiler itself doesn't need TLS.
+
+=== Documenting the Discovery
+
+I documented this finding in link:https://github.com/gounthar/nextjs-riscv64/issues/9[Issue #9: ring crate compilation failure on riscv64]. It includes:
+
+* The exact error message
+* The dependency chain analysis
+* The workaround validation
+* Long-term solution options (update to ring v0.17+, or use `native-tls` feature)
+
+Why create an issue for a workaround? Because this will bite others trying to build SWC on riscv64. Searchable documentation helps the community.
+
+== The Build Process: Watching Paint Dry (In Real Time)
+
+With the `--no-default-features` workaround in hand, I kicked off the build:
+
+[source,bash]
+----
+cd ~/next.js/packages/next-swc
+source "$HOME/.cargo/env"
+cargo build --release --manifest-path crates/napi/Cargo.toml --no-default-features
+
+----
+
+And then I waited.
+
+And waited.
+
+=== Build Timeline
+
+_Phase 1: Dependency Resolution_ (10-20 minutes)
+
+Cargo fetches and verifies hundreds of crates from crates.io. Each dependency gets downloaded, checksummed, and extracted.
+
+_Phase 2: Compilation_ (2-3 hours)
+
+This is where the Rust compiler earns its keep. It compiles:
+
+* SWC's core parsing and transformation logic
+* All the JavaScript/TypeScript AST handling
+* NAPI bindings to bridge Rust and Node.js
+* Hundreds of transitive dependencies
+
+On an 8-core riscv64 machine, this takes time. Lots of time.
+
+_Expected Output_:
+
+----
+/home/poddingue/next.js/target/release/libnext_swc_napi.so
+
+----
+
+That `.so` file is the native SWC binary for riscv64. It's the key to unlocking 15-20x faster builds.
+
+=== What I Did While Waiting
+
+I wrote documentation. Specifically, I created `docs/BUILDING-SWC.md`—a comprehensive guide covering:
+
+* Prerequisites (Rust, pnpm, system dependencies)
+* Step-by-step build process
+* The ring workaround (with Issue #9 reference)
+* Installation options (system-wide or per-project)
+* Testing procedures
+* Performance comparison (Babel vs SWC)
+* Troubleshooting section
+
+This documentation captures the _actual_ build experience, not just theoretical steps. It includes the failures, the workarounds, and the real-world timings on riscv64 hardware.
+
+== Lessons Learned (So Far)
+
+Here's where things get meta. The build was still running when I documented this work, so I can't tell you the triumphant ending yet. But I can tell you what I learned along the way.
+
+=== 1. Native Compilation Beats Cross-Compilation (Usually)
+
+Cross-compiling from x64 to riscv64 would be faster for the initial build. But it introduces subtle compatibility issues:
+
+* Toolchain mismatches
+* Library linking problems
+* Runtime crashes on actual hardware
+
+Building natively on riscv64 is slower, but the resulting binary is guaranteed to work correctly. For something as critical as a compiler, I'll take "slow but correct" over "fast but broken."
+
+=== 2. Dependency Chains Are Long (Really Long)
+
+Modern software is built on layers of dependencies. SWC depends on hundreds of crates, each with their own dependencies. One unsupported crate five levels deep can break the entire build.
+
+This is why `--no-default-features` is so powerful: it lets you selectively disable functionality you don't need, avoiding problematic dependencies.
+
+=== 3. Documentation During the Process Beats Documentation After
+
+I wrote the `BUILDING-SWC.md` guide while the build was running, capturing:
+
+* Commands I actually ran
+* Errors I actually encountered
+* Workarounds that actually worked
+* Timings on real hardware
+
+This "live" documentation is more valuable than retrospective documentation because it includes the context and decision-making process.
+
+=== 4. Issues Are Living Documentation
+
+Issue #9 isn't just a bug report—it's searchable documentation for anyone else hitting the ring compilation problem. It includes:
+
+* The exact error message (for search engines)
+* Root cause analysis
+* Validated workaround
+* Links to upstream issues
+* Long-term solution options
+
+Future developers will find this via Google and save hours of debugging.
+
+== What's Next
+
+As I write this, the SWC build is still compiling on the Banana Pi F3. Here's what happens next:
+
+=== When the Build Completes
+
+. _Verify the binary exists_:
+
+[source,bash]
+----
+ls -lh ~/next.js/target/release/libnext_swc_napi.so
+
+----
+
+. _Copy to test project_:
+
+[source,bash]
+----
+mkdir -p tests/pages-router/node_modules/@next/swc-linux-riscv64-gnu/
+cp ~/next.js/target/release/libnext_swc_napi.so \
+   tests/pages-router/node_modules/@next/swc-linux-riscv64-gnu/next-swc.linux-riscv64-gnu.node
+
+----
+
+. _Test with Pages Router_:
+
+[source,bash]
+----
+cd tests/pages-router
+npm run build
+
+----
+
+. _Test with App Router_:
+
+[source,bash]
+----
+cd tests/app-router
+npm run build
+
+----
+
+. _Measure performance_:
+
+Compare build times between Babel fallback (~60s) and native SWC (expected ~3-4s).
+
+=== If the Build Succeeds
+
+* Update Issue #1 (Runtime Testing) with native SWC results
+* Document performance improvements
+* Create release with prebuilt binaries
+* Share findings with Next.js and SWC communities
+
+=== If the Build Fails
+
+* Investigate error logs
+* Try alternative approaches (native-tls feature, ring v0.17 backport)
+* Document failure modes
+* Consider cross-compilation as fallback
+
+== Takeaways & Tips for the Team
+
+* _Build on actual hardware when possible_ - Cross-compilation is faster but native builds avoid subtle compatibility issues
+* _Use `--no-default-features` strategically_ - Skip optional dependencies that don't support your target architecture
+* _Document while you wait_ - Long build times are perfect for writing guides based on fresh experience
+* _Create searchable issues for workarounds_ - Future developers will thank you (and search engines will find them)
+* _Pin exact toolchain versions_ - Rust nightly changes frequently; the `rust-toolchain` file prevents surprises
+* _Expect 2-4 hour builds on riscv64_ - Embedded systems are slower but getting faster; patience is part of the game
+
+== Related Resources
+
+* Project Repository: link:https://github.com/gounthar/nextjs-riscv64[https://github.com/gounthar/nextjs-riscv64]
+* Issue #9 (ring problem): link:https://github.com/gounthar/nextjs-riscv64/issues/9[https://github.com/gounthar/nextjs-riscv64/issues/9]
+* PR #8 (Babel fallback): link:https://github.com/gounthar/nextjs-riscv64/pull/8[https://github.com/gounthar/nextjs-riscv64/pull/8]
+* Building Guide: `docs/BUILDING-SWC.md`
+* Node.js Unofficial Builds: link:https://github.com/gounthar/unofficial-builds[https://github.com/gounthar/unofficial-builds]
+
+== Final Thoughts
+
+There's something deeply satisfying about building software from source on exotic architectures. Yes, it's slower. Yes, you hit weird dependency issues. Yes, you spend hours waiting for compilation.
+
+But when that binary finally compiles, and when you copy it into your test project, and when you run `npm run build` and see it complete in 3 seconds instead of 60?
+
+That's worth it.
+
+Now if you'll excuse me, I need to check if that build finished yet.
+
+_(To be continued in tomorrow's work: Did the build succeed? How much faster is native SWC? Does App Router finally work? Stay tuned.)_
+
+---

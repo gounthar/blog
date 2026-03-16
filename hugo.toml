@@ -1,0 +1,99 @@
+baseURL = "https://bruno.verachten.fr"
+languageCode = "en"
+title = "bruno.verachten.fr"
+# No external theme — layouts are in layouts/
+summaryLength = 30
+timeZone = "Europe/Paris"
+enableRobotsTXT = true
+
+# Google Analytics (legacy UA — migrate to GA4 when ready)
+[services.googleAnalytics]
+  ID = "UA-46278016-1"
+
+[permalinks]
+  [permalinks.page]
+    posts = "/:year/:month/:day/:title/"
+  [permalinks.section]
+    posts = "/:year/:month/:day/:title/"
+
+[taxonomies]
+  category = "categories"
+  tag = "tags"
+
+[pagination]
+  pagerSize = 6
+  # Hugo generates /page/2/ etc. Jekyll used /page2/
+  # We create server-side aliases via layouts/partials/pagination-aliases.html
+  path = "page"
+
+# AsciiDoc rendering via external asciidoctor binary
+[markup.asciidocExt]
+  backend = "html5"
+  extensions = []
+  failureLevel = "fatal"
+  noHeaderOrFooter = true
+  preserveTOC = true
+  safeMode = "unsafe"
+  sectionNumbers = false
+  trace = false
+  verbose = false
+  workingFolderCurrent = true
+  [markup.asciidocExt.attributes]
+    "source-highlighter" = "rouge"
+    "icons" = "font"
+    "sectanchors" = ""
+    "experimental" = ""
+
+# Syntax highlighting (Chroma — Hugo built-in)
+[markup.highlight]
+  style = "monokai"
+  lineNos = false
+  lineNumbersInTable = true
+  guessSyntax = true
+
+[markup.goldmark.renderer]
+  unsafe = true
+
+[params]
+  description = "Articles regarding my daily work and my tinkering at home"
+  logo = "assets/images/logo.png"
+  favicon = "assets/images/logo.png"
+  author = "Bruno Verachten"
+  authorGravatar = "f619f6978eab84209620fcf3543c63b9"
+  authorEmail = "bruno@verachten.fr"
+  authorTwitter = "https://twitter.com/poddingue"
+  adsense = "disabled"
+  adsenseClient = "ca-pub-3412143450191416"
+  adsenseSlot = "1363087678"
+  lazyImages = false
+  youtubeURL = "https://www.youtube.com/channel/UCyrSW5yzz1gAHzN567cE2YA"
+
+# RSS feed at /feed.xml to match Jekyll
+[outputFormats.RSS]
+  mediaType = "application/rss+xml"
+  baseName = "feed"
+
+[outputs]
+  home = ["HTML", "RSS"]
+  section = ["HTML"]
+  taxonomy = ["HTML"]
+  term = ["HTML"]
+
+[sitemap]
+  changeFreq = ""
+  filename = "sitemap.xml"
+  priority = -1
+
+# Ignore files
+[build]
+  [build.buildStats]
+    enable = false
+
+ignoreFiles = ["CLAUDE\\.md$", "CONTEXT\\.md$", "\\.env$"]
+
+# Security: allow asciidoctor binary
+[security]
+  [security.exec]
+    allow = ['^(dart-)?sass(-embedded)?$', '^go$', '^git$', '^npx$', '^postcss$', '^tailwindcss$', '^asciidoctor$']
+    osEnv = ['(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE|PROGRAMDATA|GEM_PATH|GEM_HOME|RUBY\w+)$']
+

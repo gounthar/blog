@@ -1,0 +1,311 @@
+---
+author: Bruno Verachten
+categories:
+- docker
+- node.js
+- risc-v
+- riscv64
+- qemu
+- github-actions
+date: 2026-02-16 00:00:00 +0100
+description: How and why I built unofficial Node.js Docker images for RISC-V 64-bit,
+  filling the gap until official support lands.
+excerpt: Building unofficial Node.js Docker images for RISC-V 64-bit to fill the gap
+  until official support arrives. Learn how the images are structured, how the CI
+  pipeline works, and how to use them.
+featured: true
+hidden: false
+image: assets/images/2026/02/16/docker-captain-article-header.jpg
+tags:
+- docker
+- node.js
+- risc-v
+- riscv64
+- qemu
+- github-actions
+title: Running Node.js on RISC-V with Docker (when there's no official image yet)
+---
+
+image::/assets/images/2026/02/16/docker-captain-article-header.jpg[Bridge under construction over water]
+
+_Photo by link:https://unsplash.com/@tatiana_p?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText[Tatiana P] on link:https://unsplash.com/photos/a-large-bridge-spanning-over-a-large-body-of-water-UfFSO6JOlKE[Unsplash]_
+
+You know that moment when you try `docker pull node --platform linux/riscv64` and Docker comes back with this?
+
+----
+Using default tag: latest
+Error response from daemon: no matching manifest for linux/riscv64 in the manifest list entries:
+no match for platform in manifest: not found
+
+----
+
+Not exactly a warm welcome.
+
+If you've been watching the RISC-V world lately, you know the software story is catching up fast. Kernel support has been there for years, Debian and Fedora ship riscv64 builds, and boards like the Banana Pi F3 or StarFive VisionFive 2 are sitting on people's desks running real workloads. But the official Node.js Docker images? They don't support riscv64. Not yet. There's work happening upstream to change that, but we're not there today.
+
+So I built my own.
+
+== The problem (a.k.a. "why can't I just apt install?")
+
+I maintain a set of link:https://github.com/gounthar/unofficial-builds[unofficial Node.js builds for riscv64]. These are native builds, compiled on actual RISC-V hardware (a Banana Pi F3 with 8 cores and 16GB of RAM, because if it's too easy, it's no fun, right?), packaged as tarballs, `.deb`, and `.rpm` files, and published as GitHub Releases. Node.js 22 LTS and 24 Current are available today.
+
+The builds work well. But distributing raw tarballs has friction. People who get their hands on a RISC-V board typically have a clean Debian or Fedora install. Their distro might ship Node.js 18. Maybe they installed a vendor-specific build. They don't want to mess with that. They want isolation.
+
+Others don't have RISC-V hardware at all. They want to test their Node.js application against riscv64 before their CI environment supports it, or before they deploy to a RISC-V server. QEMU handles that.
+
+In both cases, Docker is the answer.
+
+== What we ship
+
+The images live on Docker Hub at link:https://hub.docker.com/r/gounthar/node-riscv64[`gounthar/node-riscv64`]. Two variants per version:
+
+[cols="1,1,1", options="header"]
+|===
+| Tag
+| Base
+| What's inside
+
+| `24.13.1-trixie`
+| `buildpack-deps:trixie`
+| Node.js 24 + npm + Yarn + gcc, g++, make, python3 (~522 MB)
+
+| `24.13.1-trixie-slim`
+| `debian:trixie-slim`
+| Node.js 24 + npm + Yarn, minimal footprint (~80 MB)
+
+| `22.22.0-trixie`
+| `buildpack-deps:trixie`
+| Node.js 22 LTS + npm + Yarn + build tools (~523 MB)
+
+| `22.22.0-trixie-slim`
+| `debian:trixie-slim`
+| Node.js 22 LTS + npm + Yarn, minimal footprint (~80 MB)
+
+|===
+
+You'll notice there's no `latest` tag. That's on purpose, at least for now. The first images were pushed today via manual workflow dispatch, and the CI pipeline only creates `latest` and `slim` floating tags on actual GitHub Release events. The next release will add them.
+
+But honestly? You shouldn't use `latest` anyway. Friends don't let friends use `latest`. It's a moving target that tells you nothing about what you're running. Your build works on Tuesday, breaks on Thursday, and you have no idea what changed because `latest` silently moved from 22.x to 24.x under your feet. Pin your versions. `24.13.1-trixie` means you know exactly what you're getting, and your Dockerfile stays reproducible six months from now. `latest` is a convenience for quick demos and local experiments, not for anything you'd put in production or commit to a repo.
+
+The full variant is for development: you can `npm install` native addons without extra setup. The slim variant is for production or when image size matters.
+
+Quick smoke test:
+
+[source,bash]
+----
+docker run --platform linux/riscv64 gounthar/node-riscv64:24.13.1-trixie node -e "console.log(process.arch)"
+== riscv64
+
+----
+
+If you're on an x86_64 or ARM machine, Docker uses QEMU under the hood to emulate riscv64. It's slower than native, but it works.
+
+== How the Dockerfiles are structured
+
+=== The full variant
+
+We adapted the Dockerfiles from the upstream link:https://github.com/nodejs/docker-node[`nodejs/docker-node`] project. The approach is the same one the official images use for x86_64 and ARM: download a pre-built binary, verify checksums, extract to `/usr/local/`, install Yarn, set up the entrypoint.
+
+The full variant is pretty straightforward:
+
+[source,dockerfile]
+----
+FROM buildpack-deps:trixie
+
+ARG NODE_VERSION=24.13.1
+ARG NODE_DOWNLOAD_URL=https://github.com/gounthar/unofficial-builds/releases/download
+
+RUN set -ex \
+  && curl -fsSLO "${NODE_DOWNLOAD_URL}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-riscv64.tar.xz" \
+  && curl -fsSLO "${NODE_DOWNLOAD_URL}/v${NODE_VERSION}/SHASUMS256.txt" \
+  && grep " node-v${NODE_VERSION}-linux-riscv64.tar.xz\$" SHASUMS256.txt | sha256sum -c - \
+  && tar -xJf "node-v${NODE_VERSION}-linux-riscv64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
+  && rm "node-v${NODE_VERSION}-linux-riscv64.tar.xz" SHASUMS256.txt \
+  && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
+  && node --version \
+  && npm --version
+
+----
+
+Nothing exotic. The binaries come from our own GitHub Releases instead of nodejs.org, and we verify them with the SHA256 checksums published alongside each release.
+
+=== The slim variant (where it gets interesting)
+
+The slim variant uses a technique borrowed from the official Node.js images to keep the final image small. After installing Node.js, it uses `ldd` to figure out which shared libraries the binaries actually need at runtime, marks only those packages as manually installed, then runs `apt-get purge --auto-remove` to strip everything else:
+
+[source,bash]
+----
+apt-mark auto '.*' > /dev/null
+find /usr/local -type f -executable -exec ldd '{}' ';' \
+  | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); print so }' \
+  | sort -u \
+  | xargs -r dpkg-query --search \
+  | cut -d: -f1 \
+  | sort -u \
+  | xargs -r apt-mark manual
+apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
+
+----
+
+Why am I showing you this gnarly pipeline? Because I find it genuinely clever. It also removes OpenSSL architecture-specific files for platforms other than riscv64, since they're dead weight in a single-arch image.
+
+== The CI pipeline
+
+=== From release to Docker Hub
+
+Every time we create a GitHub Release (which happens when a new Node.js version comes out or we rebuild an existing one), a GitHub Actions workflow kicks in:
+
+. Verifies the release contains a `node-v*-linux-riscv64.tar.xz` tarball
+. Sets up QEMU for riscv64 emulation
+. Sets up Docker Buildx for cross-platform builds
+. Builds both the full and slim images targeting `linux/riscv64`
+. Pushes to Docker Hub with version-specific tags
+. Updates the `latest` and `slim` floating tags (only for actual releases, not manual rebuilds)
+. Syncs the Docker Hub repository description from a README file in the repo
+
+The workflow runs on standard `ubuntu-latest` GitHub runners. No RISC-V hardware needed for the Docker build step; QEMU handles it. The actual Node.js compilation happened earlier on the Banana Pi F3; this workflow just packages the result.
+
+One detail I'm particularly proud of: the floating `latest` and `slim` tags only get updated on release events, not on manual workflow dispatches. This prevents someone (me, probably) from accidentally rebuilding an older version and overwriting the latest tag. I've already been burned by that kind of thing before.
+
+=== Staying in sync with upstream
+
+The official `nodejs/docker-node` project evolves. Security fixes, Yarn updates, Dockerfile best practices. We don't want our images to drift silently.
+
+So we have a second workflow that runs weekly (every Monday at 06:00 UTC). It reads a tracking file (`docker/UPSTREAM_REF`) that records which upstream commit we last synced from and which files we care about:
+
+----
+repo=nodejs/docker-node
+commit=74b0481b76e0af5b19d425ad34489e7393b23aff
+files=24/trixie/Dockerfile,24/trixie-slim/Dockerfile,24/trixie/docker-entrypoint.sh
+
+----
+
+The workflow compares file hashes between our tracked commit and upstream HEAD. If the Dockerfiles or entrypoint changed, it creates a GitHub issue tagged `upstream-sync` with a diff link and a list of changed files. If upstream moved forward but the tracked files didn't change, it opens a PR to update the reference commit. If nothing changed, it does nothing.
+
+This is a lighter approach than forking the entire upstream repo. We track exactly the files we adapted, and we get notified only when those files change.
+
+== Using the images
+
+=== On a RISC-V machine
+
+If you're running Docker on actual riscv64 hardware, there's no `--platform` flag needed:
+
+[source,bash]
+----
+docker run -it gounthar/node-riscv64:24.13.1-trixie bash
+node -v    # v24.13.1
+npm -v     # 11.8.0
+
+----
+
+You can use the image as a base for your own applications:
+
+[source,dockerfile]
+----
+FROM gounthar/node-riscv64:24.13.1-trixie
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+CMD ["node", "server.js"]
+
+----
+
+Or the slim variant for a smaller production image:
+
+[source,dockerfile]
+----
+FROM gounthar/node-riscv64:24.13.1-trixie-slim
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+USER node
+CMD ["node", "server.js"]
+
+----
+
+=== On x86_64 or ARM with QEMU
+
+Make sure QEMU user-mode emulation is registered. On most Docker Desktop installations, this works out of the box. On Linux, you may need:
+
+[source,bash]
+----
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+----
+
+Then use the `--platform` flag:
+
+[source,bash]
+----
+docker run --platform linux/riscv64 gounthar/node-riscv64:24.13.1-trixie node -e "
+const os = require('os');
+console.log('arch:', os.arch());
+console.log('platform:', os.platform());
+console.log('cpus:', os.cpus().length);
+"
+
+----
+
+Expect it to be slow. QEMU instruction-level emulation has overhead. But for testing compatibility and validating that your dependencies work on riscv64, it's good enough.
+
+=== Building native addons
+
+The full variant includes build tools, so native addons with C/C++ bindings compile inside the container:
+
+[source,bash]
+----
+docker run --platform linux/riscv64 gounthar/node-riscv64:24.13.1-trixie \
+  sh -c "mkdir /tmp/test && cd /tmp/test && npm init -y && npm install utf-8-validate && node -e \"require('utf-8-validate'); console.log('native addon loaded')\""
+
+----
+
+This is useful for checking whether your application's native dependencies build on riscv64 before committing to hardware. Give it a whirl with your own dependencies.
+
+== Why not wait for official images?
+
+There's an open discussion at link:https://github.com/nodejs/docker-node/issues/1707[nodejs/docker-node#1707] about adding riscv64 support to the official images. It's moving, but it takes time. The official images need to build from official binaries, and Node.js doesn't produce official riscv64 binaries yet (riscv64 is in the "unofficial builds" tier).
+
+We're filling a gap. When official support lands, these images become unnecessary and that's fine. Until then, if you need Node.js on riscv64 in a container today, they're here.
+
+== What's inside, specifically
+
+Each image contains:
+
+* Node.js (built natively on RISC-V, not cross-compiled) with npm
+* Yarn Classic 1.22.22, verified via GPG signature
+* A `node` user (UID 1000) for running processes without root
+* An entrypoint that auto-detects whether you're passing Node.js arguments or a system command
+
+That last point means `docker run gounthar/node-riscv64 app.js` runs `node app.js`, while `docker run gounthar/node-riscv64 bash` gives you a shell. Same behavior as the official Node.js images.
+
+== Some numbers
+
+Node.js compiles in about 12 hours on the Banana Pi F3 (first build), around 40 minutes with ccache warm. The QEMU-based Docker image build on GitHub Actions takes about 5 minutes per version (under a minute for the full variant, closer to 4 for the slim one because of the `ldd`/`apt-mark` cleanup dance). We currently build Node.js 22 LTS and 24 Current, on a Banana Pi F3 (SpacemiT K1 SoC, 8 cores, 16GB RAM) running Debian Trixie.
+
+== Try it
+
+[source,bash]
+----
+== Quick test
+docker run --platform linux/riscv64 gounthar/node-riscv64:24.13.1-trixie node -v
+
+== Interactive session
+docker run -it --platform linux/riscv64 gounthar/node-riscv64:24.13.1-trixie bash
+
+== As a build environment
+docker run --platform linux/riscv64 -v $(pwd):/app -w /app gounthar/node-riscv64:24.13.1-trixie npm test
+
+----
+
+The source is at link:https://github.com/gounthar/unofficial-builds[github.com/gounthar/unofficial-builds], the images are at link:https://hub.docker.com/r/gounthar/node-riscv64[hub.docker.com/r/gounthar/node-riscv64], and contributions are welcome.
+
+If you're experimenting with RISC-V or just curious about where this architecture is heading, I'd love to hear about your experience. The gap between "officially supported" and "actually usable" is where the fun happens.
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: docker-captain-article.adoc
+Conversion date: 2026-02-16
+Notes: Successfully converted all AsciiDoc syntax to Jekyll markdown, including code blocks, tables, headers, and inline formatting. Table converted from AsciiDoc pipe format to standard Markdown. All links preserved and converted from AsciiDoc link syntax to Markdown. Header image copied to assets directory.
+-->

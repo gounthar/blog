@@ -1,0 +1,156 @@
+---
+author: Bruno Verachten
+categories:
+- ai
+- infrastructure
+date: 2026-02-28 12:00:00 +0100
+description: Part 1 of 3 - Why the future of AI-assisted development runs on hypervisors
+excerpt: 'Part 1 of 3: AI agents are shifting from autocomplete tools to autonomous
+  software factories running on their own isolated computers. But who provisions those
+  machines, and where should they actually run?'
+featured: false
+image: assets/images/2026/02/28/blog-series-part1-header.jpg
+tags:
+- ai agents
+- hypervisors
+- cloud infrastructure
+- development tools
+- XCP-ng
+- virtualization
+title: Your AI Agents Need Their Own Computers
+---
+
+Part 1 of 3: Why the future of AI-assisted development runs on hypervisors
+
+image::/assets/images/2026/02/28/blog-series-part1-header.jpg[Close-up of server hardware with blue lighting]
+
+_Photo by link:https://www.pexels.com/@cookiecutter/[Cookiecutter] on link:https://www.pexels.com/photo/close-up-photo-of-mining-rig-1148820/[Pexels]_
+
+You know that moment when you read something and your mental model of an entire industry just... shifts?
+
+That happened to me this week. Michael Truell, Cursor's CEO, casually dropped this: _more than one-third of the PRs Cursor merges internally are now created by agents running on their own computers in the cloud._ Not autocomplete. Not fancy tab-completion. Actual autonomous agents, each with its own VM, tackling tasks independently while developers move on to something else.
+
+One-third. Of merged PRs. With minimal human direction.
+
+---
+
+== The Factory, Not the Code
+
+Here's the thing: a year ago, Cursor had 2.5x more users relying on Tab completions than on agents. Today? They have _2x more agent users than Tab users_. The inversion happened fast. Truell calls it "the third era of AI software development," one where agents tackle larger tasks independently, over longer timescales, with less human direction.
+
+These aren't your "suggest the next line" copilots anymore. In one example, Cursor showed a cloud agent spending 45 minutes doing a full walkthrough of their docs site: sidebar navigation, search, theme switching, copy buttons, the whole nine yards. Other agents navigate UIs, manipulate spreadsheets, host servers. They produce artifacts: video demos, screenshots, logs, live previews. Cursor, in Truell's words, is "no longer primarily about writing code. It is about helping developers build the factory that creates their software."
+
+A factory. Not a tool. That's a different mental model entirely.
+
+=== Every Tool Is Converging on the Same Idea
+
+And it's not just Cursor. Look at what everyone else is doing right now:
+
+* _Cursor_ gives cloud agents their own proprietary VMs
+* _OpenAI Codex_ runs in sandboxed containers
+* _Devin_ (Cognition) spins up custom cloud environments
+* _GitHub Copilot Workspace_ uses cloud containers
+* _Claude Code_ runs directly on your machine with your own permissions, so isolation is your responsibility (because apparently living dangerously is a feature)
+
+See the pattern? The writing is on the wall: _AI agents need their own computers._ Not a thread. Not a container (well, sometimes a container). An actual isolated environment where they can run arbitrary code without burning your house down.
+
+Why? Because these agents execute code with elevated privileges. They install packages, modify system files, run tests, spin up servers. Would you let a stranger do all that on your laptop? No way! Exactly.
+
+---
+
+== The Questions Nobody's Asking
+
+=== Who Provisions Those Computers?
+
+So we've established that AI agents need isolated environments. Fine. But here's a question that seems weirdly absent from every AI tool announcement I've read: _who provisions those computers?_
+
+Right now, the answer is "the AI vendor does it for you, in their cloud, with their infrastructure." Convenient? Sure. But think about what that actually means.
+
+Your proprietary source code, the stuff that gives your company a competitive edge, gets shipped to someone else's servers and executed in someone else's VMs. Your code literally leaves the building.
+
+For a side project or an open-source repo? No big deal. But for the rest of the world?
+
+Not so fast.
+
+=== The Sovereignty Problem
+
+Financial services companies have regulations that prevent code from leaving their infrastructure. Full stop. Defense and government agencies work in air-gapped environments where "cloud" is a weather phenomenon, not a deployment strategy. Healthcare organizations deal with HIPAA compliance. And honestly? Plenty of regular companies just don't want Cursor or OpenAI touching their proprietary codebase.
+
+(I'm not being paranoid here. I'm being realistic.)
+
+"But I can just spin up my own EC2 instances in my own AWS account!" Sure, and that works. Until you're running 200 agent VMs and paying cloud prices for what is essentially a CI workload. More on that in a second.
+
+This isn't a niche concern. It's the elephant in the room every time someone demos an AI coding agent running "in the cloud." Whose cloud? Under whose jurisdiction?
+
+---
+
+== Beyond Code: The Agent Fleet Is Coming
+
+=== It's Not Just About Writing Software
+
+Here's where things get interesting. Coding agents are just the beginning. The same "give the agent a computer" pattern is showing up everywhere:
+
+* _QA and testing agents_ need browser VMs to click through UIs and validate user flows
+* _Security research agents_ need sandboxed environments for malware analysis (you _really_ don't want those on your main network)
+* _Data pipeline agents_ need isolated environments with specific toolchains
+* _CI/CD agents_ have been using VMs for years already; AI just makes them smarter
+
+We're not talking about one agent per developer anymore. We're talking about fleets of agents, each needing its own isolated, disposable, API-provisioned compute environment. Today it's 35% of internal PRs at one company. What happens when it's 80%? If a 50-person dev team runs 5 agents each, that's 250 concurrent VMs. At 2-4 GB of RAM per lightweight agent VM, you're looking at 500 GB to 1 TB. That's a small server rack, not a laptop.
+
+And at cloud prices, 250 instances running a few hours a day adds up fast. Penny wise, pound foolish, as the saying goes. There's a cost inflection point where on-prem hardware pays for itself in weeks, not months.
+
+=== Why Containers Aren't Enough
+
+"But wait," I hear you say, "can't we just use containers?"
+
+You can. And for many use cases, containers are fine. But let's be honest about the security model.
+
+Yes, you can harden containers with seccomp profiles, AppArmor, user namespaces (I know, I know, that's a lot of acronyms for one sentence). You can use microVM technologies like Firecracker or Kata Containers that give you VM-level isolation with container-like startup times. These are real options and I'm not going to pretend they don't exist.
+
+But here's the thing: microVMs are designed for short-lived, stateless workloads. Think Lambda functions. AI coding agents are different. They need full development environments: git, compilers, package managers, browsers, sometimes a GUI. They run for 45+ minutes, install arbitrary packages, and modify their own filesystems. They're not serverless functions. They're more like junior developers who happen to live inside a machine.
+
+For that workload, you want a full VM with its own kernel, its own network stack, its own filesystem. A Type-1 hypervisor gives you hardware-level isolation. If an agent goes rogue (and with minimal supervision over long sessions, "if" is doing a lot of heavy lifting in that sentence), it can't escape the VM boundary. The difference is between "one agent misbehaved" and "one agent compromised our entire build infrastructure."
+
+And with copy-on-write storage, you can clone a 20 GB golden image in seconds, not minutes. Provisioning speed isn't the bottleneck it used to be.
+
+---
+
+== The Thesis
+
+=== The Infrastructure Layer Is Missing
+
+So where does all of this leave us? AI agents need their own computers. Everyone agrees on that now. Those computers need real isolation, not just container boundaries. Enterprises need them on-premises, not in someone else's cloud. And the number of agents is about to go way up, which means provisioning needs to be API-driven and automated.
+
+What I'm describing is a self-hosted, open-source, Type-1 hypervisor with an API-driven orchestration layer. If that sounds suspiciously specific, like I have a particular product in mind... yeah, I do.
+
+And it already exists.
+
+Not as a startup pitch deck. As open-source software that's been quietly running data centers while everyone was busy arguing about which AI model is best.
+
+---
+
+=== Takeaways & What's Next
+
+* _The shift is real._ 35% of Cursor's own internal merged PRs come from autonomous agents, and that number is only going up.
+* _Isolation isn't optional._ Agents running arbitrary code need hardware-level boundaries, not just containers.
+* _Code sovereignty matters._ Not every organization can (or should) ship their source code to a vendor's cloud.
+* _The infrastructure question is underrated._ Everyone's building the agent; almost nobody's talking about where the agent _runs_.
+
+In _Part 2_, I'll get hands-on. I'll rent a bare-metal server on Scaleway for €0.077/hour, install XCP-ng and Xen Orchestra on it, and spin up two AI agent VMs, one running Claude Code and the other Gemini CLI, working on the same repo in parallel. Total cost for a 4-hour demo: €0.31. The price of a bad espresso.
+
+"But wait," you say, "didn't you just spend 1,200 words arguing against using someone else's cloud?" Fair point. My homelab runs ARM32, ARM64, and RISC-V boards. Great for tinkering, not so great for x86-only hypervisors. So for this demo, I'm renting French bare metal by the hour to show you how the setup works. Once you see it, you can run the exact same thing on your own hardware. That's the whole point.
+
+No homelab required. No upfront investment. Just hourly bare metal, open-source software, and Bob's your uncle.
+
+Stay tuned.
+
+---
+
+_Sources:_ Michael Truell, link:https://cursor.com/blog/third-era["The Third Era of AI Software Development"], Cursor Blog, February 26, 2026. See also: link:https://cursor.com/blog/agent-computer-use["Cursor Cloud Agents"], February 25, 2026.
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll agent
+Original file: /mnt/c/support/users/dev/vates/analysis/blog-series-part1-ai-agents-need-computers.adoc
+Conversion date: 2026-02-27
+Notes: All content preserved exactly as written. AsciiDoc formatting (bold, italic, links) converted to markdown equivalents. Section hierarchy converted from AsciiDoc levels (=, ==, ===) to markdown levels (#, ##, ###). Image path adjusted for Jekyll structure (assets/images/). Series metadata added as custom frontmatter fields for tracking.
+-->

@@ -1,0 +1,16 @@
+---
+layout: post
+title: "{{ replace .Name "-" " " | title }}"
+author: Bruno Verachten
+date: {{ .Date }}
+categories: []
+tags: []
+image: ""
+description: ""
+excerpt: ""
+featured: false
+hidden: false
+draft: true
+---
+
+Write your content here in AsciiDoc.

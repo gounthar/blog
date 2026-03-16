@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="terminal" baseProfile="full" viewBox="0 0 880 1022" width="880" version="1.1">
+    <defs>
+        <termtosvg:template_settings xmlns:termtosvg="https://github.com/nbedos/termtosvg">
+            <termtosvg:screen_geometry columns="110" rows="60"/>
+            <termtosvg:animation type="css"/>
+        </termtosvg:template_settings>
+        <style type="text/css" id="generated-style"><![CDATA[#screen {
+                font-family: 'DejaVu Sans Mono', monospace;
+                font-style: normal;
+                font-size: 14px;
+            }
+
+        text {
+            dominant-baseline: text-before-edge;
+            white-space: pre;
+        }
+    
+            :root {
+                --animation-duration: 6181ms;
+            }
+
+            @keyframes roll {
+                0.000%{transform:translateY(0px)}
+83.821%{transform:translateY(-1054px)}
+100.000%{transform:translateY(-1054px)}
+            }
+
+            #screen_view {
+                animation-duration: 6181ms;
+                animation-iteration-count:infinite;
+                animation-name:roll;
+                animation-timing-function: steps(1,end);
+                animation-fill-mode: forwards;
+            }
+        ]]></style>
+        <style type="text/css" id="user-style">
+            /* gjm8 color theme (source: https://terminal.sexy/) */
+            .foreground {fill: #c5c5c5;}
+            .background {fill: #1c1c1c;}
+            .color0 {fill: #1c1c1c;}
+            .color1 {fill: #ff005b;}
+            .color2 {fill: #cee318;}
+            .color3 {fill: #ffe755;}
+            .color4 {fill: #048ac7;}
+            .color5 {fill: #833c9f;}
+            .color6 {fill: #0ac1cd;}
+            .color7 {fill: #e5e5e5;}
+            .color8 {fill: #1c1c1c;}
+            .color9 {fill: #ff005b;}
+            .color10 {fill: #cee318;}
+            .color11 {fill: #ffe755;}
+            .color12 {fill: #048ac7;}
+            .color13 {fill: #833c9f;}
+            .color14 {fill: #0ac1cd;}
+            .color15 {fill: #e5e5e5;}
+        </style>
+    </defs>
+    <svg id="screen" width="880" height="1020" viewBox="0 0 880 1020" preserveAspectRatio="xMidYMin slice">
+        <rect class="background" height="100%" width="100%" x="0" y="0"/><defs><g id="g1"><text class="color10" font-weight="bold" textLength="296" x="0">linaro@captation-techforum-rk3399-4GB</text><text class="foreground" textLength="8" x="296">:</text><text class="color12" font-weight="bold" textLength="8" x="304">~</text><text class="foreground" textLength="16" x="312">$ </text><text class="background" textLength="8" x="328"> </text></g><g id="g2"><text class="color10" font-weight="bold" textLength="296" x="0">linaro@captation-techforum-rk3399-4GB</text><text class="foreground" textLength="8" x="296">:</text><text class="color12" font-weight="bold" textLength="8" x="304">~</text><text class="foreground" textLength="48" x="312">$ exit</text></g><g id="g3"><text class="background" textLength="8" x="0"> </text></g></defs><g id="screen_view"><g><rect class="foreground" height="17" width="8" x="328" y="0"/><use y="0" xlink:href="#g1"/></g><g><use y="1054" xlink:href="#g2"/><rect class="foreground" height="17" width="8" x="0" y="1071"/><use y="1071" xlink:href="#g3"/></g></g></svg>
+</svg>

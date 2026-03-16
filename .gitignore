@@ -1,0 +1,8 @@
+public/
+resources/
+.hugo_build.lock
+.env
+CLAUDE.md
+CONTEXT.md
+*.credentials.json
+node_modules/

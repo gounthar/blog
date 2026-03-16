@@ -1,0 +1,395 @@
+---
+author: Bruno Verachten
+categories:
+- Development
+- Cross-Platform
+date: 2025-12-22 14:00:00 +0100
+description: The journey of adding RISC-V 64-bit build support to a Tauri application,
+  complete with unexpected roadblocks and a plan to go upstream
+excerpt: I wanted to give back to the Armbian community by contributing RISC-V support
+  to their shiny new Imager app. What followed was a journey through QEMU emulation,
+  Debian version archaeology, and a build process that reminded me why I have gray
+  hairs from the ARM32 era.
+image: assets/images/2025-12-22-riscv-header.jpg
+tags:
+- risc-v
+- riscv64
+- tauri
+- rust
+- armbian
+- qemu
+- docker
+- debian
+- webkit2gtk
+- cross-compilation
+title: 'Adding RISC-V Support to Armbian Imager: A Tale of QEMU, Tauri, and Deja Vu'
+---
+
+image::/assets/images/2025-12-22-riscv-header.jpg[Foggy road in the Caucasus Mountains]
+_Photo by link:https://unsplash.com/@catauggie[SnapSaga] on Unsplash_
+
+== The Setup
+
+Armbian Imager is a Tauri 2 application: React frontend, Rust backend, builds for Linux (x64, ARM64), macOS (both architectures), and Windows (both architectures). A proper multi-platform desktop app that actually works, which is rarer than you'd think.
+
+The build workflow already handled six platform combinations through GitHub Actions. Adding a seventh (Linux RISC-V 64-bit) seemed straightforward. After all, I'd done this dance before with ARM32 back in the dark ages (2013-2014, when docker-compose on Raspberry Pi was considered experimental black magic).
+
+Famous last words.
+
+=== The Murphy's Law Setup
+
+Here's the thing: whenever you think "this should be straightforward," the universe takes that as a personal challenge. I should've known better. The gray hairs didn't appear from successful, uneventful builds.
+
+== Why RISC-V, Why Now
+
+Armbian supports RISC-V boards. The Banana Pi F3 runs Armbian. Various Pine64 and StarFive boards run Armbian. The Framework 13 laptop has a RISC-V mainboard option (DC-Roma, because apparently laptop mainboards are modular now, what a time to be alive). The ecosystem is growing.
+
+But if you're on a RISC-V system and want to flash an Armbian image to an SD card, you currently need to use `dd` like it's 1995. The Imager app doesn't have a RISC-V build.
+
+I figured I'd fix that.
+
+Sounds appealing or strange enough to get you intrigued?
+
+== The Research Phase
+
+First step: figure out what the existing build workflow does. The `.github/workflows/build.yml` file tells the story:
+
+* Linux x64 builds on `ubuntu-24.04` runners
+* Linux ARM64 builds on `ubuntu-24.04-arm` runners (GitHub has native ARM runners now, progress!)
+* macOS and Windows have their own native runners
+
+For RISC-V, GitHub doesn't offer native runners yet. There's link:https://cloud-v.co/github-riscv-runner[Cloud-V] which provides RISC-V GitHub runners, but Armbian's workflow isn't set up for external runners. For this contribution, emulation was the path of least resistance.
+
+Docker + QEMU it is. (Spoiler alert: this is where things get interesting.)
+
+=== The WebKit2GTK Archaeology
+
+Tauri apps on Linux need WebKit2GTK. This is the system webview that renders the UI, basically the browser engine that makes your Rust backend look pretty. On x64 and ARM64, it's readily available in Debian bookworm and trixie.
+
+On RISC-V? I checked the link:https://tracker.debian.org/pkg/webkit2gtk[Debian package tracker], because I'm a glutton for disappointment.
+
+[source,text]
+----
+webkit2gtk in bookworm: not available for riscv64
+webkit2gtk in trixie: available for riscv64
+
+----
+
+Good news: Debian trixie became stable in 2025, and it has the packages we need. The timing worked out: RISC-V users on the current stable release get WebKit2GTK out of the box.
+
+=== The NodeSource Curveball
+
+The frontend build needs Node.js. The standard approach in CI is to use NodeSource's distribution:
+
+[source,bash]
+----
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+----
+
+I checked NodeSource's supported architectures: amd64, arm64, armhf. No riscv64.
+
+Of course not. Why would there be?
+
+Here's where things get simple (yes, really): use Debian's native nodejs package instead. It's version 18 instead of 20, but that's close enough for a Vite build. Sometimes the boring solution is the right solution.
+
+[source,bash]
+----
+apt-get install -y nodejs npm
+
+----
+
+(Side note: if you need the latest Node.js LTS on RISC-V, I maintain link:https://github.com/gounthar/unofficial-builds/releases[unofficial builds] with an APT repo via GitHub Pages. We've got 24.12.0 ready to go. But for this build, Debian's package was sufficient.)
+
+Two problems identified, two solutions found. Look at me being all productive and efficient. This never happens. I should've been more suspicious.
+
+== The Implementation
+
+I added a new job to the GitHub workflow:
+
+[source,yaml]
+----
+build-linux-riscv64:
+  name: build-linux (riscv64gc-unknown-linux-gnu)
+  needs: [create-release]
+  if: ${{ github.event_name == 'push' || inputs.build_linux_riscv64 }}
+  runs-on: ubuntu-24.04
+  steps:
+    * uses: actions/checkout@v4
+
+    * name: Set up QEMU for RISC-V emulation
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: riscv64
+
+    * name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    * name: Build in RISC-V container (Debian trixie)
+      run: |
+        docker run --rm --platform linux/riscv64 \
+          -v "$(pwd)":/app \
+          -w /app \
+          riscv64/debian:trixie \
+          bash -c '
+            # Install build dependencies
+            apt-get update
+            apt-get install -y \
+              curl build-essential pkg-config \
+              libwebkit2gtk-4.1-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev patchelf libssl-dev libgtk-3-dev \
+              squashfs-tools xdg-utils file
+
+            # Node.js from Debian (NodeSource lacks RISC-V)
+            apt-get install -y nodejs npm
+
+            # Install Rust
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | \
+              sh -s -- -y
+            source "$HOME/.cargo/env"
+
+            # Build frontend
+            npm ci
+            npm run build
+
+            # Install Tauri CLI and build
+            cargo install tauri-cli --version "^2" --locked
+            cargo tauri build --bundles deb
+          '
+
+----
+
+The key differences from the x64/ARM64 builds:
+
+. Uses `riscv64/debian:trixie` instead of Ubuntu (because we need those WebKit packages)
+. Node.js comes from Debian packages, not NodeSource (because NodeSource said "nope")
+. Runs through QEMU user-mode emulation (this will be important later)
+. Only builds `.deb` packages (no AppImage; that's a story for another day, involving AppImage's aversion to exotic architectures)
+
+I also created a standalone script `scripts/build-riscv64.sh` for local builds, and added `--riscv64` to the `build-all.sh` orchestrator, because I like my tooling to be consistent.
+
+Four commits later:
+
+[source,text]
+----
+aae7628 feat: Add RISC-V 64-bit build support
+105f77f fix: Use Debian nodejs package for RISC-V builds
+22499b1 feat: Add pre-built Docker image support for faster RISC-V builds
+0eb2992 fix: Use Debian nodejs in build-all.sh for RISC-V
+
+----
+
+Time to test. What could possibly go wrong?
+
+== The Wall
+
+I kicked off a build. Docker pulled the RISC-V Debian image. QEMU started emulating. The apt packages installed. Rust downloaded. So far, so good.
+
+Then:
+
+[source,text]
+----
+cargo install tauri-cli --version "^2" --locked
+
+----
+
+And we wait.
+
+And wait.
+
+And wait some more.
+
+=== The Great Compilation Watch
+
+The tauri-cli crate has over 600 dependencies. Six. Hundred. Each one needs to compile. Under QEMU user-mode emulation, every single CPU instruction goes through a translation layer. A Rust build that takes 2 minutes on native hardware takes... well, let's just say it takes a while.
+
+I went to make coffee. Came back. Still compiling.
+
+I went to lunch. Came back. Still compiling.
+
+I started questioning my life choices. The build was still compiling.
+
+This is the ARM32 era all over again, and I'm having flashbacks.
+
+== Flashback: 2013-2014
+
+=== The ARM32 PTSD
+
+Picture this: around 2013, I was trying to get docker-compose working on ARM32. And RethinkDB. And everything else needed to run openSTF (Open Smartphone Test Farm) on Raspberry Pi hardware, because apparently I enjoy suffering.
+
+Nothing worked. Every dependency was a new adventure in "why doesn't this architecture exist in their CI matrix?" "Just compile it from source" meant leaving your Pi running overnight and hoping it didn't thermal throttle itself into early retirement. Cross-compilation setups were fragile. One wrong symlink and you'd spend three hours debugging why `ld` couldn't find `libc.so.6`. Pre-built binaries were as rare as sensible variable names in legacy code.
+
+We eventually got there. ARM support improved. Docker got multi-arch images. GitHub added ARM runners. The ecosystem matured. The gray hairs appeared.
+
+Here's the thing: RISC-V is at that same inflection point now. The hardware exists. The kernels boot. The distributions have packages. But the tooling ecosystem hasn't caught up yet.
+
+And I'm apparently volunteering to help it catch up. Because I learn nothing from experience.
+
+== The Math
+
+Let's be concrete about the problem, because misery loves documentation.
+
+On a native x64 machine with cached dependencies, `cargo install tauri-cli` takes about 2 minutes. Fast enough to grab a coffee, check Slack, come back to a finished build.
+
+Under QEMU user-mode emulation, that same operation takes... I didn't let it finish. After 3 hours, I killed the build because I value my sanity. Extrapolating from progress (and some very pessimistic napkin math), a complete build would take 6-8 hours.
+
+For CI/CD, this is unusable. GitHub Actions has a 6-hour timeout per job. Even if it finished, waiting that long for every release is absurd. Imagine telling your team "yeah, the release will be ready in 8 hours, assuming nothing goes wrong." (Spoiler: something always goes wrong.)
+
+=== The Pre-built Image Strategy
+
+My first optimization: build a Docker image with tauri-cli pre-installed. Suffer once, benefit forever (or until Tauri releases a new version, whichever comes first).
+
+[source,dockerfile]
+----
+FROM --platform=linux/riscv64 riscv64/debian:trixie
+
+== Install all build dependencies
+RUN apt-get update && apt-get install -y \
+    curl build-essential pkg-config \
+    libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+    librsvg2-dev patchelf libssl-dev libgtk-3-dev \
+    squashfs-tools xdg-utils file nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+== Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+== Pre-install tauri-cli (this is the slow part)
+RUN cargo install tauri-cli --version "^2" --locked
+
+WORKDIR /app
+CMD ["bash"]
+
+----
+
+Build this image once (accepting the 6+ hour wait like penance for your architectural choices), push it to a registry, then subsequent builds only need to compile the actual application, maybe 10-20 minutes under emulation. Still slow, but manageable.
+
+[quote]
+____
+_Tip:_ If you're building locally, run `./scripts/build-riscv64.sh --build-image` once to create the pre-built image. Subsequent builds will skip tauri-cli compilation entirely. Your future self will thank you.
+____
+
+This works for local development. For CI/CD, it requires maintaining a container registry with RISC-V images, rebuilding whenever Tauri releases a new version. Manageable, but inelegant. And I have opinions about inelegant solutions.
+
+=== The Cross-Compilation Dream (That Didn't Happen)
+
+The proper solution is cross-compilation, right? Build on a fast x64 machine, target riscv64. No emulation overhead. Just pure, unadulterated compilation speed.
+
+The problem: WebKit2GTK. Again. That dependency is following me around like a particularly persistent technical debt.
+
+Tauri links against the system WebKit. To cross-compile, you need a RISC-V sysroot with all the WebKit headers and libraries. Setting that up is... non-trivial. You're essentially recreating a Debian trixie root filesystem for a different architecture, and WebKit pulls in half of GNOME as dependencies. Have you _seen_ the dependency tree for a full GNOME stack? It's like a fractal of "why does this need that."
+
+I spent an hour exploring this path. It's doable, but fragile. One apt update breaks your sysroot. Version mismatches between the cross-compilation toolchain and the target libraries. Symlink hell. Not worth the maintenance burden for a community contribution.
+
+Sometimes you have to know when to fold.
+
+== Going Upstream
+
+=== The Aha Moment
+
+Here's where my thinking shifted.
+
+The bottleneck isn't Armbian Imager. It isn't QEMU. It isn't Docker. The bottleneck is `cargo install tauri-cli`: compiling 600+ crates from source because there's no pre-built RISC-V binary.
+
+Wait, what? Why isn't there a pre-built binary?
+
+Tauri provides pre-built binaries for:
+
+* Linux x64
+* Linux ARM64
+* macOS x64
+* macOS ARM64
+* Windows x64
+
+No RISC-V.
+
+If Tauri's release workflow included RISC-V binaries, the entire Tauri ecosystem would benefit. Every single project trying to build for RISC-V would save those 6+ hours. Every developer who comes after me wouldn't have to rediscover this problem. Every CI pipeline wouldn't timeout waiting for Rust to compile half the internet.
+
+So that's the plan. Fork tauri-cli, add RISC-V to the release matrix, get a PR upstream. Contribute to the root of the problem instead of working around it at the leaf.
+
+This isn't about maintaining a fork long-term (I've already got enough side projects to feel guilty about). It's about making the whole ecosystem better. Rising tide lifts all boats, and all that.
+
+=== The Contribution Plan
+
+Here's the thing: I've been on both sides of this. I've been the maintainer getting PRs for exotic architectures. I've been the contributor trying to convince maintainers that yes, people actually use this platform.
+
+The Tauri team has been responsive to architecture additions before. They added ARM64 support. They care about multi-platform support; it's literally in their value proposition. Adding RISC-V to their CI matrix is a natural extension of what they're already doing.
+
+The work isn't even that complicated:
+
+. Add RISC-V to their GitHub Actions build matrix
+. Set up QEMU for the build (they already do this for other architectures)
+. Upload the resulting binary to their releases
+
+The hard part is the 6-hour compile time under QEMU, but there's an alternative: register a native RISC-V runner for the project. link:https://cloud-v.co/github-riscv-runner[Cloud-V] offers exactly that. Native compilation, no emulation penalty. What takes 6 hours under QEMU would take minutes on real hardware.
+
+Either way, once it's in their CI, it stays current. Every Tauri version automatically gets RISC-V binaries.
+
+I just need to prove it works, submit a clean PR, and make a compelling case. How hard could it be?
+
+(I really need to stop asking that question.)
+
+== Current Status
+
+The RISC-V build support is implemented and committed on the `feature/riscv64-support` branch:
+
+* GitHub workflow job: ready, but will timeout in CI without optimizations (those pesky 6-hour limits)
+* Standalone build script: works locally with pre-built Docker image (tested, confirmed, actually functions)
+* Integration with build-all.sh: complete (because consistency matters)
+
+What's blocked:
+
+* CI/CD builds: need either pre-built tauri-cli binaries or a hosted RISC-V builder image
+* Upstream contribution: need to explore Tauri's build infrastructure and submit that PR
+
+== What's Next
+
+=== The Roadmap
+
+. _Short term_: Push the branch, document the limitation honestly (because documentation that lies helps nobody), offer the pre-built Docker image approach as a workaround for anyone who wants RISC-V builds today.
+
+. _Medium term_: Fork tauri-cli, experiment with adding RISC-V to their release workflow, prepare a PR that's actually mergeable (not just "hey I hacked this together and it technically works").
+
+. _Long term_: Native RISC-V CI runners will eventually exist. GitHub, GitLab, someone will offer them. And when that happens, this entire problem disappears. But we're not there yet, and people want to use RISC-V now, so here we are.
+
+== Lessons Learned
+
+=== Takeaways and Tips for Future Archaeologists
+
+* _Debian trixie is your friend for RISC-V_ - The testing distribution has packages that stable lacks. For bleeding-edge architectures, accept some instability in exchange for working software. It's a fair trade.
+
+* _NodeSource doesn't support everything_ - When the fancy installer doesn't work, fall back to distribution packages. They're usually good enough, and "good enough" ships.
+
+* _Emulation is slow, but it works_ - QEMU user-mode emulation lets you run foreign binaries on any host. The speed penalty is brutal for compilation, but acceptable for runtime testing. Know which problem you're solving.
+
+* _Sometimes the fix is upstream_ - When you hit a wall that affects the whole ecosystem, consider fixing the source rather than building elaborate workarounds. Be the change you want to see in the dependency tree.
+
+* _This has all happened before_ - ARM32 in 2013. ARM64 in 2016. RISC-V in 2025. The pattern repeats: hardware arrives, software catches up, early adopters suffer, then it all becomes normal. We're in the "early adopters suffer" phase.
+
+* _Pre-built images are your friend_ - One slow build beats a thousand slow builds. Cache aggressively, share generously, document thoroughly.
+
+* _Don't cross-compile WebKit unless you hate yourself_ - Some battles aren't worth fighting. Some dependency trees are better left untraversed.
+
+I've been here before. The gray hairs prove it. But that's also why I know it gets better. The pain is temporary. The infrastructure improvements are permanent. And somewhere, someday, a developer will `cargo install tauri-cli` on their RISC-V board and it'll just work in 30 seconds, and they'll never know about the 6-hour compile times we endured to make that possible.
+
+That's the dream, anyway.
+
+---
+
+== Resources
+
+* link:https://tauri.app/[Tauri documentation]: Official Tauri 2 docs (actually well-written, surprisingly)
+* link:https://wiki.debian.org/RISC-V[Debian RISC-V wiki]: Porting status and bootstrap info
+* link:https://www.qemu.org/docs/master/user/main.html[QEMU user-mode emulation]: How binfmt_misc magic works (read this if you want to understand the sorcery)
+* link:https://www.armbian.com/download/?arch=riscv64[Armbian RISC-V boards]: Supported RISC-V hardware
+* link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[Banana Pi BPI-F3]: SpacemiT K1 octa-core RISC-V board (actual hardware you can buy today)
+
+The code works. The build process works. It's just... slow. For now.
+
+But we've been here before, and we know how this story ends. The ecosystem catches up. The tooling improves. The compile times get reasonable. The gray hairs multiply.
+
+Let's make it happen.

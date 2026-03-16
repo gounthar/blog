@@ -1,0 +1,892 @@
+---
+author: Poddingue
+categories:
+- GitHub Actions
+- RISC-V
+- Docker
+- CI/CD
+- Infrastructure
+description: A comprehensive guide to setting up and running GitHub Actions on RISC-V64
+  hardware, covering self-hosted runner installation, production deployment, troubleshooting,
+  and lessons learned from building Docker packages on BananaPi F3.
+featured: true
+hidden: false
+image: assets/images/2025/11/06/vitaliy-grin-9xNf65C3ZRs-unsplash.jpg
+tags:
+- riscv64
+- github-actions
+- docker
+- ci-cd
+- self-hosted-runner
+- automation
+- bananapi-f3
+- moby
+- devops
+title: 'Running GitHub Actions on RISC-V64: A Production Journey with Docker Builds'
+---
+
+Setting up continuous integration for RISC-V64 is not as straightforward as x86_64 or ARM64. The official GitHub Actions runner doesn't support RISC-V64, leading to a fascinating journey of finding alternatives, configuring hardware, and debugging production issues. This article documents my complete experience setting up a self-hosted runner on a BananaPi F3 for automated Docker Engine builds, including the real-world bugs I discovered and fixed after weeks of production use.
+
+== The Problem: No Official RISC-V64 Support
+
+When I started link:https://www.linkedin.com/pulse/docker-engine-compose-now-available-risc-v64-bruno-verachten-76ogc/?trackingId=dUgstzxgTiOtrRT2WVE8%2Fw%3D%3D[building Docker Engine binaries for RISC-V64], I quickly hit a wall. GitHub Actions, the de facto standard for CI/CD, doesn't provide RISC-V64 runners. The official runner relies on .NET, which only has experimental RISC-V64 support. For a production build pipeline, "experimental" isn't good enough.
+
+I needed:
+
+* _Reliable automation_: Weekly builds without manual intervention
+* _Native compilation_: Cross-compilation for Docker is complex and error-prone
+* _GitHub integration_: Seamless workflow with existing GitHub Actions
+* _Production stability_: Must survive reboots and run continuously
+
+The solution? A self-hosted runner on real RISC-V64 hardware.
+
+== Why github-act-runner?
+
+After researching alternatives, I discovered link:https://github.com/ChristopherHX/github-act-runner[github-act-runner], a Go-based implementation of the GitHub Actions runner protocol. This was perfect because:
+
+* _Go has excellent RISC-V64 support_: No experimental flags, it just works
+* _Drop-in replacement_: Compatible with GitHub Actions workflows
+* _Lightweight_: ~25MB binary, minimal resource overhead
+* _Active development_: Community-maintained with regular updates
+
+The key insight: while the official runner requires the entire .NET runtime, github-act-runner only needs Go, Node.js (for JavaScript actions), and Docker. All three have first-class RISC-V64 support.
+
+== Hardware: BananaPi F3
+
+I chose the link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[BananaPi F3] as my build server:
+
+* _SpacemiT K1 processor_: 8-core RISC-V64 (RV64GCVB) X60, octa-core design
+* _16GB RAM_: LPDDR4 memory providing ample headroom for Docker builds
+* _Armbian Trixie_: Debian-based with excellent RISC-V support
+* _Gigabit Ethernet_: Stable connectivity for 24/7 operation
+* _Low power consumption_: ~10W under load
+
+This isn't bleeding-edge hardware, but that's the point. I wanted to prove that CI/CD on RISC-V64 doesn't require exotic setups.
+
+== Initial Setup: The Happy Path
+
+=== Prerequisites
+
+First, I installed the essential dependencies on the BananaPi F3:
+
+[source,bash]
+----
+== Update system
+sudo apt-get update
+sudo apt-get upgrade -y
+
+== Install Node.js (required for JavaScript-based GitHub Actions)
+sudo apt-get install -y nodejs npm
+
+== Verify versions
+node --version  # v20.19.2
+npm --version   # 9.2.0
+go version      # go1.24.4 linux/riscv64
+docker --version # 28.5.2
+
+----
+
+The Node.js requirement surprised me initially. Many GitHub Actions use JavaScript under the hood (like `actions/checkout@v4`), so the runner needs Node.js to execute them.
+
+=== Building github-act-runner
+
+[source,bash]
+----
+cd ~
+git clone https://github.com/ChristopherHX/github-act-runner.git github-act-runner-test
+cd github-act-runner-test
+
+== Build takes ~2-3 minutes on BananaPi F3
+go build -v -o github-act-runner .
+
+== Verify
+./github-act-runner --help
+
+----
+
+The build was surprisingly fast. Go's cross-platform nature really shines here - no special flags, no configuration, it just compiles.
+
+=== Runner Configuration
+
+Getting the registration token from GitHub:
+
+[source,bash]
+----
+== Visit: https://github.com/YOUR_USERNAME/docker-for-riscv64/settings/actions/runners/new
+== Copy the token from the displayed command
+
+./github-act-runner configure \
+  --url https://github.com/gounthar/docker-for-riscv64 \
+  --token YOUR_TOKEN_HERE \
+  --name bananapi-f3-runner \
+  --labels riscv64,self-hosted,linux \
+  --work _work
+
+----
+
+The labels are crucial. Workflows target self-hosted runners with:
+
+[source,yaml]
+----
+jobs:
+  build:
+    runs-on: [self-hosted, riscv64]
+
+----
+
+This ensures jobs only run on my RISC-V64 runner, not on GitHub's x86_64 hosts.
+
+=== Critical: Systemd Service Configuration
+
+Here's where I learned an important lesson. Initially, I ran the runner manually in a terminal. This worked fine until the first power outage. When the BananaPi rebooted, no runner. Builds failed. Users complained.
+
+The solution: a proper systemd service.
+
+[source,bash]
+----
+sudo tee /etc/systemd/system/github-runner.service << 'EOF'
+[Unit]
+Description=GitHub Actions Runner (RISC-V64)
+After=network.target docker.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=poddingue
+WorkingDirectory=/home/poddingue/github-act-runner-test
+ExecStart=/home/poddingue/github-act-runner-test/github-act-runner run
+Restart=always
+RestartSec=10
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+== Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable github-runner
+sudo systemctl start github-runner
+
+== Verify
+sudo systemctl status github-runner
+
+----
+
+_Key configuration choices:_
+
+* `After=docker.service`: Don't start until Docker is ready
+* `Restart=always`: Auto-restart on failures
+* `TimeoutStopSec=5min`: Give builds time to clean up
+* `User=poddingue`: Never run as root (security)
+
+After this change, the runner survived reboots, network hiccups, and even Docker daemon restarts.
+
+== Production Workflows: The Real Test
+
+With the runner configured, I created three automated workflows:
+
+=== Weekly Docker Engine Builds
+
+[source,yaml]
+----
+name: Weekly Docker RISC-V64 Build
+
+on:
+  schedule:
+    * cron: '0 2 _ _ 0'  # Every Sunday at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      moby_ref:
+        description: 'Moby ref to build'
+        required: false
+        default: 'master'
+
+jobs:
+  build-docker:
+    runs-on: [self-hosted, riscv64]
+
+    steps:
+      * name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      * name: Build Docker binaries
+        run: |
+          cd moby
+          docker build \
+            --build-arg BASE_DEBIAN_DISTRO=trixie \
+            --build-arg GO_VERSION=1.25.3 \
+            --target=binary \
+            -f Dockerfile .
+
+      # ... containerd, runc builds ...
+
+      * name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${RELEASE_VERSION}" \
+            --title "${RELEASE_TITLE}" \
+            --notes-file release-notes.md \
+            release-$DATE/*
+
+----
+
+This workflow runs every Sunday morning, building:
+
+* _dockerd_: Docker Engine daemon
+* _docker-proxy_: Network proxy
+* _containerd_: Container runtime (v1.7.28)
+* _runc_: OCI runtime (v1.3.0)
+* _containerd-shim-runc-v2_: Containerd shim
+
+Build time: _35-40 minutes_ on the BananaPi F3. Not blazing fast, but acceptable for weekly automation.
+
+=== Release Tracking
+
+[source,yaml]
+----
+name: Track Moby Releases
+
+on:
+  schedule:
+    * cron: '0 6 _ _ *'  # Daily at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-releases:
+    runs-on: ubuntu-latest  # No native hardware needed!
+
+    steps:
+      * name: Get latest Moby release
+        run: |
+          LATEST=$(gh api repos/moby/moby/releases/latest --jq .tag_name)
+          # Check if we've already built it...
+
+----
+
+Notice this workflow uses `ubuntu-latest`, not the self-hosted runner. Why? Because it's just GitHub API calls - no compilation needed. This reduces load on my BananaPi and provides faster execution.
+
+=== APT Repository Updates
+
+The final piece of automation: after building binaries, automatically create Debian packages and update the APT repository hosted on GitHub Pages.
+
+[source,yaml]
+----
+name: Update APT Repository
+
+on:
+  workflow_run:
+    workflows: ["Build Debian Package", "Build Docker Compose Debian Package", "Build Docker CLI Debian Package"]
+    types: [completed]
+
+----
+
+This workflow downloads all packages (Engine, CLI, Compose), signs them with GPG, and updates the repository using `reprepro`. The result: users can install Docker with a simple `apt-get install`.
+
+== Weeks Later: Production Issues Emerge
+
+After three weeks of smooth operation, I started noticing strange behavior. Users reported that `apt-get upgrade` sometimes worked, sometimes didn't. The APT repository seemed to randomly "forget" packages. And when I checked my latest release, I found duplicate RPM files - why did `v28.5.2-riscv64` contain both `moby-engine-28.5.1` AND `moby-engine-28.5.2`?
+
+Time to debug.
+
+=== Bug #1: The Vanishing Packages Mystery
+
+_Symptom:_ APT repository would update successfully, but only one package type would be present. Install `docker-cli` and suddenly `docker.io` disappeared.
+
+_Investigation:_ I examined the workflow logs:
+
+[source,bash]
+----
+== In update-apt-repo.yml
+gh release download "$RELEASE_TAG" -p 'docker.io_*.deb'
+reprepro -b . includedeb trixie docker.io_*.deb
+
+----
+
+Ah. The workflow only downloaded packages from the _triggering_ release. If the Docker CLI build triggered the workflow, it only downloaded `docker-cli_*.deb`. Previous packages (docker.io, containerd, runc) were ignored.
+
+_Root cause:_ Each package type has its own release tag:
+
+* Engine releases: `v28.5.2-riscv64`
+* CLI releases: `cli-v28.5.2-riscv64`
+* Compose releases: `compose-v2.40.1-riscv64`
+
+When the APT workflow ran, it would:
+
+. Download packages from the triggering release
+. Rebuild the repository from scratch
+. Upload - but only with the newly downloaded packages
+
+_Solution:_ Download ALL packages on every run.
+
+[source,yaml]
+----
+* name: Download all latest .deb packages
+  env:
+    GH_TOKEN: ${{ github.token }}
+  run: |
+    # Find latest Engine release
+    DOCKER_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+      --limit 50 --json tagName | \
+      jq -r '.[] | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | .tagName' | \
+      head -1)
+
+    # Find latest CLI release
+    CLI_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+      --limit 50 --json tagName | \
+      jq -r '.[] | select(.tagName | test("^cli-v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | .tagName' | \
+      head -1)
+
+    # Find latest Compose release
+    COMPOSE_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+      --limit 50 --json tagName | \
+      jq -r '.[] | select(.tagName | test("^compose-v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | .tagName' | \
+      head -1)
+
+    # Download from each
+    gh release download "$DOCKER_RELEASE" -p 'docker.io_*.deb' --clobber
+    gh release download "$DOCKER_RELEASE" -p 'containerd_*.deb' --clobber
+    gh release download "$DOCKER_RELEASE" -p 'runc_*.deb' --clobber
+    gh release download "$CLI_RELEASE" -p 'docker-cli_*.deb' --clobber
+    gh release download "$COMPOSE_RELEASE" -p 'docker-compose-plugin_*.deb' --clobber
+
+----
+
+Now the repository always contains all packages, regardless of which build triggered the update.
+
+_Verification step added:_
+
+[source,yaml]
+----
+* name: Verify all packages present
+  run: |
+    EXPECTED_PACKAGES=(
+      "containerd"
+      "docker-cli"
+      "docker.io"
+      "runc"
+    )
+
+    MISSING_PACKAGES=()
+    for pkg in "${EXPECTED_PACKAGES[@]}"; do
+      if reprepro -b . list trixie | grep -q "^trixie|main|riscv64: $pkg "; then
+        echo "✅ $pkg found"
+      else
+        echo "❌ $pkg MISSING"
+        MISSING_PACKAGES+=("$pkg")
+      fi
+    done
+
+    if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+      echo "⚠️  ${#MISSING_PACKAGES[@]} package(s) missing!"
+      exit 1
+    fi
+
+----
+
+This catches regressions immediately.
+
+=== Bug #2: The jq Syntax Catastrophe
+
+After fixing the package downloading, I ran into a new error:
+
+[source,text]
+----
+Error: jq parse error: Invalid escape at line 1, column 45
+
+----
+
+_Investigation:_ I had recently "fixed" a line length issue by adding a backslash:
+
+[source,yaml]
+----
+CLI_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+              --limit 50 --json tagName | \
+              jq -r '.[] | select(.tagName | test("^cli-v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | \  # ← BAD!
+              .tagName' | \
+              head -1)
+
+----
+
+The backslash was _inside_ the jq expression. `jq` interpreted it as an escape sequence, not as a shell line continuation.
+
+_Solution:_ Move the backslash outside the jq expression:
+
+[source,yaml]
+----
+CLI_RELEASE=$(gh release list --repo gounthar/docker-for-riscv64 \
+              --limit 50 --json tagName | \
+              jq -r '.[] | select(.tagName | test("^cli-v[0-9]+\\.[0-9]+\\.[0-9]+-riscv64$")) | .tagName' | \  # ← GOOD!
+              head -1)
+
+----
+
+Lesson learned: when piping to `jq`, keep the entire jq expression on one logical line, even if you split the bash command with backslashes.
+
+=== Bug #3: The Persistent RPM Problem
+
+The most subtle bug involved RPM packaging. Users reported that downloading `moby-engine-28.5.2-1.riscv64.rpm` sometimes gave them the old version (28.5.1).
+
+_Investigation:_ I checked the release assets:
+
+[source,bash]
+----
+$ gh release view v28.5.2-riscv64
+...
+moby-engine-28.5.1-1.riscv64.rpm  25MB
+moby-engine-28.5.2-1.riscv64.rpm  25MB
+containerd-1.7.28-1.riscv64.rpm   30MB
+runc-1.3.0-1.riscv64.rpm          8MB
+
+----
+
+Two versions of moby-engine! But why?
+
+The RPM build workflow runs on the self-hosted runner. Unlike GitHub's ephemeral runners, my BananaPi has _persistent state_. The `~/rpmbuild/RPMS/riscv64/` directory survives between builds.
+
+_Timeline:_
+
+. Build v28.5.1 → creates `moby-engine-28.5.1-1.riscv64.rpm`
+. Upload all files in `~/rpmbuild/RPMS/riscv64/`
+. Two weeks later: build v28.5.2 → creates `moby-engine-28.5.2-1.riscv64.rpm`
+. Upload all files in `~/rpmbuild/RPMS/riscv64/` → uploads BOTH versions!
+
+_Solution:_ Clean the build directory before building.
+
+Added to all RPM workflows:
+
+[source,yaml]
+----
+* name: Clean previous RPM builds
+  if: steps.release.outputs.has-new-release == 'true'
+  run: |
+    # Remove any existing RPM files to prevent uploading old versions
+    rm -f ~/rpmbuild/RPMS/riscv64/moby-engine-*.rpm
+    rm -f ~/rpmbuild/RPMS/riscv64/containerd-*.rpm
+    rm -f ~/rpmbuild/RPMS/riscv64/runc-*.rpm
+    echo "Cleaned previous Engine RPM files"
+
+----
+
+This is specific to self-hosted runners. On GitHub's ephemeral runners, each build starts with a clean filesystem. On self-hosted runners, _you_ are responsible for cleanup.
+
+_Manual cleanup:_ I also had to manually remove the duplicate files from the existing releases:
+
+[source,bash]
+----
+== List all assets
+gh release view v28.5.2-riscv64 --json assets --jq '.assets[].name'
+
+== Delete the old versions
+gh release delete-asset v28.5.2-riscv64 moby-engine-28.5.1-1.riscv64.rpm
+gh release delete-asset v28.5.2-riscv64 docker-cli-28.5.1-1.riscv64.rpm
+
+----
+
+== Performance Characteristics
+
+After weeks of production use, here are the real-world performance numbers:
+
+=== Build Times (BananaPi F3)
+
+[cols="1,1,1", options="header"]
+|===
+| Component
+| Time
+| Notes
+
+| Test workflow
+| ~5 seconds
+| Simple architecture checks
+
+| Docker Engine (complete)
+| 35-40 minutes
+| Includes dockerd, containerd, runc
+
+| Docker CLI
+| 12-15 minutes
+| Lighter build, fewer dependencies
+
+| Docker Compose
+| 8-10 minutes
+| Pure Go, fast compilation
+
+| Tini
+| 2-3 minutes
+| Small C project
+
+|===
+
+=== Resource Usage
+
+During a full Docker build:
+
+* _CPU_: 8 cores at 80-95% utilization
+* _RAM_: Peak 3.5GB (out of 16GB total)
+* _Disk I/O_: ~200MB/s read during image builds
+* _Network_: ~50Mbps for downloading Go modules
+
+The BananaPi F3 handles these builds comfortably. It's not fast by modern standards, but it's _reliable_.
+
+=== Reliability Metrics
+
+Since implementing the systemd service (3 weeks ago):
+
+* _Uptime_: 99.2% (only offline during power outages)
+* _Successful builds_: 47 out of 48 (one failure due to disk space)
+* _Average weekly builds_: 4-5 (one scheduled, others manual/tracking)
+
+== Lessons Learned
+
+=== Self-Hosted Runners Are Different
+
+The biggest mental shift: self-hosted runners have _state_. Every assumption you have from using GitHub's ephemeral runners needs to be re-examined:
+
+* _Cleanup is your responsibility_: Files persist between runs
+* _Dependencies don't auto-update_: You manage Node.js, Go, Docker versions
+* _Disk space accumulates_: Docker images, build caches, logs
+* _Reboots happen_: Systemd services are mandatory
+
+=== Architecture-Specific Challenges
+
+Some issues are unique to RISC-V64:
+
+* _Limited pre-built images_: Many Docker images don't have riscv64 variants
+* _Longer build times_: 8 RISC-V cores at lower clock speeds vs 8+ x86_64 cores at 3+GHz
+* _Beta software_: Some tools (like the runner itself) are community projects
+* _Documentation gaps_: Fewer people have solved these problems before
+
+But none of these are dealbreakers. They just require more attention.
+
+=== Automation Complexity
+
+The more automated your pipeline, the more places for subtle bugs:
+
+* _Multi-package repositories_: Need careful orchestration to avoid race conditions
+* _Concurrent workflows_: APT repository updates can conflict if two packages build simultaneously
+* _Release tag conventions_: Different prefixes (v*, cli-v*, compose-v*) require regex matching
+* _Error handling_: Silent failures are worse than loud failures
+
+I added retry logic to the APT repository update:
+
+[source,yaml]
+----
+== Push with retry logic for concurrent workflow handling
+MAX_RETRIES=5
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if git push origin apt-repo; then
+    echo "✅ Successfully pushed changes"
+    break
+  else
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    # Fetch, rebase, retry...
+
+----
+
+This handles the case where two packages finish building within seconds of each other.
+
+=== Testing Is Critical
+
+After the "vanishing packages" bug, I added comprehensive verification:
+
+. _Package presence checks_: Verify all expected packages exist
+. _Version checks_: Ensure new versions actually update
+. _Installation tests_: Actually install and run the packages
+. _Regression tests_: Keep test cases for past bugs
+
+The verification step catches 90% of issues before users see them.
+
+== Recommendations for Others
+
+If you're setting up RISC-V64 CI/CD, here's what I'd recommend:
+
+=== Hardware Choices
+
+_Minimum viable:_
+
+* 4 cores (RISC-V64)
+* 4GB RAM
+* 64GB storage
+* Gigabit Ethernet
+
+_Ideal (BananaPi F3 with 16GB):_
+
+* 8 cores (RISC-V64)
+* 16GB RAM
+* 128GB eMMC + NVMe expansion via M.2
+* UPS for power stability
+
+The BananaPi F3 with 8 cores and 16GB RAM exceeds minimum requirements and provides comfortable headroom for concurrent builds. The 8-core processor handles compilation efficiently without becoming a bottleneck.
+
+=== Software Stack
+
+_Required:_
+
+* Debian Trixie or Ubuntu 24.04 (riscv64)
+* Go 1.24+
+* Node.js 18+
+* Docker 28+
+* github-act-runner
+
+_Recommended:_
+
+* Systemd for runner management
+* Monitoring (Prometheus, Grafana)
+* Log aggregation (journalctl is enough to start)
+* Backup strategy for runner state
+
+=== Workflow Design Principles
+
+. _Use ubuntu-latest for non-compilation tasks_: Save your RISC-V64 runner for actual builds
+. _Add cleanup steps_: Especially for RPM/DEB builds
+. _Implement verification_: Check that automation actually worked
+. _Handle concurrency_: Retry logic for repository updates
+. _Document everything_: Future you will thank you
+
+=== Monitoring and Alerts
+
+I monitor:
+
+* Runner online/offline status (GitHub API)
+* Disk space (alert at 80% full)
+* Build success rate (alert on 2+ failures)
+* Docker daemon health
+
+Simple monitoring catches problems early.
+
+== Current Status and Future Plans
+
+Today, the build infrastructure is solid:
+
+* _3 automated workflows_: Docker Engine, CLI, Compose
+* _2 package formats_: DEB (APT) and RPM
+* _3 weeks uptime_: 99%+ reliability
+* _Zero manual intervention_: Fully automated builds
+
+But there's more to do:
+
+=== Short Term
+
+* _Gentoo overlay generation_: Create ebuilds automatically
+* _Binary verification_: Add checksums and signatures to releases
+* _Build caching_: Reduce builds from 40 minutes to 20 minutes
+
+=== Long Term
+
+* _Multi-architecture support_: Add ARM64, x86_64 for comparison
+* _Runner auto-update_: Detect new github-act-runner versions
+* _High availability_: Second runner for redundancy
+* _Performance profiling_: Identify bottlenecks in build process
+
+== Conclusion
+
+Setting up CI/CD for RISC-V64 is more complex than mainstream architectures, but it's absolutely achievable. The key insights:
+
+. _Use the right tools_: github-act-runner works where official runner fails
+. _Embrace self-hosted_: Persistent state requires different thinking
+. _Test thoroughly_: Automation bugs hide in production for weeks
+. _Monitor everything_: Catch problems before users do
+
+The RISC-V64 ecosystem is maturing rapidly. A year ago, this setup would have been significantly harder. Today, it's straightforward if you know the gotchas.
+
+Most importantly: after three weeks of production use, with 47 successful builds serving real users upgrading their Docker installations, I can confidently say that RISC-V64 is ready for production CI/CD. Not "experimental." Not "beta." Actually ready.
+
+Now go build something.
+
+== References
+
+* _github-act-runner_: link:https://github.com/ChristopherHX/github-act-runner[https://github.com/ChristopherHX/github-act-runner]
+* _BananaPi F3 Wiki_: link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[https://wiki.banana-pi.org/Banana_Pi_BPI-F3]
+* _BananaPi F3 Official Documentation_: link:https://docs.banana-pi.org/en/BPI-F3/BananaPi_BPI-F3[https://docs.banana-pi.org/en/BPI-F3/BananaPi_BPI-F3]
+* _Docker for RISC-V64_: link:https://github.com/gounthar/docker-for-riscv64[https://github.com/gounthar/docker-for-riscv64]
+* _APT Repository_: link:https://gounthar.github.io/docker-for-riscv64[https://gounthar.github.io/docker-for-riscv64]
+* _GitHub Actions Self-Hosted Runners_: link:https://docs.github.com/en/actions/hosting-your-own-runners[https://docs.github.com/en/actions/hosting-your-own-runners]
+
+== Appendix: Complete Systemd Service File
+
+[source,ini]
+----
+[Unit]
+Description=GitHub Actions Runner (RISC-V64)
+After=network.target docker.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=poddingue
+WorkingDirectory=/home/poddingue/github-act-runner-test
+ExecStart=/home/poddingue/github-act-runner-test/github-act-runner run
+Restart=always
+RestartSec=10
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+
+== Environment variables (optional)
+== Environment="RUNNER_WORKDIR=/home/poddingue/github-act-runner-test/_work"
+
+== Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=github-runner
+
+[Install]
+WantedBy=multi-user.target
+
+----
+
+== Appendix: Useful Maintenance Commands
+
+[source,bash]
+----
+== Check runner status
+systemctl status github-runner
+
+== View runner logs (real-time)
+sudo journalctl -u github-runner -f
+
+== View recent logs (last 100 lines)
+sudo journalctl -u github-runner -n 100
+
+== Restart runner
+sudo systemctl restart github-runner
+
+== Update runner
+cd ~/github-act-runner-test
+git pull
+go build -v -o github-act-runner .
+sudo systemctl restart github-runner
+
+== Check disk space
+df -h ~
+docker system df
+
+== Clean Docker
+docker system prune -a -f
+
+== Check GitHub runner status via API
+gh api repos/gounthar/docker-for-riscv64/actions/runners --jq '.runners[] | {name, status, busy}'
+
+== List recent workflow runs
+gh run list --limit 10
+
+== View specific workflow run
+gh run view RUN_ID
+
+== Manually trigger workflow
+gh workflow run docker-weekly-build.yml
+
+----
+
+== Appendix: Troubleshooting Common Issues
+
+=== Runner Shows Offline
+
+_Check service:_
+[source,bash]
+----
+systemctl status github-runner
+
+----
+
+_Check logs:_
+[source,bash]
+----
+sudo journalctl -u github-runner -n 50
+
+----
+
+_Common causes:_
+
+* Network connectivity lost
+* Docker daemon not running
+* Authentication token expired (after 90 days)
+* Disk full
+
+_Solution:_
+[source,bash]
+----
+== Restart
+sudo systemctl restart github-runner
+
+== If token expired, reconfigure
+cd ~/github-act-runner-test
+./github-act-runner remove
+./github-act-runner configure --url ... --token NEW_TOKEN
+sudo systemctl start github-runner
+
+----
+
+=== Build Failures
+
+_Check workflow logs:_
+[source,bash]
+----
+gh run list --limit 5
+gh run view RUN_ID --log
+
+----
+
+_Common causes:_
+
+* Disk space exhausted
+* Docker image pull failures
+* Network timeout
+* Missing dependencies
+
+_Solution:_
+[source,bash]
+----
+== Clean disk
+docker system prune -a
+rm -rf ~/github-act-runner-test/_work/_temp/*
+
+== Check available space
+df -h ~
+
+== Verify Docker works
+docker run --rm hello-world
+
+----
+
+=== Duplicate Package Versions
+
+_Symptom:_ Release contains multiple versions of same package.
+
+_Cause:_ Self-hosted runner persistence.
+
+_Solution:_
+[source,bash]
+----
+== Clean RPM build directory
+rm -f ~/rpmbuild/RPMS/riscv64/*.rpm
+
+== For Debian packages
+rm -f ~/docker-for-riscv64/debian-build/*.deb
+
+== Add cleanup to workflow (see Bug #3 above)
+
+----
+
+=== APT Repository Missing Packages
+
+_Symptom:_ `apt-get install docker.io` fails, package not found.
+
+_Diagnosis:_
+[source,bash]
+----
+== Check repository contents
+gh api repos/gounthar/docker-for-riscv64/contents/dists/trixie/main/binary-riscv64 --jq '.[] | .name'
+
+== Check what packages exist
+curl -s https://gounthar.github.io/docker-for-riscv64/dists/trixie/main/binary-riscv64/Packages | grep "Package:"
+
+----
+
+_Solution:_ See Bug #1 - ensure all packages are downloaded on every repository update.

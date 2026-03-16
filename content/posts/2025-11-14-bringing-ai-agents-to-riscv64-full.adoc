@@ -1,0 +1,1032 @@
+---
+author: Poddingue
+categories:
+- RISC-V
+- Docker
+- AI
+- Packaging
+description: How we packaged Docker Engineering's cagent multi-agent AI runtime for
+  RISC-V64, creating the first Linux distribution package for this powerful tool
+featured: true
+hidden: false
+image: assets/images/2025/11/14/cagent-header.jpg
+tags:
+- cagent
+- risc-v
+- riscv64
+- ai
+- multi-agent
+- docker
+- debian
+- rpm
+- golang
+- bananapi
+title: 'Bringing AI Agents to RISC-V64: The First cagent Distribution Package'
+---
+
+== Bringing AI Agents to RISC-V64: The First cagent Distribution Package
+
+<span id="author" class="author">Bruno Verachten</span>  
+<span id="revnumber">version 1.0,</span> <span id="revdate">2025-11-14</span>
+
+Table of Contents
+
+*   link:#_the_discovery_what_is_cagent[1. The Discovery: What is cagent?]
+    *   link:#_why_cagent_matters[1.1. Why cagent Matters]
+*   link:#_the_decision_why_package_cagent_for_risc_v64[2. The Decision: Why Package cagent for RISC-V64?]
+    *   link:#_natural_ecosystem_fit[2.1. Natural Ecosystem Fit]
+    *   link:#_strategic_positioning[2.2. Strategic Positioning]
+    *   link:#_first_to_market_opportunity[2.3. First-to-Market Opportunity]
+*   link:#_the_implementation_building_for_risc_v64[3. The Implementation: Building for RISC-V64]
+    *   link:#_creating_the_build_script[3.1. Creating the Build Script]
+        *   link:#_build_performance[3.1.1. Build Performance]
+    *   link:#_the_cicd_pipeline[3.2. The CI/CD Pipeline]
+        *   link:#_weekly_builds_cagent_weekly_build_yml[3.2.1. Weekly Builds (`cagent-weekly-build.yml`)]
+        *   link:#_release_tracking_track_cagent_releases_yml[3.2.2. Release Tracking (`track-cagent-releases.yml`)]
+        *   link:#_package_builds_debian_and_rpm[3.2.3. Package Builds (Debian and RPM)]
+*   link:#_the_packaging_challenge_go_binaries_are_special[4. The Packaging Challenge: Go Binaries Are Special]
+    *   link:#_the_debian_package[4.1. The Debian Package]
+        *   link:#_package_control_file[4.1.1. Package Control File]
+        *   link:#_the_debianrules_magic[4.1.2. The debian/rules Magic]
+        *   link:#_understanding_the_overrides[4.1.3. Understanding the Overrides]
+    *   link:#_the_rpm_package[4.2. The RPM Package]
+    *   link:#_package_detection_logic[4.3. Package Detection Logic]
+*   link:#_repository_integration_making_it_available[5. Repository Integration: Making it Available]
+    *   link:#_apt_repository_updates[5.1. APT Repository Updates]
+        *   link:#_verification[5.1.1. Verification]
+    *   link:#_rpm_repository_updates[5.2. RPM Repository Updates]
+        *   link:#_verification_2[5.2.1. Verification]
+*   link:#_the_first_package_what_it_means[6. The First Package: What It Means]
+    *   link:#_why_this_matters[6.1. Why This Matters]
+    *   link:#_implications_for_cagent[6.2. Implications for cagent]
+    *   link:#_implications_for_risc_v64[6.3. Implications for RISC-V64]
+    *   link:#_distribution_availability_comparison[6.4. Distribution Availability Comparison]
+*   link:#_lessons_learned[7. Lessons Learned]
+    *   link:#_go_binary_packaging_is_different[7.1. Go Binary Packaging is Different]
+    *   link:#_automation_prevents_drift[7.2. Automation Prevents Drift]
+    *   link:#_first_mover_advantage_exists[7.3. First-Mover Advantage Exists]
+*   link:#_current_status_and_future_work[8. Current Status and Future Work]
+    *   link:#_what_works_today[8.1. What Works Today]
+    *   link:#_troubleshooting[8.2. Troubleshooting]
+        *   link:#_build_issues[8.2.1. Build Issues]
+        *   link:#_installation_issues[8.2.2. Installation Issues]
+        *   link:#_runtime_issues[8.2.3. Runtime Issues]
+    *   link:#_real_world_example_devops_assistant[8.3. Real-World Example: DevOps Assistant]
+    *   link:#_whats_next[8.4. What’s Next]
+        *   link:#_configuration_package[8.4.1. Configuration Package]
+        *   link:#_systemd_integration[8.4.2. Systemd Integration]
+        *   link:#_mcp_server_packages[8.4.3. MCP Server Packages]
+*   link:#_conclusion[9. Conclusion]
+*   link:#_resources[10. Resources]
+*   link:#_license[11. License]
+
+image::./images/cagent-header.jpg[Bringing AI Agents to RISC-V64]
+
+_Photo from <a href="https://unsplash.com/photos/4eFNfs7iBLc" target="_blank" rel="noopener">Unsplash</a> - Abstract geometric patterns representing the convergence of AI agents and architecture_
+
+[quote]
+____
+When Docker Engineering released cagent, their multi-agent AI runtime, I knew immediately it belonged in our RISC-V64 repository. What started as "just another package" turned into something special: the first Linux distribution package for cagent ever created. Here’s the story of how we brought orchestrated AI agents to RISC-V64, complete with automated builds, dual package formats, and all the quirks of packaging Go binaries.
+____
+
+== 1. The Discovery: What is cagent?
+
+I discovered cagent while browsing Docker’s GitHub repositories. The README caught my attention immediately:
+
+[quote]
+____
+A powerful, easy to use, customizable multi-agent runtime that orchestrates AI agents with specialized capabilities and tools.
+____
+
+This wasn’t just another tool. This was Docker Engineering’s vision of how to build intelligent agent systems. Think of it as letting you quickly build and run a team of virtual experts that collaborate to solve complex problems.
+
+=== 1.1. Why cagent Matters
+
+The concept is elegant: instead of asking a single AI model to be an expert at everything, you create specialized agents. One agent might be a Golang expert, another might handle DevOps tasks, and a third might coordinate between them. Each agent has:
+
+*   _Specialized knowledge_ - Domain-specific expertise defined in YAML
+
+*   _Custom tools_ - Integration with external services via MCP (Model Context Protocol)
+
+*   _Smart delegation_ - Ability to hand off tasks to more specialized agents
+
+*   _Provider flexibility_ - Support for OpenAI, Anthropic, Gemini, xAI, Mistral
+
+Here’s what a basic agent looks like:
+
+    agents:
+      root:
+        model: openai/gpt-5-mini
+        description: A helpful AI assistant
+        instruction: |
+          You are a knowledgeable assistant that helps users with various tasks.
+          Be helpful, accurate, and concise in your responses.
+
+But it gets better. You can give agents access to real tools through MCP servers:
+
+    agents:
+      root:
+        model: openai/gpt-5-mini
+        description: A helpful AI assistant with search capabilities
+        instruction: |
+          You are a knowledgeable assistant. Use DuckDuckGo to search for
+          current information when needed.
+        toolsets:
+          * type: mcp
+            ref: docker:duckduckgo
+
+Now your agent can search the web, read files, interact with APIs - all defined declaratively in YAML.
+
+== 2. The Decision: Why Package cagent for RISC-V64?
+
+When I saw cagent, several thoughts hit me immediately:
+
+=== 2.1. Natural Ecosystem Fit
+
+We’re already packaging Docker Engine, Docker CLI, Docker Compose, and Docker Buildx for RISC-V64. Adding cagent was a natural extension:
+
+*   _Same parent organization_ - Developed by Docker Engineering
+
+*   _Complementary tool_ - Extends Docker’s AI capabilities
+
+*   _Go-based_ - Same language and build toolchain as other Docker tools
+
+*   _Similar users_ - Developers using our other packages would want this
+
+=== 2.2. Strategic Positioning
+
+RISC-V64 is positioned as an open, innovative architecture. AI agents represent cutting-edge development. Bringing cagent to RISC-V64 sends a message: this architecture is ready for modern AI workflows.
+
+=== 2.3. First-to-Market Opportunity
+
+Here’s what made me move fast: _cagent had no distribution packages yet_. Not on Debian, not on Fedora, not on Ubuntu. Docker provides binaries via GitHub releases and Homebrew on macOS, but no Linux distribution had packaged it.
+
+We could be first. And for a relatively young platform like RISC-V64, being first to support cutting-edge tools matters.
+
+== 3. The Implementation: Building for RISC-V64
+
+Go’s portability makes it ideal for RISC-V64. Building natively on our BananaPi F3 hardware is straightforward thanks to Go’s excellent RISC-V64 support.
+
+=== 3.1. Creating the Build Script
+
+I started with `build-cagent-riscv64.sh`:
+
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    build_cagent() {
+        echo "Building cagent for RISC-V64..."
+
+        if [ ! -d "cagent" ]; then
+            echo "Error: cagent directory not found"
+            echo "Please initialize the submodule with:"
+            echo "  git submodule update --init --recursive"
+            exit 1
+        fi
+
+        cd cagent
+
+        # Get version info
+        GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "dev")
+        GIT_COMMIT=$(git rev-parse HEAD)
+
+        echo "Version: ${GIT_TAG}"
+        echo "Commit: ${GIT_COMMIT}"
+
+        # Build with ldflags for version info
+        GOOS=linux GOARCH=riscv64 go build \
+            -ldflags "-X 'github.com/docker/cagent/pkg/version.Version=${GIT_TAG}' -X 'github.com/docker/cagent/pkg/version.Commit=${GIT_COMMIT}'" \
+            -o ../bin/cagent-linux-riscv64 \
+            ./main.go
+
+        cd ..
+
+        echo "Build complete: bin/cagent-linux-riscv64"
+    }
+
+Key decisions here:
+
+.  _Submodule approach_ - Following our pattern of using official upstream sources as git submodules rather than vendoring or forking. This keeps us synchronized with upstream, eliminates fork maintenance burden, and makes it trivial to update to any version (just `git submodule update --remote`)
+
+.  _Version embedding_ - Using ldflags to bake version info into the binary
+
+.  _Static naming_ - Output to `cagent-linux-riscv64` for consistency with our other packages
+
+==== 3.1.1. Build Performance
+
+On our BananaPi F3 RISC-V64 hardware:
+
+*   _Build time_: 5-8 minutes (depending on Go cache state)
+
+*   _Resource requirements_:
+
+    *   RAM: 2GB minimum, 4GB recommended
+
+    *   Disk space: ~1GB for Go dependencies and build artifacts
+
+    *   Network: ~200MB initial download for Go modules
+
+*   _Go version_: Requires Go 1.21 or later for RISC-V64 support
+
+=== 3.2. The CI/CD Pipeline
+
+I created three workflows following our established patterns:
+
+==== 3.2.1. Weekly Builds (`cagent-weekly-build.yml`)
+
+Runs every Sunday at 06:00 UTC, building the latest cagent from the main branch.
+
+The complete workflow is available at <a href="https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/cagent-weekly-build.yml" target="_blank" rel="noopener">cagent-weekly-build.yml</a>.
+
+Key sections:
+
+    jobs:
+      build-cagent:
+        runs-on: [self-hosted, riscv64]
+
+        steps:
+          * name: Build cagent binary
+            run: |
+              cd cagent
+              GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "dev")
+              GIT_COMMIT=$(git rev-parse HEAD)
+
+              GOOS=linux GOARCH=riscv64 CGO_ENABLED=0 go build \
+                -ldflags "-X 'github.com/docker/cagent/pkg/version.Version=${GIT_TAG}' -X 'github.com/docker/cagent/pkg/version.Commit=${GIT_COMMIT}'" \
+                -o cagent-linux-riscv64 \
+                ./main.go
+
+Note `CGO_ENABLED=0` - we want truly static binaries that don’t depend on glibc or other C libraries, ensuring maximum portability across different RISC-V64 systems. This eliminates runtime dependencies and makes the binary work identically on any RISC-V64 Linux system, regardless of library versions.
+
+==== 3.2.2. Release Tracking (`track-cagent-releases.yml`)
+
+Checks daily for new upstream releases and automatically triggers builds.
+
+The complete workflow is available at <a href="https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/track-cagent-releases.yml" target="_blank" rel="noopener">track-cagent-releases.yml</a>.
+
+Key logic:
+
+    * name: Check for new cagent release
+      run: |
+        # Get latest release from docker/cagent
+        LATEST=$(gh api repos/docker/cagent/releases/latest --jq '.tag_name')
+
+        # Check if we've built it (cagent-v1.9.13-riscv64 format)
+        CLEAN_VERSION="${LATEST#v}"
+        OUR_TAG="cagent-v${CLEAN_VERSION}-riscv64"
+
+        if gh release view "${OUR_TAG}" >/dev/null 2>&1; then
+          echo "already_built=true"
+        else
+          echo "already_built=false"
+          # Trigger build workflow
+          gh workflow run cagent-weekly-build.yml -f cagent_ref=$LATEST
+        fi
+
+This gives us automatic version tracking with zero manual intervention.
+
+==== 3.2.3. Package Builds (Debian and RPM)
+
+The package workflows trigger automatically after successful binary builds. More on this in the packaging section.
+
+== 4. The Packaging Challenge: Go Binaries Are Special
+
+Here’s where things got interesting. Go binaries have quirks that make packaging different from traditional C/C++ software.
+
+=== 4.1. The Debian Package
+
+Creating the Debian package structure in `debian-cagent/`.
+
+==== 4.1.1. Package Control File
+
+The control file defines metadata and dependencies:
+
+    Source: cagent
+    Section: devel
+    Priority: optional
+    Maintainer: Bruno Verachten <myself@gmail.com>
+    Build-Depends: debhelper-compat (= 13)
+    Standards-Version: 4.7.2.0
+    Homepage: https://github.com/docker/cagent
+
+    Package: cagent
+    Architecture: riscv64
+    Depends: ${misc:Depends}, ${shlibs:Depends}
+    Description: Multi-agent AI runtime by Docker Engineering for RISC-V64
+     cagent is a powerful, easy to use, customizable multi-agent runtime that
+     orchestrates AI agents with specialized capabilities and tools.
+
+==== 4.1.2. The debian/rules Magic
+
+The real magic is in `debian/rules`, where we tell dpkg how to handle our pre-built binary:
+
+    #!/usr/bin/make -f
+
+    %:
+        dh $@
+
+    override_dh_auto_build:
+        # Binary is pre-built, skip build
+
+    override_dh_auto_install:
+        install -d debian/cagent/usr/bin
+        install -m 0755 bin/cagent-linux-riscv64 debian/cagent/usr/bin/cagent
+
+    override_dh_strip:
+        # Skip stripping Go binaries
+
+    override_dh_shlibdeps:
+        # Skip shlib dependency detection for Go binaries
+
+    override_dh_dwz:
+        # Skip dwz compression for Go binaries
+
+==== 4.1.3. Understanding the Overrides
+
+Let me explain these overrides, because they’re critical for Go binary packaging:
+
+===== Why Skip Stripping?
+
+Go binaries embed metadata that tools like `strip` can corrupt. The version information we baked in with ldflags? Stripping can damage it.
+
+===== Why Skip Shlib Dependencies?
+
+Go programs are typically statically linked. They don’t depend on system shared libraries the way C programs do. Running `dh_shlibdeps` would either fail or add bogus dependencies.
+
+===== Why Skip dwz?
+
+The `dwz` tool compresses DWARF debug information, but Go’s debug format doesn’t play nicely with it. You’ll get errors about "unsupported compressed debug sections."
+
+These overrides were hard-won knowledge from earlier Go packaging attempts.
+
+=== 4.2. The RPM Package
+
+The RPM spec file (`rpm-cagent/cagent.spec`) has similar considerations:
+
+    Name:           cagent
+    Version:        1.9.13
+    Release:        1%{?dist}
+    Summary:        Multi-agent AI runtime by Docker Engineering for RISC-V64
+
+    BuildArch:      riscv64
+
+    # Disable Go binary processing
+    %global __brp_strip %{nil}
+    %global __brp_strip_static_archive %{nil}
+    %global __brp_strip_comment_note %{nil}
+    %global _enable_debug_packages 0
+    %global debug_package %{nil}
+
+    %install
+    install -d %{buildroot}%{_bindir}
+    install -p -m 0755 %{SOURCE0} %{buildroot}%{_bindir}/cagent
+
+Same principle: tell RPM to leave our Go binary alone. Don’t strip it, don’t analyze it, don’t debug-package it, just install it.
+
+=== 4.3. Package Detection Logic
+
+Here’s a subtle bug I had to fix. The package build workflow needs to detect whether a release already has packages.
+
+Initially, I used a pattern that was too strict:
+
+    # Broken (too strict - doesn't match version-suffixed filenames):
+    if echo "$ASSETS" | grep -q 'cagent\.deb'; then
+        echo "Release already has Debian packages - skipping build"
+        exit 0
+    fi
+
+This failed to match versioned filenames like `cagent_1.9.13-1_riscv64.deb` because it looked for an exact `.deb` extension without accounting for the version string.
+
+The corrected version:
+
+    # Fixed (properly matches versioned filenames):
+    ASSETS=$(gh release view "$LATEST_RELEASE" --json assets --jq '.assets[].name')
+    if echo "$ASSETS" | grep -q 'cagent.*\.deb$'; then
+        echo "Release already has Debian packages - skipping build"
+        exit 0
+    fi
+
+The regex
+
+cagent.
+
+\\deb$ uses `.` to match any characters (including underscores, version numbers, and architecture tags) between "cagent" and ".deb", properly matching filenames like `cagent_1.9.13-1_riscv64.deb`.
+
+== 5. Repository Integration: Making it Available
+
+With packages built correctly and automation detecting releases properly, the next challenge was making them easily discoverable and installable through standard package managers. Building the packages is only half the battle. Users need a way to install them.
+
+=== 5.1. APT Repository Updates
+
+The `update-apt-repo.yml` workflow now includes cagent in its triggers:
+
+    on:
+      workflow_run:
+        workflows:
+          * "Build Debian Package"
+          * "Build Docker Compose Debian Package"
+          * "Build Docker CLI Debian Package"
+          * "Build Docker Buildx Debian Package"
+          * "Build cagent Debian Package"  # <-- Added this
+        types: [completed]
+
+When a cagent Debian package is built, the workflow:
+
+.  Downloads the `.deb` from the release
+
+.  Checks out the `apt-repo` branch
+
+.  Uses `reprepro` to add the package
+
+.  Signs it with our GPG key
+
+.  Commits and pushes to GitHub Pages
+
+Users can now install cagent alongside Docker:
+
+    # Add our repository
+    wget -qO - https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg \
+      | sudo gpg --dearmor -o /usr/share/keyrings/docker-riscv64.gpg
+
+    echo "deb [arch=riscv64 signed-by=/usr/share/keyrings/docker-riscv64.gpg] \
+      https://gounthar.github.io/docker-for-riscv64 trixie main" \
+      | sudo tee /etc/apt/sources.list.d/docker-riscv64.list
+
+    # Install cagent
+    sudo apt-get update
+    sudo apt-get install cagent
+
+The installation output should look like this:
+
+    Reading package lists... Done
+    Building dependency tree... Done
+    Reading state information... Done
+    The following NEW packages will be installed:
+      cagent
+    0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+    Need to get 0 B/26.6 MB of archives.
+    After this operation, 73.9 MB of additional disk space will be used.
+    Selecting previously unselected package cagent.
+    (Reading database ... 145234 files and directories currently installed.)
+    Preparing to unpack .../cagent_1.9.13-1_riscv64.deb ...
+    Unpacking cagent (1.9.13-1) ...
+    Setting up cagent (1.9.13-1) ...
+
+==== 5.1.1. Verification
+
+After installation, verify the package is working correctly:
+
+    # Check version
+    cagent version
+
+    # Expected output:
+    # cagent version 1.9.13 (commit: abc123...)
+
+    # Verify binary location
+    which cagent
+    # /usr/bin/cagent
+
+    # Test basic functionality
+    cagent new --help
+    # Should display help for creating new agent configurations
+
+=== 5.2. RPM Repository Updates
+
+Similarly for RPM (`update-rpm-repo.yml`):
+
+    on:
+      workflow_run:
+        workflows:
+          * "Build Docker RPM Package"
+          * "Build Docker Compose RPM Package"
+          * "Build Docker CLI RPM Package"
+          * "Build Tini RPM Package"
+          * "Build Docker Buildx RPM Package"
+          * "Build cagent RPM Package"  # <-- Added this
+
+The process is similar but uses `createrepo_c` instead of `reprepro`. Fedora RISC-V users can now:
+
+    # Add our repository
+    sudo tee /etc/yum.repos.d/docker-riscv64.repo << EOF
+    [docker-riscv64]
+    name=Docker for RISC-V64
+    baseurl=https://gounthar.github.io/docker-for-riscv64/rpm
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg
+    EOF
+
+    # Install cagent
+    sudo dnf install cagent
+
+The installation output should look like this:
+
+    Last metadata expiration check: 0:00:23 ago on Thu 14 Nov 2025 06:30:15 PM UTC.
+    Dependencies resolved.
+    ================================================================================
+     Package        Architecture    Version              Repository           Size
+    ================================================================================
+    Installing:
+     cagent         riscv64         1.9.13-1             docker-riscv64       26 M
+
+    Transaction Summary
+    ================================================================================
+    Install  1 Package
+
+    Total download size: 26 M
+    Installed size: 74 M
+    Is this ok [y/N]: y
+    Downloading Packages:
+    cagent-1.9.13-1.riscv64.rpm                     26 MB/s |  26 MB     00:01
+    --------------------------------------------------------------------------------
+    Total                                           26 MB/s |  26 MB     00:01
+    Running transaction check
+    Transaction check succeeded.
+    Running transaction test
+    Transaction test succeeded.
+    Running transaction
+      Preparing        :                                                        1/1
+      Installing       : cagent-1.9.13-1.riscv64                                1/1
+      Verifying        : cagent-1.9.13-1.riscv64                                1/1
+
+    Installed:
+      cagent-1.9.13-1.riscv64
+
+    Complete!
+
+==== 5.2.1. Verification
+
+After installation, verify the package is working correctly:
+
+    # Check version
+    cagent version
+
+    # Expected output:
+    # cagent version 1.9.13 (commit: abc123...)
+
+    # Verify binary location
+    which cagent
+    # /usr/bin/cagent
+
+    # Verify RPM package info
+    rpm -qi cagent
+    # Should show package information including version and description
+
+    # Test basic functionality
+    cagent new --help
+    # Should display help for creating new agent configurations
+
+== 6. The First Package: What It Means
+
+Let me emphasize this again: _this is the first Linux distribution package for cagent_. Period.
+
+=== 6.1. Why This Matters
+
+Docker provides several distribution methods:
+
+*   _GitHub releases_ - Manual downloads of static binaries
+
+*   _Homebrew_ - Automated installation on macOS
+
+*   _Docker Hub_ - Agent configurations as OCI images
+
+But no Linux distribution had packaged it. Not Debian, not Fedora, not Ubuntu, not Arch. We’re first.
+
+=== 6.2. Implications for cagent
+
+Being packaged in a distribution (even a small, specialized one) has benefits:
+
+.  _Dependency management_ - Package managers handle updates
+
+.  _System integration_ - Standard paths, predictable locations
+
+.  _Distribution channels_ - Easier discovery for users
+
+.  _Validation_ - Packages go through quality checks
+
+Our packaging work could serve as a template when mainstream distributions eventually package cagent.
+
+=== 6.3. Implications for RISC-V64
+
+Every modern, cutting-edge tool we bring to RISC-V64 strengthens the ecosystem:
+
+*   _Developer mindshare_ - "I can run cagent on RISC-V? Interesting…​"
+
+*   _Use case expansion_ - RISC-V64 as an AI development platform
+
+*   _Ecosystem completeness_ - Docker + Docker Compose + Buildx + cagent = full stack
+
+We’re not just porting old software. We’re bringing tomorrow’s tools to RISC-V64 today.
+
+=== 6.4. Distribution Availability Comparison
+
+Here’s how cagent availability looks across different Linux distributions and architectures:
+
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 20%" />
+<col style="width: 30%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th class="tableblock halign-left valign-top">Distribution</th>
+<th class="tableblock halign-left valign-top">Architecture</th>
+<th class="tableblock halign-left valign-top">Package Available</th>
+<th class="tableblock halign-left valign-top">Installation Method</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td class="tableblock halign-left valign-top"><p>_Debian Trixie_</p></td>
+<td class="tableblock halign-left valign-top"><p>riscv64</p></td>
+<td class="tableblock halign-left valign-top"><p>✅ _Yes_ (First!)</p></td>
+<td class="tableblock halign-left valign-top"><p>`apt-get install cagent`</p></td>
+</tr>
+<tr class="even">
+<td class="tableblock halign-left valign-top"><p>_Fedora_</p></td>
+<td class="tableblock halign-left valign-top"><p>riscv64</p></td>
+<td class="tableblock halign-left valign-top"><p>✅ _Yes_ (First!)</p></td>
+<td class="tableblock halign-left valign-top"><p>`dnf install cagent`</p></td>
+</tr>
+<tr class="odd">
+<td class="tableblock halign-left valign-top"><p>_Ubuntu_</p></td>
+<td class="tableblock halign-left valign-top"><p>riscv64</p></td>
+<td class="tableblock halign-left valign-top"><p>⚠️ _Compatible_</p></td>
+<td class="tableblock halign-left valign-top"><p>Our .deb packages compatible<sup>1</sup></p></td>
+</tr>
+<tr class="even">
+<td class="tableblock halign-left valign-top"><p>_Ubuntu_</p></td>
+<td class="tableblock halign-left valign-top"><p>amd64/arm64</p></td>
+<td class="tableblock halign-left valign-top"><p>❌ No</p></td>
+<td class="tableblock halign-left valign-top"><p>Manual download from GitHub</p></td>
+</tr>
+<tr class="odd">
+<td class="tableblock halign-left valign-top"><p>_Debian_</p></td>
+<td class="tableblock halign-left valign-top"><p>amd64/arm64</p></td>
+<td class="tableblock halign-left valign-top"><p>❌ No</p></td>
+<td class="tableblock halign-left valign-top"><p>Manual download from GitHub</p></td>
+</tr>
+<tr class="even">
+<td class="tableblock halign-left valign-top"><p>_Fedora_</p></td>
+<td class="tableblock halign-left valign-top"><p>x86_64/aarch64</p></td>
+<td class="tableblock halign-left valign-top"><p>❌ No</p></td>
+<td class="tableblock halign-left valign-top"><p>Manual download from GitHub</p></td>
+</tr>
+<tr class="odd">
+<td class="tableblock halign-left valign-top"><p>_Arch Linux_</p></td>
+<td class="tableblock halign-left valign-top"><p>Any</p></td>
+<td class="tableblock halign-left valign-top"><p>❌ No</p></td>
+<td class="tableblock halign-left valign-top"><p>Manual download or AUR</p></td>
+</tr>
+<tr class="even">
+<td class="tableblock halign-left valign-top"><p>_macOS_</p></td>
+<td class="tableblock halign-left valign-top"><p>arm64/amd64</p></td>
+<td class="tableblock halign-left valign-top"><p>✅ Yes</p></td>
+<td class="tableblock halign-left valign-top"><p>`brew install cagent`</p></td>
+</tr>
+<tr class="odd">
+<td class="tableblock halign-left valign-top"><p>_Any Linux_</p></td>
+<td class="tableblock halign-left valign-top"><p>Any</p></td>
+<td class="tableblock halign-left valign-top"><p>⚠️ _Binary_</p></td>
+<td class="tableblock halign-left valign-top"><p>Download from docker/cagent releases</p></td>
+</tr>
+</tbody>
+</table>
+
+<sup>1</sup> Our Debian Trixie packages use .deb format and should work on Ubuntu RISC-V64 systems, though we haven’t officially tested or certified this configuration. Ubuntu uses the same package format (dpkg/apt), so compatibility is likely but not guaranteed.
+
+_Key insight_: As of November 2025, RISC-V64 is the _only Linux architecture_ with native distribution packages for cagent. Not x86\_64, not aarch64 - RISC-V64 is leading in cagent packaging support.
+
+== 7. Lessons Learned
+
+=== 7.1. Go Binary Packaging is Different
+
+The biggest lesson: Go binaries need special handling. Document these overrides clearly:
+
+*   Skip stripping (corrupts embedded metadata)
+
+*   Skip shlib detection (static linking)
+
+*   Skip dwz compression (incompatible debug format)
+
+These aren’t optional workarounds. They’re requirements for correct Go packaging.
+
+=== 7.2. Automation Prevents Drift
+
+Our automated tracking caught cagent 1.9.13’s release within 24 hours. Without automation, we’d need manual monitoring and would likely lag weeks behind upstream.
+
+The pattern we’ve established - weekly builds + daily release tracking + automatic packaging - scales beautifully. Adding cagent required minimal new code because the infrastructure was already there.
+
+=== 7.3. First-Mover Advantage Exists
+
+Being the first to package cagent gives us visibility. When people search "cagent linux package," we’re the answer. When upstream Docker considers distribution packaging, we’re the reference implementation.
+
+Speed matters in open source. Being first isn’t everything, but it’s something.
+
+== 8. Current Status and Future Work
+
+=== 8.1. What Works Today
+
+As of November 14, 2025:
+
+*   ✅ cagent 1.9.13-1 available for Debian Trixie (riscv64)
+
+*   ✅ cagent 1.9.13-1 available for Fedora (riscv64)
+
+*   ✅ Automated weekly builds from upstream main
+
+*   ✅ Automated release tracking and packaging
+
+*   ✅ Signed APT and RPM repositories
+
+*   ✅ Full GitHub Pages distribution
+
+Installation requires adding our repository first:
+
+    # Debian/Trixie - Add repository
+    wget -qO - https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg \
+      | sudo gpg --dearmor -o /usr/share/keyrings/docker-riscv64.gpg
+
+    echo "deb [arch=riscv64 signed-by=/usr/share/keyrings/docker-riscv64.gpg] \
+      https://gounthar.github.io/docker-for-riscv64 trixie main" \
+      | sudo tee /etc/apt/sources.list.d/docker-riscv64.list
+
+    # Install cagent
+    sudo apt-get update
+    sudo apt-get install cagent
+
+    # Verify
+    cagent version
+
+For Fedora:
+
+    # Fedora - Add repository
+    sudo tee /etc/yum.repos.d/docker-riscv64.repo << EOF
+    [docker-riscv64]
+    name=Docker for RISC-V64
+    baseurl=https://gounthar.github.io/docker-for-riscv64/rpm/fedora/riscv64
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg
+    EOF
+
+    # Install cagent
+    sudo dnf install cagent
+
+    # Verify
+    cagent version
+
+=== 8.2. Troubleshooting
+
+==== 8.2.1. Build Issues
+
+_Problem: "cagent directory not found" error_
+
+    Error: cagent directory not found
+    Please initialize the submodule with:
+      git submodule update --init --recursive
+
+_Solution_: Initialize the git submodule:
+
+    git submodule update --init --recursive
+
+_Problem: "unsupported GOOS/GOARCH pair linux/riscv64" error_
+
+_Solution_: Update to Go 1.21 or later, which includes official RISC-V64 support:
+
+    go version  # Should show go1.21 or later
+
+_Problem: Build runs out of memory_
+
+_Solution_: Ensure at least 2GB RAM is available. On constrained systems, reduce concurrent builds:
+
+    GOMAXPROCS=1 go build ...
+
+==== 8.2.2. Installation Issues
+
+_Problem: "Signature verification failed" when installing_
+
+    E: The repository 'https://gounthar.github.io/docker-for-riscv64 trixie Release' is not signed.
+
+_Solution_: Re-import the GPG key:
+
+    wget -qO - https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/docker-riscv64.gpg \
+      | sudo gpg --dearmor -o /usr/share/keyrings/docker-riscv64.gpg
+
+    # Verify key was imported
+    gpg --list-keys --keyring /usr/share/keyrings/docker-riscv64.gpg
+
+_Problem: "Package cagent is not available" on apt-get install_
+
+_Solution_: Ensure the architecture matches:
+
+    # Check your architecture
+    dpkg --print-architecture
+    # Should show: riscv64
+
+    # Update package lists
+    sudo apt-get update
+
+    # Verify repository is added
+    apt-cache policy cagent
+
+_Problem: cagent binary fails with "cannot execute binary file: Exec format error"_
+
+_Solution_: This means you’re trying to run a RISC-V64 binary on a different architecture. Verify:
+
+    uname -m
+    # Should show: riscv64
+
+    file /usr/bin/cagent
+    # Should show: ELF 64-bit LSB executable, UCB RISC-V, ...
+
+==== 8.2.3. Runtime Issues
+
+_Problem: cagent fails with "API key not found"_
+
+_Solution_: cagent requires API keys for AI providers. Set them as environment variables:
+
+    export OPENAI_API_KEY="your-key-here"
+    export ANTHROPIC_API_KEY="your-key-here"
+
+Or create a `.env` file in your agent configuration directory.
+
+_Problem: MCP server connection fails_
+
+_Solution_: Verify MCP servers are installed and accessible:
+
+    # Check if MCP server binary exists
+    which docker-mcp-server
+
+    # Test MCP server directly
+    docker-mcp-server --help
+
+=== 8.3. Real-World Example: DevOps Assistant
+
+To demonstrate cagent’s capabilities, here’s a complete working configuration for a DevOps assistant specialized in RISC-V64 systems:
+
+    # devops-assistant.yaml
+    agents:
+      root:
+        model: anthropic/claude-3-5-sonnet-20241022
+        description: |
+          DevOps specialist for RISC-V64 Docker systems with expertise in
+          container management, system monitoring, and troubleshooting.
+        instruction: |
+          You are an expert DevOps engineer specializing in:
+          * Docker container management on RISC-V64 architecture
+          * System performance monitoring and optimization
+          * Build automation and CI/CD pipelines
+          * Linux package management (apt, dnf, rpm)
+
+          You have access to filesystem operations and can help users:
+          * Inspect Docker configurations and logs
+          * Analyze system resource usage
+          * Debug container issues
+          * Review build scripts and workflows
+
+          Always provide clear explanations and consider RISC-V64 specific
+          constraints like limited binary availability and build times.
+
+        toolsets:
+          * type: mcp
+            ref: docker:filesystem
+            config:
+              allowed_directories:
+                * /var/log/docker
+                * /etc/docker
+                * /home/${USER}/.docker
+                * ${PWD}
+
+    settings:
+      providers:
+        anthropic:
+          api_key_env: ANTHROPIC_API_KEY
+          model_aliases:
+            sonnet: claude-3-5-sonnet-20241022
+
+Save this to `devops-assistant.yaml` and run:
+
+    # Set your API key
+    export ANTHROPIC_API_KEY="your-key-here"
+
+    # Run the agent
+    cagent run devops-assistant.yaml
+
+    # Example interaction:
+    # User: "Check my Docker daemon logs for errors"
+    # Agent: _uses filesystem MCP to read /var/log/docker/daemon.log_
+    #        _analyzes logs and provides diagnostics_
+
+This demonstrates:
+
+*   _Specialized knowledge_ - DevOps and RISC-V64 expertise in the instruction
+
+*   _Tool access_ - Filesystem MCP for reading logs and configs
+
+*   _Security constraints_ - Limited to specific directories
+
+*   _Provider configuration_ - Anthropic with model aliases
+
+=== 8.4. What’s Next
+
+Several possibilities for future enhancement:
+
+==== 8.4.1. Configuration Package
+
+cagent supports pre-configured agent definitions. We could create a `cagent-examples` package with useful agent configurations:
+
+*   Development assistants (Golang expert, Python expert, DevOps specialist)
+
+*   Multi-agent teams (software development team, research team)
+
+*   MCP-integrated agents (GitHub integration, file system access, web search)
+
+==== 8.4.2. Systemd Integration
+
+For long-running agent services, systemd units could automate:
+
+*   Agent daemon management
+
+*   Log rotation and monitoring
+
+*   Resource limits and security constraints
+
+==== 8.4.3. MCP Server Packages
+
+The Model Context Protocol ecosystem is growing. We could package popular MCP servers:
+
+*   `rust-mcp-filesystem` - File system tools
+
+*   `mcp-server-git` - Git operations
+
+*   `mcp-server-docker` - Docker control
+
+Combined with cagent, this creates a complete agent development environment.
+
+== 9. Conclusion
+
+Adding cagent to our RISC-V64 repository was straightforward technically - Go’s native RISC-V64 support made building trivial on our BananaPi F3 hardware, and our established packaging infrastructure made integration smooth.
+
+But the significance goes beyond the technical implementation. We’ve brought a cutting-edge AI agent runtime to RISC-V64 before any mainstream Linux distribution packaged it. We’ve shown that RISC-V64 isn’t just catching up to existing software - it’s ready for the future.
+
+When someone wants to build intelligent agent systems on RISC-V64, they can now:
+
+    sudo apt-get install cagent
+    cagent new  # Generate an agent configuration
+    cagent run my-agent.yaml  # Deploy it immediately
+
+That’s the power of proper packaging: turning a GitHub project into a first-class system tool.
+
+The Docker ecosystem on RISC-V64 now includes:
+
+*   _Docker Engine_ - Container runtime
+
+*   _Docker CLI_ - Command-line interface
+
+*   _Docker Compose_ - Multi-container applications
+
+*   _Docker Buildx_ - Multi-platform builds
+
+*   _Tini_ - Container init system
+
+*   _cagent_ - Multi-agent AI runtime
+
+We’re not just building containers anymore. We’re building intelligent systems.
+
+And that’s exciting.
+
+== 10. Resources
+
+*   _Project Repository_: <a href="https://github.com/gounthar/docker-for-riscv64" class="bare">https://github.com/gounthar/docker-for-riscv64</a>
+
+*   _Upstream cagent_: <a href="https://github.com/docker/cagent" class="bare">https://github.com/docker/cagent</a>
+
+*   _APT Repository_: <a href="https://gounthar.github.io/docker-for-riscv64" class="bare">https://gounthar.github.io/docker-for-riscv64</a>
+
+*   _RPM Repository_: <a href="https://gounthar.github.io/docker-for-riscv64/rpm" class="bare">https://gounthar.github.io/docker-for-riscv64/rpm</a>
+
+*   _Installation Guide_: <a href="https://github.com/gounthar/docker-for-riscv64#installation" class="bare">https://github.com/gounthar/docker-for-riscv64#installation</a>
+
+== 11. License
+
+This article is licensed under link:https://creativecommons.org/licenses/by-sa/4.0/[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)].
+
+Code examples in this article are dual-licensed under:
+
+*   _Apache License 2.0_: <a href="https://www.apache.org/licenses/LICENSE-2.0" class="bare">https://www.apache.org/licenses/LICENSE-2.0</a>
+
+*   _MIT License_: <a href="https://opensource.org/licenses/MIT" class="bare">https://opensource.org/licenses/MIT</a>
+
+You are free to use, modify, and distribute the code examples under either license.
+
+The cagent software itself is licensed under the Apache License 2.0. See the link:https://github.com/docker/cagent/blob/main/LICENSE[upstream repository] for details.
+
+------------------------------------------------------------------------
+
+_This work is part of the ongoing effort to bring Docker and modern development tools to RISC-V64 architecture. All code and packaging materials are available under open source licenses._
+
+Version 1.0  
+Last updated 2025-11-14 17:33:44 +0100

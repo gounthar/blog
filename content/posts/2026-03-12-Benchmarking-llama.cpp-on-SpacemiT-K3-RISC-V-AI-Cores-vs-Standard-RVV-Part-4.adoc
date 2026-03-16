@@ -1,0 +1,741 @@
+---
+author: Bruno Verachten
+categories:
+- LLM
+- RISC-V
+- Embedded
+- AI
+date: 2026-03-12 12:00:00 +0100
+description: 'Benchmarking llama.cpp on SpacemiT''s K3 RISC-V chip with three models:
+  X100 cores hit 76 t/s, A100 AI cores are 30x slower on pp until vendor IME2 code
+  unlocks 111 t/s.'
+excerpt: 'I got 3 hours on SpacemiT''s K3 before the cloud instance died. In that
+  time, I built llama.cpp, benchmarked two types of cores, discovered the AI cores
+  are 30x slower with standard code, and found that a vendor binary with custom instructions
+  makes them the fastest option on the chip. Also: our CI binary works but leaves
+  1.7x on the table.'
+featured: true
+hidden: false
+image: assets/images/2026/03/12/header-k3-benchmark.jpg
+tags:
+- llama.cpp
+- riscv
+- ggml
+- inference
+- spacemit
+- k3
+- k1
+- banana-pi
+- benchmark
+- ime
+- rvv
+- rva23
+title: 'Benchmarking llama.cpp on SpacemiT K3: RISC-V AI Cores vs Standard RVV (Part
+  4)'
+---
+
+== TL;DR
+
+link:https://en.wikipedia.org/wiki/SpacemiT[SpacemiT]'s link:https://canonical.com/blog/spacemit-announces-availability-of-ubuntu-on-k3-k1-series[K3] has two core types: link:https://www.cnx-software.com/2026/01/23/spacemit-k3-16-core-risc-v-soc-system-information-and-early-benchmarks/[X100] (general-purpose, link:https://github.com/riscvarchive/riscv-v-spec[vlen] 256) and link:https://www.reddit.com/r/RISCV/comments/1qo9tmk/spacemitk3x100a100processes_on_higher_coresmd_at/?show=original[A100] ("AI cores", vlen 1024). Standard link:https://github.com/ggml-org/llama.cpp[llama.cpp] runs 2.3x faster on X100 than the previous-generation K1. But on the A100 cores, the same binary runs _34x slower on prompt processing_ at single-thread (30x at eight threads). SpacemiT's own build with IME2 matrix instructions flips that completely -- A100 becomes the fastest option at 111 t/s prompt processing and ~28 t/s generation. The annoying part? You can't compile it yourself. The vendor toolchain isn't public.
+
+---
+
+== Previously, on "Docker Captain vs. RISC-V"
+
+In link:{% post_url 2026-02-27-Running-a-Local-LLM-on-RISC-V-Building-llama.cpp-on-a-Banana-Pi-F3-Part-1 %}[Part 1], I built link:https://github.com/ggml-org/llama.cpp[llama.cpp] on a link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[Banana Pi F3] (link:https://www.spacemit.com/key-stone-k1[SpacemiT K1] link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC]) and got link:https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0[TinyLlama 1.1B] running at ~8.5 t/s. Not fast, but it worked. An link:https://en.wikipedia.org/wiki/Large_language_model[LLM] on link:https://riscv.org/[RISC-V], no GPU, no cloud API.
+
+Since then, I've been building CI infrastructure around the fork: a self-hosted link:https://github.com/features/actions[GitHub Actions] runner on the Banana Pi itself, a release workflow that produces riscv64 binaries, and a daily sync workflow to keep up with upstream. The plumbing is in place.
+
+Now for the interesting question: what happens when you run the same code on SpacemiT's next-generation chip?
+
+---
+
+== The K3: SpacemiT's RVA23 Chip
+
+SpacemiT calls the link:https://www.spacemit.com/key-stone-k3[K3] "the first link:https://github.com/riscv/riscv-profiles/blob/main/src/rva23-profile.adoc[RVA23] RISC-V AI CPU." Bold claim. It's a link:https://en.wikipedia.org/wiki/ARM_big.LITTLE[big.LITTLE-style] design with two core types on the same die:
+
+_K3 Core Types_
+
+[cols="1,1,1", options="header"]
+|===
+| Property
+| link:https://www.spacemit.com/key-stone-k3[X100] (cores 0-7)
+| link:https://www.spacemit.com/key-stone-k3[A100] (cores 8-15)
+
+| Role
+| General-purpose
+| AI acceleration
+
+| Clock
+| 2.4 GHz
+| 2.0 GHz
+
+| Vector width (link:https://github.com/riscvarchive/riscv-v-spec[vlen])
+| 256 bits
+| _1024 bits_
+
+| link:https://github.com/riscv/riscv-isa-manual/blob/main/src/hypervisor.adoc[Hypervisor]
+| Yes (`rv64imafdcvh`)
+| No (`rv64imafdcv`)
+
+|===
+
+Sixteen cores total, 32 GB shared RAM, kernel 6.18.3, link:https://gcc.gnu.org/[GCC] 15.2.0. Both core types share the same computational extensions: `zicbop`, `zicond`, `zfa`, `zawrs`, vector crypto, and standard link:https://github.com/riscvarchive/riscv-v-spec[RVV] (`v`) with float16 (`zvfh`). The only link:https://en.wikipedia.org/wiki/Instruction_set_architecture[ISA] difference: X100 has the hypervisor extension (`h`), A100 does not.
+
+The K1 I tested in Part 1 had 8 X60 cores at 1.6 GHz with vlen 128. The K3's X100 cores run at 2.4 GHz with vlen 256. Twice the vector width, 50% higher clock, newer microarchitecture. On paper, that's a pretty big jump.
+
+The A100 "AI cores" are the wild card. 1024-bit vectors look like a big advantage on a spec sheet, but do they actually help llama.cpp?
+
+=== Getting access (the hard way)
+
+I got access through link:https://cloud.spacemit.com/[BianbuCloud], SpacemiT's cloud platform for developers. Three-day window, web terminal, Chinese locale throughout. `lscpu` output is in Chinese. `free -h` too. Not a huge problem, but it does add a layer of "wait, what does _that_ column mean?" to everything you do.
+
+SSH barely cooperated. The gateway requires link:https://www.openssh.com/legacy.html[`ssh-rsa`] (which modern clients reject by default, because apparently we can't have nice things), the default password doesn't work, and key-based auth doesn't reach the instance. The web terminal disconnects on idle. link:https://github.com/tmux/tmux/wiki[`tmux`] isn't optional here, it's survival equipment.
+
+And then the instance crashed after about three hours. "Device Lost!" Power restart failed. I got what I needed, but definitely not what I planned.
+
+So yeah. Three days of access. Three hours of actual work. Welcome to cloud hardware testing.
+
+---
+
+== Measuring vlen
+
+First thing I wanted to check: do the vector widths actually match the spec? Both core types report the same ISA extensions, so the difference has to be in the hardware, not the instruction set.
+
+A four-line C program reads the `vlenb` link:https://five-embeddev.com/riscv-isa-manual/latest/machine.html#machine-level-csrs[CSR] (vector length in bytes):
+
+[source,c]
+----
+#include <stdio.h>
+int main() {
+    unsigned long vlenb = 0;
+    __asm__ volatile("csrr %0, vlenb" : "=r"(vlenb));
+    printf("vlenb=%lu bytes, vlen=%lu bits\n", vlenb, vlenb * 8);
+    return 0;
+}
+
+----
+
+----
+X100 cores: vlen=256 bits
+A100 cores: vlen=1024 bits
+
+----
+
+Running on A100 requires scheduling the process there first: `echo $$ > /proc/set_ai_thread`. Without that, everything lands on X100 by default. A small detail that cost me 20 minutes of confusion before I remembered to check.
+
+---
+
+== Building llama.cpp
+
+Same approach as Part 1: clone, configure with `GGML_NATIVE=ON`, build. If it ain't broke, don't fix it (unless it's the `ALL_VARIANTS` bug from Part 1, in which case, definitely fix it). The full build-and-benchmark script is link:https://gist.github.com/gounthar/d8c8670da8ca6e1c52ca4b645425eff4[available as a gist] if you want to reproduce this on your own RISC-V hardware.
+
+[source,bash]
+----
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON
+cmake --build build --config Release -j 8
+
+----
+
+link:https://cmake.org/[cmake] probed the CPU and produced:
+
+----
+-march=rv64gc_zfh_v_zvfh_zicbop_zihintpause -mabi=lp64d -fopenmp
+
+----
+
+More extensions than the K1 got: `zicbop` (cache prefetch hints), `zicond` (conditional operations), `zfa` (additional floating-point instructions). The `v` extension is generic RVV, not pinned to a specific vlen -- this binary should run on any RVV-capable core.
+
+Build time: _12 minutes 39 seconds_ wall, 60m45s CPU time across 8 X100 cores. I didn't use `time` on the K1 in Part 1 (I've learned my lesson since), so direct build time comparison isn't possible. All benchmarks in this article used 3 repetitions; values shown are means.
+
+---
+
+== Benchmarks: X100 cores (the expected part)
+
+link:https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0[TinyLlama 1.1B] link:https://github.com/ggml-org/llama.cpp/blob/master/tools/quantize/README.md[Q4_0], same model family as Part 1 (though Part 1 used Q4_K_M quantization -- the difference is small but worth noting for precise comparisons). link:https://en.wikipedia.org/wiki/Scalability#Horizontal_%28scale_out%29_and_vertical_scaling_%28scale_up%29[Thread scaling] on X100:
+
+_X100 Thread Scaling -- TinyLlama 1.1B Q4_0_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| link:https://github.com/ggml-org/llama.cpp/tree/master/tools/llama-bench[pp512] (t/s)
+| link:https://github.com/ggml-org/llama.cpp/tree/master/tools/llama-bench[tg128] (t/s)
+
+| 1
+| 11.02
+| 7.52
+
+| 4
+| 42.36
+| _21.70_
+
+| 8
+| _76.05_
+| 19.70
+
+|===
+
+That's a 6.9x speedup from 1 to 8 threads on link:https://en.wikipedia.org/wiki/Prompt_engineering[prompt processing], 86% efficiency. Proper link:https://en.wikipedia.org/wiki/CPU-bound[compute-bound] scaling. The wide vectors are pulling their weight.
+
+Token generation tells a different story. It peaks at 4 threads (21.70 t/s), then _drops_ to 19.70 at 8. Classic link:https://en.wikipedia.org/wiki/Memory_bandwidth[memory bandwidth] bottleneck -- adding threads just creates contention on the shared link:https://en.wikipedia.org/wiki/CPU_cache#Multi-level_caches[L2] and memory bus. For interactive use, 4 threads is the sweet spot on this chip.
+
+Compared to Part 1's K1 result (8.5 t/s tg128 at 8 threads), the K3 X100 hits 19.70 t/s at the same thread count -- _2.3x faster_. At the optimal 4 threads, it reaches 21.70 t/s. For prompt processing, 76 t/s vs the K1's ~12.5 t/s (from Part 1): a _6x_ improvement in prefill speed.
+
+Where does this come from? Wider vectors (256 vs 128 bits), higher clock (2.4 vs 1.6 GHz), newer microarchitecture, better compiler. Hard to say how much each factor contributes, but the net result speaks for itself.
+
+---
+
+== Benchmarks: A100 AI cores (the unexpected part)
+
+Now the interesting test. Same binary, A100 cores, vlen 1024. How fast do those fat vectors go?
+
+_A100 Standard RVV Thread Scaling -- TinyLlama 1.1B Q4_0_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| link:https://github.com/ggml-org/llama.cpp/tree/master/tools/llama-bench[pp512] (t/s)
+| link:https://github.com/ggml-org/llama.cpp/tree/master/tools/llama-bench[tg128] (t/s)
+
+| 1
+| 0.32
+| 0.31
+
+| 4
+| 1.26
+| 1.18
+
+| 8
+| 2.49
+| 2.30
+
+|===
+
+0.32 tokens per second on prompt processing at single-thread. Let that sink in.
+
+That's _34x slower_ than the same binary on X100 at single-thread (0.32 vs 11.02), and _30x slower_ at eight threads (2.49 vs 76.05). Token generation is 24x slower at single-thread, 8.5x at eight. It's slower than the _K1_ from Part 1. These are supposed to be the "AI cores."
+
+Here's the telling part: thread scaling is near-linear (7.8x at 8 threads for pp512), which rules out contention. Each core is consistently slow. And the degradation hits harder on compute-bound work (pp: 34x at 1t) than memory-bound work (tg: 24x at 1t). It's the core itself that can't keep up, not the memory subsystem.
+
+=== Ruling out compilation issues
+
+My first thought: maybe `GGML_NATIVE=ON` on X100 bakes in assumptions that break on vlen 1024. So I ran cmake configure on A100 cores:
+
+[source,bash]
+----
+bash -c 'echo $$ > /proc/set_ai_thread; cmake -B build-a100 -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON'
+
+----
+
+Diffed the two CMakeCache files: _no differences_. Same link:https://github.com/ggml-org/ggml[GGML] flags, same detected extensions, same `-march` string. The compiler generates identical binaries regardless of which core type runs cmake.
+
+The `-march=rv64gc_zfh_v_zvfh_zicbop_zihintpause` uses generic `v`, not a fixed vlen. RVV is designed to be vlen-agnostic. The same vector code should adapt at runtime.
+
+So why are the A100 cores so much slower with standard code?
+
+=== Why standard RVV runs 30x slower on A100 AI cores
+
+Short answer: the A100 cores are built for SpacemiT's _IME2 (Intelligent Matrix Engine version 2)_. They got 1024-bit vectors because that's what IME needs, not because standard RVV code benefits from wider vectors. The scalar pipeline, the caches, the memory interface -- all tuned for streaming matrix workloads, not the irregular access patterns of LLM inference.
+
+So standard RVV code crawls on them. Those wide vector units are starving because the core around them can't feed them fast enough with general-purpose instructions.
+
+---
+
+== SpacemiT's binary: the plot twist
+
+SpacemiT ships a prebuilt llama.cpp package in their link:https://bianbu.spacemit.com/[Bianbu] apt repository:
+
+[source,bash]
+----
+sudo apt install llama.cpp-tools-spacemit
+
+----
+
+Package version `0.0.1-6`, built with GCC 14.3.0 (not the system's 15.2) -- their own patched toolchain. The llama.cpp version is unknown (the binary reports version `0`), so we're comparing an unknown-vintage SpacemiT fork against current upstream.
+
+When you run it, the startup banner tells the story:
+
+----
+CPU_RISCV64_SPACEMIT: num_cores: 16, num_perfer_cores: 8,
+  perfer_core_arch_id: a064, use_ime1: 0, use_ime2: 1, cpu_mask: ff00
+
+----
+
+`use_ime2: 1`. IME2 detected and enabled. `cpu_mask: ff00` -- cores 8-15, the A100 cluster. The binary auto-migrates to the AI cores without needing `/proc/set_ai_thread`. It knows where to go.
+
+Results with TinyLlama 1.1B Q4_0, 8 threads:
+
+_Standard vs IME2 Build -- TinyLlama 1.1B Q4_0, 8 Threads_
+
+[cols="1,1,1,1", options="header"]
+|===
+| Binary
+| Cores
+| pp512 (t/s)
+| tg128 (t/s)
+
+| Standard (our build)
+| X100
+| 76.05
+| 19.70
+
+| Standard (our build)
+| A100
+| 2.49
+| 2.30
+
+| _SpacemiT IME2_
+| _A100_
+| _111.14_
+| _27.82_
+
+|===
+
+From 2.49 to 111.14 on prompt processing. I had to double-check that number. A _44.6x_ speedup on the same cores with the same model.
+
+Token generation goes from 2.30 to 27.82: 12x faster. And the SpacemiT binary on A100 _beats_ our native X100 build: 1.46x faster on pp512, 1.41x on tg128. The "AI cores" earn their name, but only with the right code.
+
+=== Thread scaling on IME2
+
+_IME2 Thread Scaling -- TinyLlama 1.1B Q4_0_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 15.40
+| 9.24
+
+| 4
+| 59.01
+| _27.79_
+
+| 8
+| _111.14_
+| 27.82
+
+|===
+
+Same pattern as X100: prompt processing scales well (7.2x at 8 threads), token generation saturates at 4 threads. But unlike X100, IME2 tg doesn't _drop_ at 8 threads -- it stays flat at 27.8. The A100 memory subsystem handles contention better.
+
+At single-thread, IME2 already beats X100 RVV: 15.40 vs 11.02 on pp512. That's a per-core win, not just a threading trick.
+
+=== Qwen2.5 0.5B benchmark on K3
+
+link:https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct[Qwen2.5 0.5B Instruct] Q4_0 (630M parameters, 403 MiB) -- the same model SpacemiT uses in their published benchmarks:
+
+_Qwen2.5 0.5B Q4_0 -- X100 Thread Scaling_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 27.77
+| 12.17
+
+| 4
+| 103.50
+| _37.02_
+
+| 8
+| _184.49_
+| 34.62
+
+|===
+
+Same thread scaling pattern as TinyLlama: pp scales well (6.6x at 8 threads), tg peaks at 4 threads then drops at 8. The smaller model is proportionally faster -- roughly 2.5x TinyLlama's pp at the same thread count, which makes sense given the parameter difference.
+
+And yes, A100 standard RVV on this model is just as bad:
+
+_Qwen2.5 0.5B Q4_0 -- A100 Standard RVV_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 0.87
+| 0.59
+
+| 4
+| 3.40
+| 2.26
+
+| 8
+| 6.67
+| 4.26
+
+|===
+
+32x slower than X100 at single-thread on pp512 (0.87 vs 27.77). Same pattern.
+
+With IME2, the A100 cores pull ahead again:
+
+_Qwen2.5 0.5B Q4_0 -- A100 IME2_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 35.67
+| 18.19
+
+| 4
+| 135.23
+| _47.55_
+
+| 8
+| _244.77_
+| 47.82
+
+|===
+
+48 t/s on token generation. 245 t/s on prompt processing. On a RISC-V chip. IME2 maintains roughly the same advantage over X100 RVV here (1.33x pp at 8t, 1.38x tg at 4t). Token generation saturates at 4 threads on IME2 too — same wall, different model.
+
+=== Qwen3.5 0.8B: newer model, same patterns
+
+link:https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF[Qwen3.5 0.8B] Q4_0 (752M parameters, 473 MiB) -- the latest generation Qwen, released early 2026. Slightly larger than Qwen2.5 0.5B.
+
+_Qwen3.5 0.8B Q4_0 -- X100 Thread Scaling_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 11.02
+| 4.98
+
+| 4
+| 40.96
+| _14.12_
+
+| 8
+| _69.09_
+| 15.76
+
+|===
+
+_Qwen3.5 0.8B Q4_0 -- A100 Standard RVV_
+
+[cols="1,1,1", options="header"]
+|===
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| 1
+| 0.56
+| 0.54
+
+| 4
+| 2.14
+| 2.04
+
+| 8
+| 4.05
+| 3.84
+
+|===
+
+Same X100/A100 ratio: 20x slower at single-thread (11.02 vs 0.56 pp512). No surprises.
+
+IME2 benchmarks? No luck. SpacemiT's prebuilt binary (version `0.0.1-6`, unknown llama.cpp vintage) flat-out refuses to load Qwen3.5. It doesn't recognize the architecture. And there's the rub with the closed toolchain: you can't just rebuild with a newer llama.cpp to get support for newer models.
+
+Compared to Qwen2.5 0.5B, Qwen3.5 0.8B is ~38% slower on pp512 (69 vs 184 t/s at 8 threads on X100) and ~55% slower on tg128 (15.8 vs 34.6 t/s). Proportional to the larger model size: more parameters, more work per token.
+
+---
+
+== The closed toolchain problem
+
+So why can't you just build the IME2 version yourself? I tried.
+
+The SpacemiT build uses custom vendor ISA extensions:
+
+----
+ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp:3086: error: unrecognized opcode `vmadot v22,v14,v3',
+extension `xsmtvdotii' required
+
+----
+
+`xsmtvdotii` is SpacemiT's proprietary vector matrix dot-product extension. Standard GCC 15.2.0 doesn't know it. SpacemiT uses a patched GCC 14.3.0 to build their package, but that toolchain isn't in the Bianbu repository:
+
+[source,bash]
+----
+apt-cache search gcc | grep -i spacemit
+== nothing
+
+----
+
+So we have a RISC-V chip whose best performance requires a compiler that isn't publicly available. The prebuilt binary works, and SpacemiT clearly intends for people to use it. But you can't rebuild from source, you can't update to the latest llama.cpp, and you have no idea what optimizations the binary is actually doing under the hood.
+
+For an ISA built on openness, this stings a little. Not a deal-breaker -- these are early days for the K3, and vendor toolchains tend to open up over time (or at least, that's what I keep telling myself). But right now, you're trusting a black box for the best performance.
+
+---
+
+== Testing the fork's CI binary
+
+Separate question: does the binary from our link:https://github.com/gounthar/llama.cpp[fork]'s GitHub release work on K3? The release workflow builds natively on a self-hosted BananaPi F3 runner (K1 SoC, vlen 128) and produces two riscv64 tarballs: "native" (`GGML_NATIVE=ON`, detecting K1's ISA features) and "generic" (`GGML_NATIVE=OFF`, base rv64gc scalar fallback).
+
+Both work. Both produce correct results. But:
+
+_CI Release Binaries vs Native K3 Build -- TinyLlama 1.1B Q4_0, 8 Threads_
+
+[cols="1,1,1", options="header"]
+|===
+| Binary
+| pp512 (t/s)
+| tg128 (t/s)
+
+| Built on K3 (`GGML_NATIVE`)
+| _76.05_
+| 19.70
+
+| Release native (built on K1)
+| 44.65
+| 19.72
+
+| Release generic (scalar)
+| 44.26
+| 19.72
+
+|===
+
+Token generation is identical across all three. That's memory-bound, and ISA flags don't change memory bandwidth. But prompt processing is _1.7x faster_ when built natively on K3, because cmake detects extensions that the K1 build doesn't know about: `zicbop`, `zfa`, `zicond`.
+
+Here's the thing: the native and generic release builds perform almost the same because "native on K1" doesn't mean much to K3. The K1-detected `-march` string is a subset of what K3 supports. You're leaving performance on the table.
+
+The fix: switch the release workflow from `GGML_NATIVE=ON` to `GGML_CPU_ALL_VARIANTS=ON`. That produces multiple variant `.so` files -- scalar, base RVV, RVV with extended features -- and auto-selects at runtime. Same approach upstream uses for x86 with link:https://en.wikipedia.org/wiki/Advanced_Vector_Extensions[SSE/AVX/AVX2/AVX512] variants. One binary, optimal on every machine. That's a follow-up PR.
+
+---
+
+== The full picture
+
+All benchmark results, three models, all configurations. I ran these multiple times on fresh K3 instances -- values held within 2% across runs, so I'm confident in the numbers.
+
+=== TinyLlama 1.1B Q4_0
+
+_TinyLlama 1.1B Q4_0 -- All Configurations_
+
+[cols="1,1,1,1", options="header"]
+|===
+| Config
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| K1 X60 (Part 1 baseline)
+| 8
+| ~12.5
+| 8.5
+
+| K3 X100 native
+| 1
+| 11.02
+| 7.52
+
+| K3 X100 native
+| 4
+| 42.36
+| _21.70_
+
+| K3 X100 native
+| 8
+| 76.05
+| 19.70
+
+| K3 X100 (CI release)
+| 8
+| 44.65
+| 19.72
+
+| K3 A100 (standard RVV)
+| 1
+| 0.32
+| 0.31
+
+| K3 A100 (standard RVV)
+| 4
+| 1.26
+| 1.18
+
+| K3 A100 (standard RVV)
+| 8
+| 2.49
+| 2.30
+
+| K3 A100 (SpacemiT IME2)
+| 1
+| 15.40
+| 9.24
+
+| K3 A100 (SpacemiT IME2)
+| 4
+| 59.01
+| _27.79_
+
+| K3 A100 (SpacemiT IME2)
+| 8
+| _111.14_
+| 27.82
+
+|===
+
+=== Qwen2.5 0.5B Q4_0
+
+_Qwen2.5 0.5B Q4_0 -- All Configurations_
+
+[cols="1,1,1,1", options="header"]
+|===
+| Config
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| K3 X100 native
+| 1
+| 27.77
+| 12.17
+
+| K3 X100 native
+| 4
+| 103.50
+| _37.02_
+
+| K3 X100 native
+| 8
+| 184.49
+| 34.62
+
+| K3 A100 (standard RVV)
+| 1
+| 0.87
+| 0.59
+
+| K3 A100 (standard RVV)
+| 4
+| 3.40
+| 2.26
+
+| K3 A100 (standard RVV)
+| 8
+| 6.67
+| 4.26
+
+| K3 A100 (SpacemiT IME2)
+| 1
+| 35.67
+| 18.19
+
+| K3 A100 (SpacemiT IME2)
+| 4
+| 135.23
+| _47.55_
+
+| K3 A100 (SpacemiT IME2)
+| 8
+| _244.77_
+| 47.82
+
+|===
+
+=== Qwen3.5 0.8B Q4_0
+
+_Qwen3.5 0.8B Q4_0 -- All Configurations_
+
+[cols="1,1,1,1", options="header"]
+|===
+| Config
+| Threads
+| pp512 (t/s)
+| tg128 (t/s)
+
+| K3 X100 native
+| 1
+| 11.02
+| 4.98
+
+| K3 X100 native
+| 4
+| 40.96
+| _14.12_
+
+| K3 X100 native
+| 8
+| _69.09_
+| 15.76
+
+| K3 A100 (standard RVV)
+| 1
+| 0.56
+| 0.54
+
+| K3 A100 (standard RVV)
+| 4
+| 2.14
+| 2.04
+
+| K3 A100 (standard RVV)
+| 8
+| 4.05
+| 3.84
+
+| K3 A100 (SpacemiT IME2)
+| —
+| _not supported_
+| _not supported_
+
+|===
+
+---
+
+== What I learned
+
+K3 X100 vs K1 X60: 2.3x faster on token generation (8-thread comparison). That alone would have made the trip worthwhile.
+
+AI cores aren't magic. Without the right software, they're worse than useless -- 34x slower at single-thread, 30x at eight threads on prompt processing. The 1024-bit vlen means nothing if the surrounding microarchitecture can't keep up with general-purpose workloads. The near-linear thread scaling on A100 (7.8x at 8 threads) confirms this is per-core architectural slowness, not a contention artifact.
+
+With vendor code, they're the fastest option. SpacemiT's IME2-enabled binary turns A100 into the best core on the chip: 1.4x faster than X100 on both pp and tg. But you need their binary to get there. And that binary is a black box -- it can't even load Qwen3.5 because it's built from an older llama.cpp fork that predates the model architecture.
+
+Token generation is memory-bandwidth-bound. On both core types, tg peaks at 4 threads and adding more hurts or stays flat. No amount of wider vectors will change that.
+
+CI binaries work but need variant support. Built natively on a K1, the release binary runs correctly on K3 but misses 1.7x of prompt processing performance. `GGML_CPU_ALL_VARIANTS=ON` would fix this.
+
+I planned for 3 days. I got 3 hours on the first instance. It crashed. I got a second instance, ran the benchmarks again, and filled the gaps. Every number was captured to local notes as it was produced and uploaded off-machine before anything could die. (I've been burned before by assuming infrastructure will stay up. It won't.)
+
+---
+
+== What's next
+
+_Next up_: The `GGML_CPU_ALL_VARIANTS` PR. Fix the release workflow so one binary works well on K1, K3, and whatever comes next. Then test it on both machines.
+
+I also tested `llama-server` with the link:https://platform.openai.com/docs/api-reference/chat[OpenAI-compatible API] on X100 (4 threads). A simple `curl` chat completion returned 23 t/s generation (48 t/s prompt processing on the short 28-token prompt -- higher than llama-bench's 512-token test because shorter prompts process faster). The server works, the API is standard, no drama.
+
+The OpenClaw integration and docker-compose stack articles are still in the queue. I haven't forgotten about them, I promise.
+
+The vendor toolchain situation needs work, but it's early days.
+
+---
+
+_Bruno Verachten is a link:https://www.docker.com/community/captains/[Docker Captain] and Developer Relations engineer. The K3 cloud instance came from link:https://cloud.spacemit.com/[BianbuCloud]'s developer program. It survived long enough to tell this story._
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll converter
+Original file: /mnt/c/support/users/dev/riscv/spacemit-k3-lab/experiments/llama-cpp/article-part4-styled.adoc
+Conversion date: 2026-03-12
+Notes: All hyperlinks preserved (32+ jargon terms hyperlinked). All 14 AsciiDoc tables converted to markdown pipe table format. Code blocks converted with language hints (c, bash). AsciiDoc formatting (bold, italic, inline code) converted to markdown equivalents. Horizontal rules converted to markdown `---`. Section hierarchy maintained.
+-->

@@ -1,0 +1,297 @@
+---
+author: Poddingue
+categories:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+- OrangePi
+- 4B
+description: How to install Caffe on the Orange Pi 4B running Armbian ?
+featured: true
+hidden: false
+image: assets/images/pu7JQ6ratm.png
+tags:
+- RK3399
+- Armbian
+- ML
+- MerryKombo
+- OrangePi
+- 4B
+title: Installing Caffe on the Orange Pi 4B
+---
+
+== Install dependencies
+
+[source,bash]
+----
+sudo apt-get install libprotobuf-dev libleveldb-dev libsnappy-dev
+libopencv-dev libhdf5-serial-dev protobuf-compiler cmake
+sudo apt-get install --no-install-recommends libboost-all-dev
+sudo apt-get install libopenblas-dev liblapack-dev libatlas-base-dev
+sudo apt-get install libgflags-dev libgoogle-glog-dev liblmdb-dev
+
+----
+
+
+
+== Download Caffe and modify configuration parameters
+
+[source,bash]
+----
+git clone https://github.com/BVLC/caffe
+cd caffe
+cp Makefile.config.example Makefile.config
+
+----
+
+Modify the parameters of Makefile.config
+Change `#CPU_ONLY := 1` into `CPU_ONLY := 1`
+Change `＃OPENCV_VERSION := 3` into `OPENCV_VERSION := 3`
+
+== Install Caffe
+
+[source,bash]
+----
+mkdir build
+cd build
+cmake ..
+  Protobuf compiler version doesn't match library version 3.6.1
+
+
+----
+
+Okay... Let's try a `sudo apt install protobuf-compiler`.
+
+[source,bash]
+----
+protoc --version
+libprotoc 3.6.1
+cmake ..
+  Could NOT find HDF5 (missing: HDF5_LIBRARIES HDF5_INCLUDE_DIRS
+
+----
+
+My bad, let's install it.
+
+[source,bash]
+----
+sudo apt install libhdf5-dev
+cmake ..
+  Could not find a package configuration file provided by "OpenCV" with any
+
+----
+
+Let's install openCV, then...
+
+[source,bash]
+----
+sudo apt install libopencv-dev
+cmake ..
+[...]
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/poddingue/caffe/build
+
+----
+
+Next step, let's build it for real. By the way, kiddoes, don't try this `-j6` at home unless you have a good heatsink... Or the machine will stop/hang up/reboot without prior alert.
+
+[source,bash]
+----
+make all -j6
+make pycaffe -j6
+make test -j6
+make runtest -j6
+
+----
+
+== Run a simple example
+
+Run the caffe example -- mnist instance:
+Mnist is a handwritten digital library. Originally used for handwritten numeral recognition on checks, and it is now the DL's starting exercise library. The special model for mnist identification is Lenet, which is the earliest CNN model.
+The training samples of mnist data are 60,000 units, and the test samples are 10,000 units. Each sample is a black and white picture of size 28*28, and the handwritten number is 0-9, so it is divided into 10 categories.
+
+=== Download the mnist data first
+
+[source,bash]
+----
+sh data/mnist/get_mnist.sh
+cd data/mnist
+
+----
+
+There are four files in the directory after running the previous command:
+
+[source,bash]
+----
+ll
+total 53676
+-rwxr-xr-x 1 poddingue poddingue      408 Jun 22 16:55 get_mnist.sh
+-rw-r--r-- 1 poddingue poddingue  7840016 Jul 21  2000 t10k-images-idx3-ubyte # Training set samples
+-rw-r--r-- 1 poddingue poddingue    10008 Jul 21  2000 t10k-labels-idx1-ubyte # Corresponding annotation of training set
+-rw-r--r-- 1 poddingue poddingue 47040016 Jul 21  2000 train-images-idx3-ubyte # Testing set sample
+-rw-r--r-- 1 poddingue poddingue    60008 Jul 21  2000 train-labels-idx1-ubyte # Corresponding annotation of testing set
+
+----
+
+=== Converting the data
+
+These data cannot be used directly in Caffe, and need to be converted into LMDB data:
+
+[source,bash]
+----
+cd ../..
+sh examples/mnist/create_mnist.sh
+Creating lmdb...
+I0622 17:37:06.109530 12691 db_lmdb.cpp:35] Opened lmdb examples/mnist/mnist_train_lmdb
+I0622 17:37:06.114603 12691 convert_mnist_data.cpp:88] A total of 60000 items.
+I0622 17:37:06.114666 12691 convert_mnist_data.cpp:89] Rows: 28 Cols: 28
+I0622 17:37:11.407480 12691 convert_mnist_data.cpp:108] Processed 60000 files.
+I0622 17:37:12.192065 12698 db_lmdb.cpp:35] Opened lmdb examples/mnist/mnist_test_lmdb
+I0622 17:37:12.194784 12698 convert_mnist_data.cpp:88] A total of 10000 items.
+I0622 17:37:12.198009 12698 convert_mnist_data.cpp:89] Rows: 28 Cols: 28
+I0622 17:37:12.566424 12698 convert_mnist_data.cpp:108] Processed 10000 files.
+Done.
+ll examples/mnist/
+total 136
+-rw-r--r-- 1 poddingue poddingue  4520 Jun 22 16:55 convert_mnist_data.cpp
+-rwxr-xr-x 1 poddingue poddingue   634 Jun 22 16:55 create_mnist.sh
+-rw-r--r-- 1 poddingue poddingue   777 Jun 22 16:55 lenet_adadelta_solver.prototxt
+-rw-r--r-- 1 poddingue poddingue   778 Jun 22 16:55 lenet_auto_solver.prototxt
+-rw-r--r-- 1 poddingue poddingue  6003 Jun 22 16:55 lenet_consolidated_solver.prototxt
+-rw-r--r-- 1 poddingue poddingue   871 Jun 22 16:55 lenet_multistep_solver.prototxt
+-rw-r--r-- 1 poddingue poddingue  1738 Jun 22 16:55 lenet.prototxt
+-rw-r--r-- 1 poddingue poddingue   886 Jun 22 16:55 lenet_solver_adam.prototxt
+-rw-r--r-- 1 poddingue poddingue   790 Jun 22 16:55 lenet_solver.prototxt
+-rw-r--r-- 1 poddingue poddingue   830 Jun 22 16:55 lenet_solver_rmsprop.prototxt
+-rw-r--r-- 1 poddingue poddingue  2282 Jun 22 16:55 lenet_train_test.prototxt
+-rw-r--r-- 1 poddingue poddingue  4814 Jun 22 16:55 mnist_autoencoder.prototxt
+-rw-r--r-- 1 poddingue poddingue   451 Jun 22 16:55 mnist_autoencoder_solver_adadelta.prototxt
+-rw-r--r-- 1 poddingue poddingue   423 Jun 22 16:55 mnist_autoencoder_solver_adagrad.prototxt
+-rw-r--r-- 1 poddingue poddingue   466 Jun 22 16:55 mnist_autoencoder_solver_nesterov.prototxt
+-rw-r--r-- 1 poddingue poddingue   433 Jun 22 16:55 mnist_autoencoder_solver.prototxt
+drwxr--r-- 2 poddingue poddingue  4096 Jun 22 17:37 mnist_test_lmdb
+drwxr--r-- 2 poddingue poddingue  4096 Jun 22 17:37 mnist_train_lmdb
+-rw-r--r-- 1 poddingue poddingue 11948 Jun 22 16:55 readme.md
+-rwxr-xr-x 1 poddingue poddingue   106 Jun 22 16:55 train_lenet_adam.sh
+-rwxr-xr-x 1 poddingue poddingue   118 Jun 22 16:55 train_lenet_consolidated.sh
+-rwxr-xr-x 1 poddingue poddingue  4517 Jun 22 16:55 train_lenet_docker.sh
+-rwxr-xr-x 1 poddingue poddingue   115 Jun 22 16:55 train_lenet_rmsprop.sh
+-rwxr-xr-x 1 poddingue poddingue   101 Jun 22 16:55 train_lenet.sh
+-rwxr-xr-x 1 poddingue poddingue   120 Jun 22 16:55 train_mnist_autoencoder_adadelta.sh
+-rwxr-xr-x 1 poddingue poddingue   119 Jun 22 16:55 train_mnist_autoencoder_adagrad.sh
+-rwxr-xr-x 1 poddingue poddingue   120 Jun 22 16:55 train_mnist_autoencoder_nesterov.sh
+-rwxr-xr-x 1 poddingue poddingue   117 Jun 22 16:55 train_mnist_autoencoder.sh
+
+
+----
+
+The `examples/mnist/create_mnist.sh` has generated two folders in the `examples/mnist/` directory, namely `mnist_train_lmdb` and `mnist_test_lmdb` after the LMDB data conversion succeeded. The `data.mdb` and `lock.mdb` stored in the folder are the running data we need.
+
+=== LevelDB Data
+
+If you want to run leveldb data, run the program under `examples/siamese/` folder. 
+
+[source,bash]
+----
+ ./examples/siamese/create_mnist_siamese.sh
+Creating leveldb...
+Done.
+ll examples/siamese/
+total 204
+-rw-r--r-- 1 poddingue poddingue   4368 Jun 22 16:55 convert_mnist_siamese_data.cpp
+-rwxr-xr-x 1 poddingue poddingue    617 Jun 22 16:55 create_mnist_siamese.sh
+-rw-r--r-- 1 poddingue poddingue 158921 Jun 22 16:55 mnist_siamese.ipynb
+-rw-r--r-- 1 poddingue poddingue   1488 Jun 22 16:55 mnist_siamese.prototxt
+-rw-r--r-- 1 poddingue poddingue    810 Jun 22 16:55 mnist_siamese_solver.prototxt
+drwxr-xr-x 2 poddingue poddingue   4096 Jun 22 17:39 mnist_siamese_test_leveldb
+drwxr-xr-x 2 poddingue poddingue   4096 Jun 22 17:39 mnist_siamese_train_leveldb
+-rw-r--r-- 1 poddingue poddingue   4907 Jun 22 16:55 mnist_siamese_train_test.prototxt
+-rw-r--r-- 1 poddingue poddingue   5949 Jun 22 16:55 readme.md
+-rwxr-xr-x 1 poddingue poddingue    125 Jun 22 16:55 train_mnist_siamese.sh
+
+----
+
+
+
+=== Next modify the configuration file lenet_solver.prototxt
+
+[source,bash]
+----
+vi ./examples/mnist/lenet_solver.prototxt
+
+----
+
+As needed, set the maximum number of iterations at 100 and the last line, `solver_mode`, to `CPU`:
+
+[source,bash]
+----
+== The train/test net protocol buffer definition
+net: "examples/mnist/lenet_train_test.prototxt"
+== test_iter specifies how many forward passes the test should carry out.
+== In the case of MNIST, we have test batch size 100 and 100 test iterations,
+== covering the full 10,000 testing images.
+test_iter: 100
+== Carry out testing every 500 training iterations.
+test_interval: 500
+== The base learning rate, momentum and the weight decay of the network.
+base_lr: 0.01
+momentum: 0.9
+weight_decay: 0.0005
+== The learning rate policy
+lr_policy: "inv"
+gamma: 0.0001
+power: 0.75
+== Display every 100 iterations
+display: 100
+== The maximum number of iterations
+max_iter: 10000
+== snapshot intermediate results
+snapshot: 5000
+snapshot_prefix: "examples/mnist/lenet"
+== solver mode: CPU or GPU
+solver_mode: CPU
+
+----
+
+=== Finally, run this example:
+
+root@OrangePi:~/caffe# time sh examples/mnist/train_lenet.sh
+I0110 06:28:06.117972 25078 caffe.cpp:197] Use CPU.
+I0110 06:28:06.118988 25078 solver.cpp:45] Initializing solver from parameters:
+test_iter: 100
+test_interval: 500
+base_lr: 0.01
+display: 100
+XUNLONG Software Co,. Ltd All rights reserved
+36 www.orangepi.com
+max_iter: 10000
+lr_policy: "inv"
+gamma: 0.0001
+power: 0.75
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 5000
+snapshot_prefix: "examples/mnist/lenet"
+solver_mode: CPU
+net: "examples/mnist/lenet_train_test.prototxt"
+......
+......
+......
+I0110 07:25:37.016746 25078 sgd_solver.cpp:284] Snapshotting solver state to binary proto file
+examples/mnist/lenet_iter_10000.solverstate
+I0110 07:25:37.146054 25078 solver.cpp:327] Iteration 10000, loss = 0.00200602
+I0110 07:25:37.146195 25078 solver.cpp:347] Iteration 10000, Testing net (#0)
+I0110 07:25:54.299634 25080 data_layer.cpp:73] Restarting data prefetching from start.
+I0110 07:25:55.010598 25078 solver.cpp:414] Test net output #0: accuracy = 0.9913
+I0110 07:25:55.010757 25078 solver.cpp:414] Test net output #1: loss = 0.0273203 (* 1 =
+0.0273203 loss)
+I0110 07:25:55.010777 25078 solver.cpp:332] Optimization Done.
+I0110 07:25:55.010793 25078 caffe.cpp:250] Optimization Done.
+real 57m48.984s
+user 58m6.479s
+sys 0m1.977s
+⑦Operation conclusion
+According to the above results, the running time of the CPU is about 58 minutes, with
+an accuracy of about 99%.

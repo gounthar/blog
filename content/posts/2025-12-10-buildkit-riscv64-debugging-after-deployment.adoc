@@ -1,0 +1,388 @@
+---
+author: Bruno Verachten
+categories:
+- BuildKit
+- RISC-V
+- Docker
+- DevOps
+- Debugging
+description: Debugging BuildKit deployment on RISC-V64 after successful packaging
+  - from GHCR access issues to worker initialization failures and CI test hangs
+excerpt: I successfully built and packaged BuildKit for RISC-V64. Users could download
+  it. The GitHub Actions workflows were green. Everything looked perfect. Then people
+  tried to actually use it, and discovered it didn't work at all.
+featured: true
+hidden: false
+image: assets/2025/12/10/buildkit-debugging-header.jpg
+tags:
+- buildkit
+- riscv64
+- docker
+- containers
+- worker-initialization
+- runc
+- entrypoint
+- ghcr
+- deployment
+- post-deployment-debugging
+title: 'BuildKit for RISC-V64: When Your Package Works But Your Container Doesn''t'
+---
+
+I successfully built and packaged BuildKit for RISC-V64. Users could download it. The GitHub Actions workflows were green. Everything looked perfect. Then people tried to actually _use_ it, and discovered it didn't work at all. This is the story of fixing BuildKit after deployment: the part nobody writes about in the success announcements. (Because who wants to admit their victory lap was premature?)
+
+image::/assets/2025/12/10/buildkit-debugging-header.jpg[Icebergs floating in dark waters]
+
+_Photo by link:https://unsplash.com/@tilakbaloni20?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText[Tilak Baloni] on link:https://unsplash.com/photos/a-group-of-icebergs-floating-on-top-of-a-body-of-water-DgyHhWKaY3s?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText[Unsplash]_
+
+== The Honeymoon Phase is Over
+
+Two days ago, I published BuildKit packages for RISC-V64. The blog post was cheerful. The documentation was thorough. The container image pushed to GitHub Container Registry without errors. I felt accomplished.
+
+Then reality showed up.
+
+The first issue report came in: "Getting 'denied' errors when pulling your BuildKit image." My immediate thought was visibility settings. Maybe the GHCR package was still private? I checked. It was public. So what was going on?
+
+Here's the thing: the error message was misleading. This wasn't actually an access problem. It was cached credentials from a previous failed pull attempt when the package _was_ still private. Docker's credential helper had cached the 403 response and kept returning it even after I'd made the package public.
+
+You know that feeling when you spend 20 minutes debugging something that turns out to be your own browser cache? Yeah, same energy.
+
+The fix was simple:
+
+[source,bash]
+----
+docker logout ghcr.io
+docker pull ghcr.io/gounthar/buildkit-riscv64:latest
+
+----
+
+Problem solved.
+
+Easy fix. False alarm. Back to feeling good about myself. I should've known it wouldn't last.
+
+The second issue was different: "Container crash-loops with 'failed to create worker: no worker found'." That one made me stop and think. And then start sweating slightly.
+
+== Understanding BuildKit Workers
+
+I hadn't paid much attention to BuildKit's worker architecture during the packaging phase. I was focused on getting binaries to compile and containers to start. The worker system seemed like an internal detail, you know, something that would just magically work once the main binary was running.
+
+Turns out it's not.
+
+BuildKit requires at least one worker backend to function. There are two options:
+
+. _OCI worker_ - Uses `runc` to spawn containers
+. _Containerd worker_ - Uses containerd's socket
+
+When buildkitd starts, it initializes workers. If no worker can be created, the daemon refuses to start. The error message is cryptic: "no worker found." It doesn't explain _why_ no worker was found, or what you should do about it, or really anything useful at all.
+
+I checked the container logs. Buried in the output was: `skipping oci worker, no runc binary in $PATH`.
+
+Ah.
+
+My container image had buildkitd and buildctl. It had tini for process management. It had all the BuildKit-specific tools. But it didn't have runc, so the OCI worker couldn't initialize. And I hadn't configured a containerd socket, so the containerd worker was also unavailable.
+
+Result: no workers, no buildkitd, container crashes. My "successful" deployment was about as useful as a screen door on a submarine.
+
+== Three Fixes, Three Pull Requests
+
+I fixed this in three stages, each addressing a different layer of the problem. (Because apparently I can't get things right on the first try.)
+
+=== PR #227: Fix ENTRYPOINT/CMD Split
+
+The first problem was how I structured the Dockerfile. I'd combined everything into ENTRYPOINT:
+
+[source,dockerfile]
+----
+ENTRYPOINT ["/usr/bin/tini", "--", "buildkitd", "--addr", "tcp://0.0.0.0:1234"]
+
+----
+
+This looked clean but was wrong. Here's why: Docker Buildx needs to pass runtime arguments to buildkitd: things like `--allow-insecure-entitlement network.host` for host networking or `--allow-insecure-entitlement security.insecure` for privileged operations.
+
+With everything in ENTRYPOINT, Docker replaces the _entire command_ when you pass arguments. So Buildx's carefully crafted configuration gets completely ignored, and buildkitd starts with the wrong settings. It's like ordering a custom pizza and getting plain cheese because the delivery guy couldn't read your special instructions.
+
+The fix was simple: move default arguments to CMD:
+
+[source,dockerfile]
+----
+ENTRYPOINT ["/usr/bin/tini", "--", "buildkitd"]
+CMD ["--addr", "tcp://0.0.0.0:1234"]
+
+----
+
+Now Buildx can override the defaults with its own configuration. When Docker starts the container, ENTRYPOINT stays intact (tini and buildkitd), but CMD gets replaced with whatever Buildx needs.
+
+Seems obvious in retrospect, but I didn't test with Buildx during initial development. (Windows with WSL2, because apparently I enjoy making my life unnecessarily complicated, and now I'm skipping integration tests like a cowboy.)
+
+=== PR #228: Add runc from Debian
+
+The second problem was the missing OCI worker. The solution was straightforward: add runc to the container:
+
+[source,dockerfile]
+----
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends runc
+
+----
+
+Debian Trixie ships runc 1.1.12. It's old, but it works. The OCI worker initialized successfully. Container stopped crash-looping.
+
+Victory.
+
+I should've left it at that. But no, someone had to point out the obvious.
+
+=== PR #229: Use Our Own runc
+
+Then someone said: "Wait, we're building runc 1.3.0 ourselves as part of the Docker Engine releases. Why are we using Debian's ancient 1.1.12 when we have a newer version in our own APT repository?"
+
+Good question. The answer was I hadn't thought about it. (Starting to notice a pattern here?)
+
+So PR #229 added our APT repository to the container and installed our runc package instead:
+
+[source,dockerfile]
+----
+== Add docker-for-riscv64 APT repository
+RUN curl -fsSL https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/gpg-public-key.asc | \
+    gpg --dearmor -o /usr/share/keyrings/docker-riscv64-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/docker-riscv64-archive-keyring.gpg] \
+          https://gounthar.github.io/docker-for-riscv64 trixie main" \
+          > /etc/apt/sources.list.d/docker-riscv64.list
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends runc
+
+----
+
+Now the container uses runc 1.3.0, keeping versions consistent across all our packages. Much better.
+
+Of course, I made a typo in the GPG key URL (`public-key.asc` instead of `gpg-public-key.asc`), so the build failed. PR #231 fixed that embarrassing oversight. Even simple changes need testing, kids.
+
+=== Testing the Fix
+
+After all three PRs merged, I verified the container actually worked end-to-end:
+
+[source,bash]
+----
+== Pull the updated image
+docker pull ghcr.io/gounthar/buildkit-riscv64:latest
+
+== Create a builder
+docker buildx create --name test-builder \
+  --driver docker-container \
+  --driver-opt image=ghcr.io/gounthar/buildkit-riscv64:latest \
+  --use
+
+== Bootstrap (this is where it was failing before)
+docker buildx inspect --bootstrap
+[+] Building 2.3s (1/1) FINISHED
+ => [internal] booting buildkit
+ => => pulling image ghcr.io/gounthar/buildkit-riscv64:latest
+ => => starting container buildx_buildkit_test-builder0
+
+== Verify the worker initialized
+docker logs buildx_buildkit_test-builder0 | grep -i worker
+found worker "runc-overlay", labels=map[...]
+found 1 workers, default="runc-overlay"
+
+----
+
+The OCI worker was there. BuildKit was running. The demo was saved. I allowed myself exactly 30 seconds of relief before the next problem appeared.
+
+== When Tests Hang Forever
+
+Fixing the container should've been the end of the story. Instead, it revealed a systemic problem with our CI workflows.
+
+After PR #228 merged, both self-hosted RISC-V64 runners got stuck. Not crashed, _stuck_. The workflow step that tested the container hung indefinitely:
+
+[source,bash]
+----
+docker run --rm buildkit:latest buildkitd --version
+
+----
+
+This should return immediately with version information. Instead, it hung. Forever. The runners stopped processing other jobs. I had to SSH into both machines and manually kill processes.
+
+You know that special kind of frustration when your automation breaks your automation? Welcome to my Tuesday.
+
+=== The Root Cause
+
+Here's the thing: the problem was buildkitd's initialization behavior. When you run `buildkitd --version`, you'd _expect_ it to:
+
+. Print version
+. Exit
+
+Simple, right? Wrong.
+
+But buildkitd doesn't work that way. It initializes workers _before_ responding to any command, including `--version`. So the actual flow is:
+
+. Initialize worker system
+. Scan for runc binary
+. Wait for worker to be ready
+. Print version
+. Exit
+
+When runc was missing (before PR #228), step 2 failed fast: "no runc found, skip OCI worker." The version command continued without issues.
+
+After adding runc, step 3 became the problem. The worker initialization tried to set up the OCI runtime, which required privileges the test container didn't have. It hung waiting for something that would never happen. Like waiting for a bus that's been cancelled but nobody told you.
+
+The test command had no timeout, and the workflow didn't enforce a job-level limit. So it hung forever. And ever. And ever.
+
+=== The Fix
+
+I added a 30-second timeout to the test command:
+
+[source,yaml]
+----
+* name: Test BuildKit container
+  run: |
+    timeout 30s docker run --rm buildkit:latest buildkitd --version || \
+      echo "Note: buildkitd --version may require privileges or timed out"
+
+----
+
+If the command takes more than 30 seconds, timeout kills it. The workflow continues. The runners stop getting stuck.
+
+Is this ideal? No. The ideal solution would be running the test container with proper privileges so buildkitd can actually initialize workers. But that requires `--privileged` or specific capability flags, which complicates the workflow for a test that's just checking if the container exists.
+
+Sometimes the pragmatic solution is: "if it doesn't finish in 30 seconds, something's wrong, move on." Not every problem needs a perfect solution. Some problems just need a timeout.
+
+== Why Buildx Needs Our Image
+
+While debugging, I learned something about Docker Buildx's default behavior. When you create a builder without specifying an image, Buildx uses `moby/buildkit:buildx-stable-1`.
+
+That's an official multi-arch image maintained by the Docker team. It includes support for amd64, arm64, s390x, ppc64le. But not riscv64. (Why would there be? We're still the weird cousins at the architecture family reunion.)
+
+So if you're on RISC-V64 and run:
+
+[source,bash]
+----
+docker buildx create --name mybuilder --use
+
+----
+
+Buildx tries to pull `moby/buildkit:buildx-stable-1`. The pull succeeds. Docker can pull multi-arch manifests even when your platform isn't supported. But when the container starts, you get:
+
+----
+exec /sbin/docker-init: no such file or directory
+
+----
+
+The image has binaries for amd64, arm64, etc. It doesn't have riscv64. The container can't run. It's like downloading a Windows installer on macOS and being confused when it doesn't work.
+
+The solution is explicit:
+
+[source,bash]
+----
+docker buildx create \
+  --name mybuilder \
+  --driver docker-container \
+  --driver-opt image=ghcr.io/gounthar/buildkit-riscv64:latest \
+  --use
+
+----
+
+Now Buildx uses our RISC-V64 image instead of the official one. Everything works.
+
+This is why our APT packages (which install buildkitd and buildctl as standalone binaries) aren't sufficient for Buildx integration. Buildx needs a container. The binaries alone aren't enough. It's a different use case requiring a different solution.
+
+== Documentation Updates
+
+After fixing the technical problems, I updated the documentation to prevent future confusion. (Because if I don't document it now, I'll forget it in three weeks and have to debug the same issues all over again.)
+
+. _README.md_: Added a warning about the official BuildKit image's limitations. Explained that Option 1 (container image) is required for Buildx, while Option 3 (APT binaries) is for standalone use.
+
+. _Release notes template_: Added clarifying text to the APT installation section explaining that it provides standalone binaries, not Buildx integration.
+
+. _Workflow file_: Added comments explaining why the timeout exists and what the test actually validates.
+
+The goal was making the distinction clear: installing BuildKit binaries vs. using BuildKit with Docker Buildx are different use cases requiring different solutions. One gives you the tools. The other gives you the integration.
+
+== Lessons From Post-Deployment Debugging
+
+Let's talk about what I learned from this mess. (Because if I don't extract lessons, it's just pain without purpose.)
+
+=== Testing in Isolation Isn't Enough
+
+I tested that the container built. I tested that buildkitd and buildctl worked. I didn't test the worker initialization path or the Buildx integration. Those failures only appeared when users tried real workflows.
+
+Here's the thing: testing individual components is necessary but not sufficient. You need to test how components interact with the systems that will use them. It's not enough to verify the car starts; you need to verify it actually drives.
+
+=== Error Messages Lie Sometimes
+
+"Access denied" was actually cached credentials. "No worker found" was actually missing runc. The actual problem is often one layer deeper than the error message suggests.
+
+When debugging, I've learned to ignore the surface error and look at what's actually failing in the logs. Error messages are like symptoms: they point in a direction, but they're not the diagnosis.
+
+=== Version Consistency Matters
+
+Using Debian's runc 1.1.12 worked. But mixing our runc 1.3.0 builds with Debian's old version created potential compatibility issues down the line. Better to use our own packages consistently.
+
+This applies everywhere: if you're building something yourself, use your builds everywhere. Don't mix upstream and self-built components unless there's a good reason. Consistency prevents weird edge cases six months from now.
+
+=== Timeouts Are Not Optional
+
+The workflow hung because I didn't anticipate buildkitd's initialization behavior. A simple 30-second timeout would've prevented the runners from getting stuck.
+
+Every command that might hang should have a timeout. Always. Even commands that "should never hang." Especially those commands, actually.
+
+=== Documentation Needs User Perspective
+
+I documented what the package contained and how to install it. I didn't document _why_ you'd choose one installation method over another. That context only became clear after users tried the wrong approach and got confused.
+
+Good documentation anticipates misunderstandings and addresses them proactively. It's not enough to explain what something does; you need to explain when to use it and when not to.
+
+== Current Status
+
+BuildKit for RISC-V64 now works. The container initializes workers correctly. Buildx integration works. The APT packages provide standalone binaries for people who need them. The documentation explains the differences.
+
+The image is at ghcr.io/gounthar/buildkit-riscv64:latest. The packages are in the apt-repo branch. The workflows run weekly and track upstream releases.
+
+It took three PRs to fix the container (#227, #228, #229), one more to fix my typo (#231), one workflow update to fix the CI (#230), and several documentation updates to clarify the installation options. None of this was in the original "successful deployment" announcement.
+
+That's typical, right? The first version works in theory. The second version works in practice. The difference is usually user feedback and debugging time. And maybe a bit of humility.
+
+== Takeaways & Tips for the Team
+
+* _Test integration, not just compilation_ - Your binaries might work perfectly in isolation and fail completely when integrated with the tools that actually use them
+* _Add timeouts to everything_ - Even commands that "should never hang" will eventually hang when you least expect it
+* _Cache invalidation is hard_ - "Access denied" might just be cached credentials from when the resource actually was denied
+* _Worker initialization isn't optional_ - BuildKit requires at least one worker (OCI or containerd) to function; the daemon won't start without it
+* _ENTRYPOINT vs CMD matters_ - Put the static parts in ENTRYPOINT, put the configurable parts in CMD, or runtime arguments won't work
+* _Use your own packages_ - If you're building runc 1.3.0, use that instead of Debian's 1.1.12; version consistency prevents future headaches
+* _Document the why, not just the what_ - Explain when to use container images vs APT packages; users need context, not just instructions
+
+---
+
+The BuildKit container is available at link:https://github.com/gounthar/docker-for-riscv64[https://github.com/gounthar/docker-for-riscv64]. The fixes discussed here are in pull requests #227, #228, #229, #230, and #231. Documentation is in README.md and BUILDKIT-TESTING.md.
+
+If you're running Docker on RISC-V64 and want to try multi-platform builds, the setup is:
+
+[source,bash]
+----
+docker pull ghcr.io/gounthar/buildkit-riscv64:latest
+docker buildx create --name riscv-builder \
+  --driver docker-container \
+  --driver-opt image=ghcr.io/gounthar/buildkit-riscv64:latest \
+  --use
+docker buildx inspect --bootstrap
+
+----
+
+Then build something:
+
+[source,bash]
+----
+docker buildx build --platform linux/riscv64,linux/amd64 -t yourimage:latest .
+
+----
+
+It should work. If it doesn't, open an issue with logs. (And I'll probably discover yet another thing I didn't test properly.)
+
+---
+
+_This article continues from link:https://bruno.verachten.fr/2025/12/09/buildkit-for-riscv64-when-your-demo-decides-to-betray-you/[BuildKit for RISC-V64: When Your Demo Decides to Betray You], which covered the initial build and packaging process._
+
+<!--
+Converted from AsciiDoc by asciidoc-to-jekyll conversion
+Original file: /mnt/c/support/users/dev/riscv/docker/docker-dev/journal/session_2025-12-10_buildkit_debugging_styled.adoc
+Conversion date: 2025-12-11
+-->

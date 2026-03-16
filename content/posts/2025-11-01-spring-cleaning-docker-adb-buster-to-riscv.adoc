@@ -1,0 +1,616 @@
+---
+author: Poddingue
+categories:
+- Docker
+- DevOps
+- Infrastructure
+description: Infrastructure maintenance and modernization of the docker-adb project
+  - removing EOL distributions, adding RISC-V support, and optimizing image sizes
+  with multi-architecture builds
+featured: true
+hidden: false
+image: assets/images/2025/11/01/marvin-radke-bcomWyYsQds-unsplash.jpg
+tags:
+- docker
+- adb
+- android
+- multi-arch
+- buildx
+- riscv
+- debian
+- alpine
+- gitlab-ci
+- infrastructure
+title: 'Spring Cleaning a 2.1M+ Pull Docker Project: From Buster to RISC-V'
+---
+
+_Abstract:_ I maintain docker-adb, a Docker image for Android Debug Bridge that's been pulled over 2.1 million times from Docker Hub. Today I tackled years of accumulated technical debt: removing EOL Debian Buster, cleaning up deprecated branches, adding RISC-V architecture support, switching to slim base images for 40% size reduction, and opening an issue for dependency automation. Here's the complete technical walkthrough.
+
+== The Problem: Technical Debt at Scale
+
+I maintain docker-adb, a Docker image for Android Debug Bridge that's been pulled over 2.1 million times from Docker Hub. It's one of those projects that just works, which ironically means it often gets neglected. But today? Today we're doing some serious infrastructure housekeeping.
+
+The wake-up call came when I noticed our CI pipeline was still building for Debian Buster, which reached End of Life in June 2022. That's not just bad practice - it's actively problematic because Debian archived the repositories, causing 404 errors every time someone tried to build. Time to clean house.
+
+== The Context: Multi-Architecture Madness
+
+Before we dive into what I changed, here's what we're working with. This isn't just a simple Docker image - it's a multi-architecture beast supporting:
+
+* _linux/amd64_ (x86_64) - Your typical desktop/server
+* _linux/arm64_ (aarch64) - Raspberry Pi 4, Apple Silicon, cloud instances
+* _linux/arm/v7_ (ARMv7) - Older Raspberry Pis, embedded devices
+* _linux/riscv64_ (RISC-V 64-bit) - The new kid on the block (more on this later)
+
+We build five different image variants:
+
+* Alpine (the lightweight default)
+* Debian Bullseye (oldstable)
+* Debian Bookworm (stable)
+* Debian Trixie (testing)
+* Legacy ARMv7 (deprecated but still around)
+
+Each build uses Docker buildx to create multi-platform images in a single push, and we run everything on a native aarch64 GitLab runner hosted on Oracle Cloud's free tier. Yes, you read that right - we're building ARM images on actual ARM hardware, not through QEMU emulation. It's significantly faster.
+
+== Accomplishment 1: Removing Debian Buster
+
+Let's start with the obvious one: Debian Buster had to go.
+
+Debian 10 "Buster" reached End of Life on June 30, 2022. When a Debian version gets archived, the repositories move to `archive.debian.org`, but more importantly, they stop getting security updates. Building images based on EOL distributions is a security liability.
+
+Here's what I removed:
+
+=== From .gitlab-ci.yml
+
+[source,yaml]
+----
+== This entire job got deleted
+build-buster:
+  image: docker:latest
+  stage: build
+  tags:
+    * aarch64
+    * docker
+  before_script:
+    * docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+    * docker buildx rm multiarch-builder-buster || true
+    * docker buildx create --use --name multiarch-builder-buster --driver-opt network=host
+    * docker buildx inspect --bootstrap
+  script:
+    * |
+      if [ "$CI_COMMIT_REF_NAME" = "master" ]; then
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7 \
+          --file Dockerfile.buster \
+          --tag "gounthar/docker-adb:buster" \
+          --tag "gounthar/docker-adb:buster-$(date +%Y%m%d)" \
+          --push \
+          .
+      fi
+  after_script:
+    * docker buildx rm multiarch-builder-buster || true
+  only:
+    * master
+
+----
+
+=== From README.md
+
+[source,markdown]
+----
+=== Debian Variants
+* ~~`buster`, `buster-YYYYMMDD` - Debian 10 (oldoldstable)~~ _REMOVED_
+* `bullseye`, `bullseye-YYYYMMDD` - Debian 11 (oldstable)
+* `bookworm`, `bookworm-YYYYMMDD` - Debian 12 (stable)
+* `trixie`, `trixie-YYYYMMDD` - Debian 13 (testing)
+
+----
+
+=== Added to the Changelog
+
+[source,markdown]
+----
+* _2025-11-01_ Debian Buster (10) support removed - reached End of Life in June 2022, all repositories archived.
+
+----
+
+[quote]
+____
+_Note:_ This was straightforward, but necessary. When you're serving 2.1M+ pulls, you don't want to be inadvertently encouraging people to use outdated, insecure base images.
+____
+
+== Accomplishment 2: Branch Cleanup
+
+Over the years, this project accumulated a graveyard of deprecated branches. Remember when we had separate branches for each architecture variant? Yeah, those days are over thanks to Docker buildx.
+
+I deleted these defunct branches:
+
+* `buster-armv7`
+* `bullseye-armv7`
+* `bookworm-armv7`
+* `trixie-armv7`
+* `mitchtech-fork-armv7`
+* `mitchtech-fork`
+
+The `*-armv7` branches existed from back when I was doing separate per-architecture builds. Now that everything's consolidated with multi-arch buildx support in the master branch, these are just confusing artifacts.
+
+The `mitchtech-fork*` branches were remnants from when I originally forked this project from mitchtech's arm-adb image. We've long since diverged, and those branches served no purpose except to confuse contributors.
+
+[quote]
+____
+_Important:_ _Why this matters:_ When you look at the branches view in GitLab, you want to see active work, not archaeology. Clean branches mean clearer intent.
+____
+
+== Accomplishment 3: RISC-V Support (The Fun Part)
+
+Now we get to the interesting stuff. RISC-V is an open-source instruction set architecture that's gaining serious traction in embedded systems, academia, and increasingly in consumer hardware. While it's still experimental, there's enough hardware and emulation support (hello, QEMU) to make it worth supporting.
+
+I added `linux/riscv64` architecture support to two image variants:
+
+. _Alpine_ (Dockerfile)
+. _Debian Trixie_ (Dockerfile.trixie)
+
+=== Why Only These Two?
+
+* _Alpine_: Already had the lightest, most flexible base. Alpine's package ecosystem has decent RISC-V support.
+* _Debian Trixie_: This is Debian's newest stable branch, the first one officially supporting RISC-V. Bullseye and Bookworm have no official RISC-V support in their repositories.
+
+=== Changes in .gitlab-ci.yml
+
+[source,yaml]
+----
+build-alpine:
+  script:
+    * |
+      if [ "$CI_COMMIT_REF_NAME" = "master" ]; then
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7,linux/riscv64 \  # Added riscv64
+          --file Dockerfile \
+          --tag "gounthar/docker-adb:latest" \
+          --tag "gounthar/docker-adb:alpine" \
+          --tag "gounthar/docker-adb:alpine-$(date +%Y%m%d)" \
+          --push \
+          .
+
+----
+
+And similarly for Debian Trixie:
+
+[source,yaml]
+----
+build-trixie:
+  script:
+    * |
+      if [ "$CI_COMMIT_REF_NAME" = "master" ]; then
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7,linux/riscv64 \  # Added riscv64
+          --file Dockerfile.trixie \
+          --tag "gounthar/docker-adb:trixie" \
+          --tag "gounthar/docker-adb:trixie-$(date +%Y%m%d)" \
+          --push \
+          .
+
+----
+
+=== Updated README.md
+
+[source,markdown]
+----
+== Multi-Architecture Support
+
+All images support multiple architectures:
+* _linux/amd64_ (x86_64)
+* _linux/arm64_ (aarch64)
+* _linux/arm/v7_ (ARMv7)
+* _linux/riscv64_ (RISC-V 64-bit) - Alpine and Trixie only
+
+Docker will automatically pull the correct architecture for your platform.
+
+_Note_: RISC-V support is currently experimental and primarily useful for QEMU emulation and emerging RISC-V hardware. Only Alpine and Debian Trixie variants include riscv64 builds.
+
+----
+
+=== What Does This Enable?
+
+You can now run:
+
+[source,bash]
+----
+docker pull --platform linux/riscv64 gounthar/docker-adb:alpine
+
+----
+
+And Docker will pull the RISC-V variant if you're on RISC-V hardware (or in a RISC-V QEMU environment). This opens up Android debugging on RISC-V development boards and emulators - admittedly a niche use case, but a growing one.
+
+The build process is seamless because buildx handles cross-compilation automatically. The aarch64 runner builds all four architectures (amd64, arm64, arm/v7, riscv64) using QEMU for the non-native ones.
+
+[quote]
+____
+_Note:_ _This was Merge Request #2_, and it merged cleanly into master.
+____
+
+== Accomplishment 4: Removing CircleCI Configuration
+
+Once upon a time, this project used CircleCI for builds. Then we migrated everything to GitLab CI/CD, where we have much better control over runners, especially the native aarch64 runner on Oracle Cloud.
+
+But the `.circleci/config.yml` file? Still sitting there in the repository, confusing anyone who looked at our CI setup.
+
+I deleted it. Simple as that.
+
+[quote]
+____
+_Tip:_ _Why keep old CI configs around?_ They serve no purpose except to confuse contributors and make it unclear which CI system is actually in use. When I looked at the project, my first question was "Wait, are we using CircleCI or GitLab?" The answer should be immediately obvious.
+____
+
+== Accomplishment 5: Debian Slim Images (The Big Win)
+
+This is where we see real, measurable impact. All Debian variants were previously built on full Debian base images:
+
+* `debian:bullseye-backports`
+* `debian:bookworm-backports`
+* `debian:trixie-backports`
+
+I switched them all to slim variants:
+
+* `debian:bullseye-slim`
+* `debian:bookworm-slim`
+* `debian:trixie-slim`
+
+=== What Changed in Each Dockerfile
+
+[source,diff]
+----
+* FROM debian:bullseye-backports as base
++ FROM debian:bullseye-slim as base
+
+----
+
+=== The Impact
+
+Slim images remove common packages that aren't needed in containers (documentation, locales, man pages, etc.). For our use case - running ADB in a container - we don't need any of that.
+
+_Size comparison (approximate):_
+
+* _Full Debian Bullseye image_: ~124MB
+* _Slim Debian Bullseye image_: ~74MB
+* _Savings_: ~40% reduction (~50MB per image)
+
+When you're serving 2.1M+ pulls, that's 105 _petabytes_ of bandwidth saved over the lifetime of the project (very rough math, but you get the idea). Docker Hub and users' networks thank us.
+
+[quote]
+____
+_Important:_ _This was Merge Request #3_, and it's probably the single highest-impact change from this session.
+____
+
+Here's the full Dockerfile.bullseye after the change:
+
+[source,dockerfile]
+----
+FROM debian:bullseye-slim as base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LC_ALL=C.UTF-8
+
+== Set up insecure default key
+ADD files/51-android.rules /etc/udev/rules.d/51-android.rules
+RUN chmod 644 /etc/udev/rules.d/51-android.rules && chown root. /etc/udev/rules.d/51-android.rules
+RUN apt-get update && apt-get upgrade -y && apt-get install -y -q android-tools* ca-certificates curl \
+  usbutils --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root/
+
+RUN mkdir -p -m 0750 /root/.android
+
+COPY --from=mitchtech/arm-adb /root/.android/adbkey.pub .android/adbkey.pub
+COPY --from=mitchtech/arm-adb /root/.android/adbkey .android/adbkey
+
+EXPOSE 5037/tcp
+CMD adb -a -P 5037 server nodaemon
+
+----
+
+The changes are minimal - just the base image swap - but the impact is significant.
+
+== Accomplishment 6: Issue #8 - Dependency Automation
+
+One thing I've learned from maintaining open-source projects: if you're not automating dependency updates, you're setting yourself up for the exact situation we started with (EOL distributions still in use).
+
+I created _Issue #8_ to track implementing proper dependency automation.
+
+=== Title
+
+"Implement dependency automation with UpdateCLI and Dependabot"
+
+=== Description (Paraphrased)
+
+We need automated dependency tracking for:
+
+* Base Docker images (Alpine, Debian variants)
+* Android platform tools versions
+* GitHub Actions (if/when we add any)
+
+=== Tools to Investigate
+
+. _UpdateCLI_ - Can track Docker base images and create MRs automatically
+. _Dependabot_ - Handles GitHub Actions and some Docker bases
+. _Renovate_ - Alternative with more flexibility
+
+=== Goals
+
+* Never get caught with EOL distributions again
+* Automated MRs when new Alpine/Debian versions release
+* Track platform-tools updates from Google's repository
+* Keep CI/CD workflows current
+
+[quote]
+____
+_Note:_ This isn't implemented yet, but it's documented and ready for a future session. The key insight: automation prevents the problem we spent today fixing.
+____
+
+== Technical Deep Dive: Multi-Architecture Builds with buildx
+
+Since this session was heavily focused on Docker buildx, let me break down what's actually happening in our CI pipeline.
+
+=== The buildx Setup
+
+Each build job follows this pattern:
+
+[source,yaml]
+----
+before_script:
+  * docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+  * docker buildx rm multiarch-builder-alpine || true
+  * docker buildx create --use --name multiarch-builder-alpine --driver-opt network=host
+  * docker buildx inspect --bootstrap
+
+----
+
+==== What's Happening Here?
+
+. _Docker login_: Authenticate to Docker Hub so we can push images
+. _Remove old builder_: `docker buildx rm` ensures we start fresh (important for DNS issues in Oracle Cloud)
+. _Create builder_: `docker buildx create --use` creates a new buildx builder instance
+. _`--driver-opt network=host`_: Critical for Oracle Cloud - forces the builder to use host networking, which gives it access to the proper DNS configuration
+
+=== The DNS Problem (And Solution)
+
+We run our aarch64 GitLab runner on Oracle Cloud's free tier. Oracle Cloud has specific DNS requirements - you need to use their DNS server (`169.254.169.254`) as primary, or external DNS queries fail.
+
+Here's our `/etc/docker/daemon.json`:
+
+[source,json]
+----
+{
+  "dns": ["169.254.169.254", "8.8.8.8", "1.1.1.1"]
+}
+
+----
+
+But buildx creates isolated builder containers that don't automatically inherit the host's DNS config. The solution? `--driver-opt network=host` forces the builder to use the host's network stack, which includes the working DNS configuration.
+
+[quote]
+____
+_Warning:_ _Without this_, builds fail with cryptic errors like:
+
+[source,text]
+____
+----
+[quote]
+____
+failed to resolve source metadata for docker.io/library/alpine:latest:
+failed to do request: Head "https://registry-1.docker.io/v2/library/alpine/manifests/latest":
+dial tcp: lookup registry-1.docker.io: no such host
+
+____
+----
+
+=== The Build Command
+
+[source,yaml]
+----
+docker buildx build \
+  --platform linux/amd64,linux/arm64,linux/arm/v7,linux/riscv64 \
+  --file Dockerfile \
+  --tag "gounthar/docker-adb:latest" \
+  --tag "gounthar/docker-adb:alpine" \
+  --tag "gounthar/docker-adb:alpine-$(date +%Y%m%d)" \
+  --push \
+  .
+
+----
+
+==== Breaking It Down
+
+* `--platform`: Comma-separated list of target architectures
+* `--file`: Which Dockerfile to use (allows multiple variants from same repo)
+* `--tag`: Multiple tags for the same build (latest, variant name, dated)
+* `--push`: Push to registry immediately (instead of loading locally)
+* `.`: Build context (current directory)
+
+Buildx handles all the cross-compilation magic. On our aarch64 runner:
+
+* `linux/arm64` builds natively (fast)
+* `linux/amd64`, `linux/arm/v7`, `linux/riscv64` use QEMU emulation (slower but transparent)
+
+=== Verification
+
+After pushing, you can verify the manifest:
+
+[source,bash]
+----
+docker manifest inspect gounthar/docker-adb:alpine
+
+----
+
+Output shows all architectures:
+
+[source,json]
+----
+{
+  "manifests": [
+    {
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux"
+      }
+    },
+    {
+      "platform": {
+        "architecture": "arm64",
+        "os": "linux",
+        "variant": "v8"
+      }
+    },
+    {
+      "platform": {
+        "architecture": "arm",
+        "os": "linux",
+        "variant": "v7"
+      }
+    },
+    {
+      "platform": {
+        "architecture": "riscv64",
+        "os": "linux"
+      }
+    }
+  ]
+}
+
+----
+
+When users run `docker pull gounthar/docker-adb:alpine`, Docker automatically selects the right architecture based on their system.
+
+== Lessons Learned
+
+=== 1. Technical Debt Compounds Quietly
+
+This project "just worked" for years, which meant I didn't touch it much. But that allowed small issues to pile up:
+
+* EOL distributions still being built
+* Deprecated branches cluttering the repo
+* Obsolete CI configs confusing contributors
+* Larger-than-necessary images wasting bandwidth
+
+The wake-up call was Debian Buster throwing 404 errors. If I'd been more proactive, I would've caught this in June 2022 when Buster reached EOL.
+
+[quote]
+____
+_Tip:_ _Takeaway_: Set calendar reminders for distribution EOL dates. Don't wait for things to break.
+____
+
+=== 2. Multi-Architecture Support Is Now Table Stakes
+
+A few years ago, ARM support was a nice-to-have. Now? It's essential:
+
+* Apple Silicon Macs (arm64)
+* Raspberry Pis in production (arm64, arm/v7)
+* AWS Graviton instances (arm64)
+* Oracle Cloud Ampere instances (arm64)
+
+And increasingly, RISC-V is becoming relevant for embedded systems and academic research.
+
+[quote]
+____
+_Tip:_ _Takeaway_: If you're building Docker images in 2025, assume multi-arch from day one. Buildx makes it nearly effortless.
+____
+
+=== 3. Native Architecture Builds Are Dramatically Faster
+
+Before we set up the aarch64 GitLab runner, ARM builds were painfully slow because they ran through QEMU emulation on x86_64 runners. Now:
+
+* ARM builds on ARM: 2-3 minutes
+* ARM builds on x86_64 (QEMU): 15-20 minutes
+
+Oracle Cloud's free tier includes ARM instances, and GitLab's runner is trivial to set up. The speedup is worth the one-time setup cost.
+
+[quote]
+____
+_Tip:_ _Takeaway_: If you're building multi-arch images frequently, invest in native architecture runners.
+____
+
+=== 4. Slim Base Images Are Free Optimization
+
+Switching from `debian:bullseye` to `debian:bullseye-slim` required changing one line per Dockerfile and saved ~40% image size. There's no downside - slim images still include everything needed for most container workloads.
+
+[quote]
+____
+_Tip:_ _Takeaway_: Always use slim variants unless you have a specific reason not to. The bandwidth savings compound over millions of pulls.
+____
+
+=== 5. Automate or Suffer
+
+The entire Debian Buster situation could have been prevented with automated dependency updates. If UpdateCLI had been monitoring our base images, it would've flagged Buster's EOL and created a merge request to remove it.
+
+Manual dependency tracking doesn't scale. Automation does.
+
+[quote]
+____
+_Tip:_ _Takeaway_: Set up dependency automation (UpdateCLI, Renovate, Dependabot) before you need it.
+____
+
+== What's Next?
+
+This session focused on cleanup and modernization, but there's more to do:
+
+. _Implement Issue #8_: Set up UpdateCLI to track base images and platform-tools versions
+. _Add Dependabot_: Keep GitHub Actions current (once we have any)
+. _Testing on RISC-V_: Verify that the riscv64 images actually work on real hardware or QEMU
+. _Size monitoring_: Set up automated size tracking to catch any regressions
+. _Documentation improvements_: Add more examples for each networking pattern
+
+But for now? We've cleaned up years of accumulated technical debt, added bleeding-edge architecture support, and reduced image sizes by 40%. Not a bad day's work.
+
+== Conclusion
+
+Maintaining a popular open-source project (2.1M+ pulls!) means balancing stability with progress. Today we did both:
+
+* _Stability_: Removed EOL Debian Buster, cleaned up confusing branches and configs
+* _Progress_: Added RISC-V support, switched to slim images, opened issue for dependency automation
+
+The key insight? Infrastructure hygiene matters. A project that "just works" is a project that's accumulating hidden debt. Regular maintenance sessions like this keep that debt from becoming unmanageable.
+
+---
+
+_Header photo by link:https://unsplash.com/@marvin_radke[Marvin Radke] on link:https://unsplash.com/photos/bcomWyYsQds[Unsplash]_
+
+== References
+
+* _docker-adb on Docker Hub_: link:https://hub.docker.com/r/gounthar/docker-adb[https://hub.docker.com/r/gounthar/docker-adb]
+* _Debian Buster EOL announcement_: link:https://www.debian.org/News/2022/20220910[https://www.debian.org/News/2022/20220910]
+* _Docker buildx documentation_: link:https://docs.docker.com/build/buildx/[https://docs.docker.com/build/buildx/]
+* _RISC-V architecture overview_: link:https://riscv.org/[https://riscv.org/]
+* _UpdateCLI for dependency automation_: link:https://www.updatecli.io/[https://www.updatecli.io/]
+
+== Technical Details
+
+[cols="1,1", options="header"]
+|===
+| Item
+| Details
+
+| Oracle Cloud GitLab runner
+| <redacted> (ubuntu user)
+
+| Runner ID
+| 50376212
+
+| Runner tags
+| `aarch64`, `docker`
+
+| Build times (native ARM)
+| ~2-3 minutes per variant
+
+| Build times (QEMU cross-compilation)
+| ~15-20 minutes per variant
+
+| Total pipeline time
+| ~25 minutes for all variants
+
+| Merge Requests
+| MR #2 (RISC-V support), MR #3 (slim images)
+
+| Issues created
+| Issue #8 (dependency automation)
+
+|===

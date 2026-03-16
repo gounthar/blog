@@ -1,0 +1,16 @@
+---
+author: Brah
+categories:
+- Financial
+description: Petite synthèse du status d'auto-entrepreneur en 2019
+draft: true
+featured: true
+hidden: true
+image: assets/images/2019-07-24-1.png
+tags:
+- BNC
+- Freelance
+title: Create a repo based blog
+---
+
+== Principes
