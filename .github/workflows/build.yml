@@ -9,6 +9,33 @@ on:
       - main
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect site-affecting changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            site:
+              - 'content/**'
+              - 'static/**'
+              - 'layouts/**'
+              - 'data/**'
+              - 'archetypes/**'
+              - 'hugo.toml'
+              - 'go.mod'
+              - 'go.sum'
+              - 'themes/**'
+              - 'assets/**'
+              - 'config/**'
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -41,8 +68,8 @@ jobs:
           retention-days: 7
 
   deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [changes, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download artifact
@@ -59,4 +86,3 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: public/
           server-dir: ${{ secrets.DESTINATION_FOLDER }}/
-          dangerous-clean-slate: true
