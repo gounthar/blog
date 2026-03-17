@@ -1,4 +1,4 @@
-name: Build Hugo Site
+name: Build and Deploy Hugo Site
 
 on:
   push:
@@ -39,3 +39,24 @@ jobs:
           name: public
           path: public/
           retention-days: 7
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: public
+          path: public/
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: public/
+          server-dir: ${{ secrets.DESTINATION_FOLDER }}/
+          dangerous-clean-slate: true
