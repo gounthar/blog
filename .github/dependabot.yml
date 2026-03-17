@@ -18,5 +18,5 @@ updates:
       - "dependencies"
       - "docker"
     ignore:
-      # Hugo image is managed by UpdateCLI across multiple files
+      # Hugo image is managed by UpdateCLI
       - dependency-name: "hugomods/hugo"
