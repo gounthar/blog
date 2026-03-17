@@ -29,8 +29,8 @@ sources:
       image: hugomods/hugo
       tagfilter: "^\\d+\\.\\d+\\.\\d+-exts$"
       versionfilter:
-        kind: semver
-        pattern: "*-exts"
+        kind: regex
+        pattern: "^\\d+\\.\\d+\\.\\d+-exts$"
 
 targets:
   docker-compose:
