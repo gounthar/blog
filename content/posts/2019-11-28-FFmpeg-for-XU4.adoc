@@ -1,21 +1,20 @@
 ---
+date: 2019-11-28 00:00:00 +0000
 author: Poddingue
 categories:
-- XU4
-- Armbian
-- h.264
-- ODroid
-- ffmpeg
+- Linux
+- Multimedia
+- SBC
 description: Compile FFmpeg on the Odroid XU4 to get hardware acceleration
 featured: true
 hidden: false
 image: assets/images/2019/11/28/ODROID_XU4_001_1_.png
 tags:
-- XU4
-- Armbian
+- armbian
+- ffmpeg
 - h.264
 - ODroid
-- ffmpeg
+- XU4
 title: Compile FFmpeg on the Odroid XU4 to get hardware acceleration
 ---
 

@@ -1,9 +1,9 @@
 ---
+date: 2026-03-11 00:00:00 +0000
 author: Bruno Verachten
 categories:
-- Technical
-- RISC-V
 - Python
+- RISC-V
 description: A clean-machine pip install exposed stale riscv64 PyTorch wheels, missing
   system libraries like libopenblas, and transitive dependencies (numpy, grpcio) our
   PEP 503 wheel index missed.
@@ -16,23 +16,25 @@ featured: false
 hidden: false
 image: assets/images/2026/03/11/dependency-rabbit-hole-header.jpg
 tags:
-- riscv64
-- python
-- wheels
-- pip
-- pep503
-- manylinux
 - auditwheel
-- numpy
-- pytorch
-- vllm
-- openblas
-- transitive-dependencies
 - bananapi
-- spacemit
-- grpcio
-- self-hosted-runners
 - github-actions
+- grpcio
+- manylinux
+- numpy
+- openblas
+- pep503
+- pip
+- python
+- pytorch
+- risc-v
+- riscv64
+- self-hosted-runners
+- spacemit
+- Technical
+- transitive-dependencies
+- vllm
+- wheels
 title: 'The Dependency Rabbit Hole: Why 25 RISC-V Python Wheels Weren''t Enough'
 toc: true
 ---

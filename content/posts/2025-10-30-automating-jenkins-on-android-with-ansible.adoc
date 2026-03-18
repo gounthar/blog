@@ -1,12 +1,10 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- android
-- termux
-- ansible
-- devops
-- automation
+- Android
+- CI/CD
+- Infrastructure
+- Jenkins
 date: 2025-10-30 10:00:00 +0200
 description: Transforming aging Android phones into Jenkins CI/CD infrastructure with
   full automation using Ansible and Infrastructure as Code principles. From 3-hour
@@ -15,14 +13,15 @@ featured: true
 hidden: false
 image: assets/images/2025/10/30/2025-10-30-automating-jenkins-on-android-with-ansible/love-part-3-16-9.png
 tags:
-- jenkins
 - android
-- termux
 - ansible
+- automation
+- devops
 - infrastructure-as-code
 - jcasc
-- automation
+- jenkins
 - sustainability
+- termux
 title: 'Automating Jenkins on Old Android Phones: From Naive Experiment to Production-Ready
   Infrastructure'
 toc: true

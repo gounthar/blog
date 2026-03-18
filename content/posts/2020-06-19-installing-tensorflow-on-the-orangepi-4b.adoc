@@ -1,23 +1,21 @@
 ---
+date: 2020-06-19 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
-- 4B
+- AI/ML
+- Linux
+- SBC
 description: How to install TensorFlow on the Orange Pi 4B running Armbian ?
 featured: true
 hidden: false
 image: assets/images/pu7JQ6ratm.png
 tags:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
 - 4B
+- armbian
+- machine-learning
+- merrykombo
+- orangepi
+- RK3399
 title: Installing TensorFlow on the Orange Pi 4B
 ---
 

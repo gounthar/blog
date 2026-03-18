@@ -1,27 +1,23 @@
 ---
+date: 2021-08-20 00:00:00 +0000
 author: gounthar
 categories:
-- aarch64
-- stationp1
-- Armbian
-- Firefly
+- ARM
 - Linux
-- RK3399
-- howto
-- bullseye
+- SBC
 description: Asciicast is needed to generate a GIF from termtosvg
 featured: true
 hidden: false
 image: assets/images/2021/08/20/glitter.gif
 tags:
 - aarch64
-- stationp1
-- Armbian
-- Firefly
-- Linux
-- RK3399
-- howto
+- armbian
 - bullseye
+- firefly
+- howto
+- linux
+- RK3399
+- stationp1
 title: Installing asciicast2gif on aarch64 Debian bullseye
 toc: true
 ---

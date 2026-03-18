@@ -1,21 +1,19 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- android
-- jdk
-- jdk21
-- termux
+- Android
+- Java
+- Jenkins
 date: 2025-05-21 00:00:00 +0200
 description: Can we get Jenkins to run on Android? Let's find out!
 featured: true
 hidden: false
 image: assets/images/2025/05/22/2025-05-22-jenkins-on-android/love-part-2-16-9.png
 tags:
-- jenkins
 - android
 - jdk
 - jdk21
+- jenkins
 - termux
 title: 'Android and Jenkins: What Is the Limit? Part Two.'
 toc: true

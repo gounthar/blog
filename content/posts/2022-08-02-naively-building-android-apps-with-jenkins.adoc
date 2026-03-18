@@ -1,22 +1,22 @@
 ---
+date: 2022-08-02 00:00:00 +0000
 author: gounthar
 categories:
-- jenkins
-- CI
 - Android
-- mobile
-- docker
+- CI/CD
+- Docker
+- Jenkins
 description: Can we easily build an Android application with Jenkins thanks to a Docker
   image?
 featured: true
 hidden: false
 image: assets/images/2022/08/02/BuildingAndroidAppsNaively.png
 tags:
-- jenkins
-- CI
-- Android
-- mobile
+- android
+- ci
 - docker
+- jenkins
+- mobile
 title: Using jenkins to build Android applications
 toc: true
 ---

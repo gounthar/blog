@@ -1,11 +1,10 @@
 ---
 author: Bruno Verachten
 categories:
-- WebAssembly
-- Embedded
-- IoT
+- CI/CD
 - Docker
-- DevOps
+- Embedded
+- Web
 date: 2026-03-01 12:00:00 +0100
 description: '100 WebAssembly containers on a Raspberry Pi 3B+ with 903 MB of RAM:
   34 MB total, 164 KB per container. Measured every data point. Here''s how Wasm compares
@@ -17,17 +16,18 @@ featured: true
 hidden: false
 image: assets/images/2026/03/01/header-art3-honeycomb.jpg
 tags:
-- WebAssembly
-- Atym
-- Ocre
-- WAMR
-- Embedded
-- Docker
 - ARM
-- RaspberryPi
-- IoT
-- Containers
+- Atym
+- containers
+- devops
+- docker
 - EdgeComputing
+- embedded
+- iot
+- Ocre
+- raspberry-pi
+- WAMR
+- webassembly
 title: Running 100 Wasm Containers on a Raspberry Pi (with 903 MB of RAM)
 ---
 

@@ -1,19 +1,19 @@
 ---
+date: 2021-01-14 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- Firefly
-- Kodi
 - Android
+- Multimedia
+- SBC
 description: Firefly Station P1 first review
 featured: true
 hidden: false
 image: assets/images/2021/01/14/Station P1.jpg
 tags:
+- android
+- firefly
+- kodi
 - RK3399
-- Firefly
-- Kodi
-- Android
 title: Firefly Station P1 first review
 ---
 

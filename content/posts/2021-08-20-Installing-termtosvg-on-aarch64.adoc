@@ -1,25 +1,22 @@
 ---
+date: 2021-08-20 00:00:00 +0000
 author: gounthar
 categories:
-- aarch64
-- stationp1
-- Armbian
-- Firefly
+- ARM
 - Linux
-- RK3399
-- howto
+- SBC
 description: term2SVG is used to generate animated SVG files from shell sessions
 featured: true
 hidden: false
 image: assets/images/2021/08/20/E3RtT58meT.png
 tags:
 - aarch64
-- stationp1
-- Armbian
-- Firefly
-- Linux
-- RK3399
+- armbian
+- firefly
 - howto
+- linux
+- RK3399
+- stationp1
 title: termtosvg on aarch64 Debian
 ---
 

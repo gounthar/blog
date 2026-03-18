@@ -1,7 +1,8 @@
 ---
 author: Bruno Verachten
 categories:
-- DevOps
+- CI/CD
+- Docker
 - RISC-V
 date: 2025-12-09 10:00:00 +0100
 description: Building and packaging BuildKit 0.26.2 for RISC-V64, from initial failure
@@ -14,27 +15,29 @@ featured: false
 hidden: false
 image: assets/images/2025/12/09/buildkit-riscv64-header.jpg
 tags:
-- buildkit
-- riscv64
-- docker
-- buildx
-- debian
-- rpm
-- packaging
-- dwz
-- ci-cd
-- golang
 - build-automation
-- docker-engine
+- buildkit
+- buildx
+- ci-cd
 - containerization
+- debian
+- debian-packaging
+- devops
+- docker
+- docker-engine
+- dwz
+- github-actions
+- go-binaries
+- golang
+- moby-buildkit
 - multi-platform-builds
 - package-management
-- github-actions
-- moby-buildkit
-- static-binaries
-- debian-packaging
+- packaging
+- risc-v
+- riscv64
+- rpm
 - rpm-packaging
-- go-binaries
+- static-binaries
 title: 'BuildKit for RISC-V64: When Your Demo Decides to Betray You'
 toc: true
 ---

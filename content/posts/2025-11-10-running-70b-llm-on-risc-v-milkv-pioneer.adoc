@@ -1,9 +1,9 @@
 ---
+date: 2025-11-10 00:00:00 +0000
 author: Poddingue
 categories:
+- AI/ML
 - RISC-V
-- LLM
-- Machine Learning
 description: Successfully deploying llama.cpp and Ollama on a 64-core RISC-V workstation
   to run a 70-billion parameter language model without GPU acceleration - a complete
   technical walkthrough with lessons learned
@@ -11,15 +11,15 @@ featured: true
 hidden: false
 image: assets/images/2025/11/10/riscv-llm-header.jpg
 tags:
-- riscv
-- llm
-- llama.cpp
-- ollama
-- milkv-pioneer
 - cpu-inference
 - deepseek-r1
+- llama.cpp
+- llm
 - machine-learning
+- milkv-pioneer
+- ollama
 - open-source
+- risc-v
 title: 'Running a 70B LLM on Pure RISC-V: The MilkV Pioneer Deployment Journey'
 ---
 

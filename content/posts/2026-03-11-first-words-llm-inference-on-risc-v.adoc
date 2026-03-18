@@ -1,10 +1,10 @@
 ---
+date: 2026-03-11 00:00:00 +0000
 author: Bruno Verachten
 categories:
-- Technical
-- RISC-V
+- AI/ML
 - Python
-- LLM
+- RISC-V
 description: Running LLM inference on RISC-V with the Python ML stack. Transformers
   generates text at 0.15-0.93 tok/s on a BananaPi F3, while llama.cpp hits 8.21 tok/s.
 excerpt: from vllm import LLM on a RISC-V terminal. It works. But importing isn't
@@ -13,18 +13,20 @@ featured: true
 hidden: false
 image: assets/images/2026/03/11/first-words-inference-header.jpg
 tags:
-- riscv64
-- python
-- llm
+- bananapi
+- benchmark
 - inference
+- llama-cpp
+- llm
+- python
+- pytorch
+- quantization
+- risc-v
+- riscv64
+- spacemit
+- Technical
 - transformers
 - vllm
-- llama-cpp
-- pytorch
-- bananapi
-- spacemit
-- benchmark
-- quantization
 title: 'First Words: LLM Inference on RISC-V'
 toc: true
 ---

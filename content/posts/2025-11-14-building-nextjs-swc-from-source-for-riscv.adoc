@@ -1,9 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- riscv
-- nextjs
-- rust
+- RISC-V
+- Rust
+- Web
 date: 2025-11-14 22:00:00 +0000
 description: How I built Next.js's native SWC compiler from source on riscv64 hardware,
   navigated cryptography dependency nightmares, and discovered workarounds that actually
@@ -15,15 +15,16 @@ excerpt: 'Picture this: You''ve got Next.js running on riscv64 architecture, but
 featured: true
 image: assets/images/2025/11/14/nextjs-swc-riscv-header.jpg
 tags:
-- risc-v
-- next.js
-- swc
-- rust
 - banana-pi-f3
-- native-compilation
-- ring-dependency
-- embedded-systems
 - compilation
+- embedded-systems
+- native-compilation
+- next.js
+- nextjs
+- ring-dependency
+- risc-v
+- rust
+- swc
 title: 'Building Next.js SWC from Source for RISC-V: A Journey Through the ring Dependency
   Maze'
 ---

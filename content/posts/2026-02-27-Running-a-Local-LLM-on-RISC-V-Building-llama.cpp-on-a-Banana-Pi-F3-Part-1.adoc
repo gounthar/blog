@@ -1,10 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- LLM
-- RISC-V
+- AI/ML
 - Embedded
-- AI
+- RISC-V
 date: 2026-02-27 12:00:00 +0100
 description: Building llama.cpp from source on a RISC-V board and running a local
   LLM inference server with TinyLlama 1.1B, achieving 8.5 tokens/second.
@@ -16,15 +15,17 @@ featured: true
 hidden: false
 image: assets/images/2026/02/27/header-bananapi-f3-dark-v2.jpg
 tags:
-- llama.cpp
-- riscv
-- ggml
-- inference
-- tinyLlama
+- ai
 - banana-pi
 - embedded
+- ggml
+- inference
 - iot
+- llama.cpp
+- llm
 - local-ai
+- risc-v
+- tinyLlama
 title: 'Running a Local LLM on RISC-V: Building llama.cpp on a Banana Pi F3 (Part
   1)'
 ---

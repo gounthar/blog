@@ -1,8 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- Development
-- Cross-Platform
+- Docker
+- RISC-V
+- Rust
 date: 2025-12-22 14:00:00 +0100
 description: The journey of adding RISC-V 64-bit build support to a Tauri application,
   complete with unexpected roadblocks and a plan to go upstream
@@ -12,16 +13,18 @@ excerpt: I wanted to give back to the Armbian community by contributing RISC-V s
   hairs from the ARM32 era.
 image: assets/images/2025-12-22-riscv-header.jpg
 tags:
+- armbian
+- cross-compilation
+- Cross-Platform
+- debian
+- Development
+- docker
+- qemu
 - risc-v
 - riscv64
-- tauri
 - rust
-- armbian
-- qemu
-- docker
-- debian
+- tauri
 - webkit2gtk
-- cross-compilation
 title: 'Adding RISC-V Support to Armbian Imager: A Tale of QEMU, Tauri, and Deja Vu'
 ---
 

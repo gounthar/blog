@@ -1,25 +1,29 @@
 ---
+date: 2025-11-12 00:00:00 +0000
 author: Poddingue
 categories:
+- CI/CD
 - Docker
-- RISC-V64
-- DevOps
-- Containers
+- Infrastructure
+- RISC-V
 description: Docker Engine v29.0.0 released Nov 6. RISC-V64 builds ready Nov 12—just
   6 days later. Containerd as default, automated builds, production-ready.
 featured: true
 hidden: false
 image: assets/images/2025/11/12/docker-v29-header.jpg
 tags:
-- docker-v29
-- riscv64
-- containerd
 - automation
-- github-actions
 - buildkit
 - ci-cd
+- containerd
+- containers
+- devops
+- docker
+- docker-v29
 - edge-computing
+- github-actions
 - infrastructure
+- riscv64
 title: 'Docker v29 Lands on RISC-V64 in Under a Week: The Future is Here'
 toc: true
 ---

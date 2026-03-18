@@ -1,24 +1,22 @@
 ---
+date: 2021-01-11 00:00:00 +0000
 author: Poddingue
 categories:
-- CI
-- Hypriot
-- Armbian
-- Raspberry
-- OrangePi
-- OrangePiZero
+- CI/CD
+- Linux
+- SBC
 description: How to add your own ARM Gitlab runner to your Gitlab instance Runners
   herd
 featured: true
 hidden: false
 image: assets/images/2021/01/11/gitlab-blog-cover.png
 tags:
-- CI
-- Hypriot
-- Armbian
-- Raspberry
-- OrangePi
-- OrangePiZero
+- armbian
+- ci
+- hypriot
+- orangepi
+- orangepi-zero
+- raspberry-pi
 title: 🍊 ARM your continuous integration system with fruits! 🍌
 toc: true
 ---

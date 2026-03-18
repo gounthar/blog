@@ -1,9 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- Jenkins
 - Android
-- iOS
+- CI/CD
+- Jenkins
 date: 2026-02-09 12:00:00 +0100
 description: 'Can iOS replicate the Termux/Jenkins automation setup from Android?
   Spoiler: it cannot. An investigation into iSH, UTM, jailbreaking, and why Apple''s
@@ -15,18 +15,19 @@ featured: false
 hidden: false
 image: assets/images/2026/02/09/ios-equivalent-investigation-header.jpg
 tags:
-- jenkins
 - android
-- ios
-- termux
-- ish
-- utm
-- ci-cd
-- mobile-devops
 - apple
+- ci-cd
+- iOS
+- ios
+- ish
 - jailbreaking
+- jenkins
+- mobile-devops
 - openjdk
 - sustainable-it
+- termux
+- utm
 title: What About iOS? Or, How a 30-Dollar Android Phone Embarrasses a 1000-Dollar
   iPad
 toc: true

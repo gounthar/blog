@@ -1,20 +1,20 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- CI
-- android
-- aarch64
+- ARM
+- Android
+- CI/CD
+- Jenkins
 date: 2023-03-10 11:43:53 +0100
 description: Can we run some parts of Jenkins on an Android device? Let's find out!
 featured: true
 hidden: false
 image: assets/images/2023/03/10/love.png
 tags:
-- jenkins
-- CI
-- android
 - aarch64
+- android
+- ci
+- jenkins
 title: Android and Jenkins
 toc: true
 ---

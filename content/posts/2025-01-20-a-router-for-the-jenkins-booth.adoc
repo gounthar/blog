@@ -1,10 +1,9 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- riscv
-- jdk
-- jdk21
+- Java
+- Jenkins
+- RISC-V
 date: 2023-08-25 11:43:53 +0100
 description: Can we get Jenkins to run with JDK21 on RISC-V? Let's find out!
 draft: true
@@ -12,10 +11,10 @@ featured: true
 hidden: false
 image: assets/images/2023/08/25/a-glimpse-of-the-future.png
 tags:
-- jenkins
-- riscv
 - jdk
 - jdk21
+- jenkins
+- risc-v
 title: A glimpse of the future
 toc: true
 ---

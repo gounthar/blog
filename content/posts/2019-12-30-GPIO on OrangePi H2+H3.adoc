@@ -1,20 +1,20 @@
 ---
+date: 2019-12-30 00:00:00 +0000
 author: Poddingue
 categories:
-- H3
-- GPIO
-- OrangePi
-- Armbian
+- Embedded
+- Linux
+- SBC
 description: How to use the GPIO on the OrangePi Zero running Armbian
 draft: true
 featured: true
 hidden: false
 image: assets/images/2019/12/30/Screenshot_2020-01-05_GPIO_and_Armbian_for_OrangePi_Zero_.png
 tags:
-- H3
+- armbian
 - GPIO
-- OrangePi
-- Armbian
+- H3
+- orangepi
 title: How to use the GPIO on the OrangePi Zero running Armbian
 ---
 

@@ -1,26 +1,25 @@
 ---
+date: 2022-08-02 00:00:00 +0000
 author: gounthar
 categories:
+- CI/CD
+- Docker
+- Java
+- Jenkins
 - Linux
-- jenkins
-- docker
-- java
-- ubuntu
-- systemd
-- CI
 description: Run your Jenkins agent as a service so that you don't have to restart
   it by hand
 featured: true
 hidden: false
 image: assets/images/2022/08/03/curl-and-java-launch-agent.svg
 tags:
-- Linux
-- jenkins
+- ci
 - docker
 - java
-- ubuntu
+- jenkins
+- linux
 - systemd
-- CI
+- ubuntu
 title: Create a new Jenkins node, and run your Jenkins agent as a service
 toc: true
 ---
@@ -185,11 +184,11 @@ We will now create a new node in Jenkins, using our Ubuntu machine as the node, 
  * Go to _Manage Jenkins_ option in the main menu
  * Go to _Manage Nodes and clouds_ item
 
-image::/assets/images/2022/08/03/manage-nodes-and-clouds.png "Manage Nodes and Clouds"[Jenkins UI]
+image::/assets/images/2022/08/03/manage-nodes-and-clouds.png[Manage Nodes and Clouds]
  * Go to New Node option in the side menu
  * Fill in the _Node name_ (_My New Ubuntu 22.04 Node with Java and Docker installed_ for me) and type (_Permanent Agent_ for me)
 
-image::/assets/images/2022/08/03/new-node.png "New node"[Jenkins UI]
+image::/assets/images/2022/08/03/new-node.png[New node]
  * Click on the _Create_ button
  * In the _Description_ field, enter if you want a human-readable description of the node (_My New Ubuntu 22.04 Node with Java and Docker installed_ for me) 
  * Let `1` as the number of executors for the time being. A good value to start with would be the number of CPU cores on the machine (unfortunately for me, it's `1`)
@@ -205,7 +204,7 @@ ____
 === Node configuration
 The _Save_ button will create the node within Jenkins, and lead you to the _Manage nodes and clouds_ page. Your new node will appear _brown_ in the list, and you can click on it to see its details. 
 The details page displays your java command line to start the agent.
-image::/assets/images/2022/08/03/java-command-to-launch-the-agent.png "Command to launch the agent"[Jenkins UI]
+image::/assets/images/2022/08/03/java-command-to-launch-the-agent.png[Command to launch the agent]
 
 This command looks like that for me:
 
@@ -216,11 +215,11 @@ java -jar agent.jar -jnlpUrl http://my_ip:8080/computer/My%20New%20Ubuntu%2022%2
 
 ----
 
-image::/assets/images/2022/08/03/curl-and-java-launch-agent.svg "New agent starting"[Terminal]
+image::/assets/images/2022/08/03/curl-and-java-launch-agent.svg[New agent starting]
 
 You can now go back into Jenkins' UI, click on the _Back to List_ menu item on the left and see that your new agent is doing fine.
 
-image::/assets/images/2022/08/03/new-node-looks-fine.png "New node looks fine"[Jenkins UI]
+image::/assets/images/2022/08/03/new-node-looks-fine.png[New node looks fine]
 
 Now what? Are we done yet? I'm afraid we're not. Whenever you close the terminal you launched the agent with, the agent will stop. If you ever have to reboot the machine after a kernel update, you will have to restart the agent manually too. Therefore, I suggest you keep the agent running by declaring it as a service.
 

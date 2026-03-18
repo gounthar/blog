@@ -1,18 +1,20 @@
 ---
+date: 2019-11-19 00:00:00 +0000
 author: Poddingue
 categories:
-- H3
-- Armbian
-- FFmpeg
+- Linux
+- Multimedia
+- SBC
 description: Stream thanks to FFmpeg under Armbian behind a corporate proxy
 draft: true
 featured: true
 hidden: true
 image: assets/images/closed-coming-soon-door-4291-1210x423_1_.jpg
 tags:
-- Armbian
+- armbian
+- ffmpeg
+- H3
 - proxy
-- FFmpeg
 title: Stream thanks to FFmpeg under Armbian behind a corporate proxy
 ---
 

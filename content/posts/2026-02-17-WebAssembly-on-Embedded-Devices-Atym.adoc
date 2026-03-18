@@ -1,11 +1,11 @@
 ---
 author: Bruno Verachten
 categories:
-- WebAssembly
-- Embedded
-- IoT
+- CI/CD
 - Docker
-- DevOps
+- Embedded
+- RISC-V
+- Web
 date: 2026-02-17 12:00:00 +0100
 description: An in-depth exploration of WebAssembly containers on embedded devices
   using the Atym platform - comparing size, performance, and architecture against
@@ -17,16 +17,17 @@ featured: true
 hidden: false
 image: assets/images/2026/02/17/header-green-pcb.jpg
 tags:
-- WebAssembly
-- Atym
-- Ocre
-- WAMR
-- Embedded
-- Docker
 - ARM
-- RISC-V
-- IoT
-- Containerization
+- Atym
+- containers
+- devops
+- docker
+- embedded
+- iot
+- Ocre
+- risc-v
+- WAMR
+- webassembly
 title: 'WebAssembly on Embedded Devices: A Docker Captain Tries Atym'
 ---
 

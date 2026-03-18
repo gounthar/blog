@@ -1,17 +1,18 @@
 ---
+date: 2020-01-03 00:00:00 +0000
 author: Poddingue
 categories:
-- H3
-- Armbian
+- Linux
+- SBC
 description: How to compile and install termtosvg on the OrangePi Zero running Armbian
   ?
 featured: true
 hidden: false
 image: assets/images/whatever-name-I-choose.svg
 tags:
+- armbian
 - H3
 - termtosvg
-- Armbian
 title: Terminal recording on the OrangePi Zero
 ---
 

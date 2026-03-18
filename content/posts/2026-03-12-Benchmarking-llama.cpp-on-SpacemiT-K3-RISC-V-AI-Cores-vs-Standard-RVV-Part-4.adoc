@@ -1,10 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- LLM
-- RISC-V
+- AI/ML
 - Embedded
-- AI
+- RISC-V
 date: 2026-03-12 12:00:00 +0100
 description: 'Benchmarking llama.cpp on SpacemiT''s K3 RISC-V chip with three models:
   X100 cores hit 76 t/s, A100 AI cores are 30x slower on pp until vendor IME2 code
@@ -18,18 +17,21 @@ featured: true
 hidden: false
 image: assets/images/2026/03/12/header-k3-benchmark.jpg
 tags:
-- llama.cpp
-- riscv
-- ggml
-- inference
-- spacemit
-- k3
-- k1
+- ai
 - banana-pi
 - benchmark
+- embedded
+- ggml
 - ime
-- rvv
+- inference
+- k1
+- k3
+- llama.cpp
+- llm
+- risc-v
 - rva23
+- rvv
+- spacemit
 title: 'Benchmarking llama.cpp on SpacemiT K3: RISC-V AI Cores vs Standard RVV (Part
   4)'
 ---

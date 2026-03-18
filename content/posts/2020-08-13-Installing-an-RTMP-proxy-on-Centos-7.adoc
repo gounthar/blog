@@ -1,20 +1,19 @@
 ---
+date: 2020-08-13 00:00:00 +0000
 author: Poddingue
 categories:
-- RTMP
-- nginx
-- FFmpeg
-- Centos
+- Linux
+- Multimedia
 description: Install an RTMP proxy to restream on Centos 7
 draft: true
 featured: true
 hidden: true
 image: assets/images/closed-coming-soon-door-4291-1210x423_1_.jpg
 tags:
-- RTMP
+- centos
+- ffmpeg
 - nginx
-- FFmpeg
-- Centos
+- RTMP
 title: Install an RTMP proxy to restream on Centos 7
 ---
 

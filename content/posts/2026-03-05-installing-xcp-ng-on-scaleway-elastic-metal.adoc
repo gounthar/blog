@@ -1,11 +1,7 @@
 ---
 author: Bruno Verachten
 categories:
-- XCP-ng
 - Infrastructure
-- Hypervisor
-- Scaleway
-- Automation
 date: 2026-03-05 10:00:00 +0000
 description: 'Installing XCP-ng on Scaleway Elastic Metal the hard way: QEMU disk
   passthrough, Dell firmware bugs, Open vSwitch networking, and a script that does
@@ -17,16 +13,19 @@ featured: true
 hidden: false
 image: assets/images/2026/03/05/blog-series-part2-header.jpg
 tags:
-- xcp-ng
-- xen
+- Automation
 - bare-metal
-- scaleway
 - elastic-metal
 - hypervisor
-- qemu
+- Hypervisor
+- Infrastructure
 - infrastructure
+- qemu
+- scaleway
 - self-hosted
 - vmware-alternative
+- xcp-ng
+- xen
 title: 'Installing XCP-ng on Scaleway Elastic Metal: 30 Hours of Pain, 10 Minutes
   of Script'
 toc: true
