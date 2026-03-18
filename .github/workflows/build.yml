@@ -86,4 +86,3 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: public/
           server-dir: ${{ secrets.DESTINATION_FOLDER }}/
-          dangerous-clean-slate: true
