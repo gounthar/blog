@@ -1,7 +1,9 @@
 ---
+date: 2019-11-12 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
+- Multimedia
+- SBC
 description: How to compile a recent version of RockChip's ffmpeg on an OrangePi RK3399
   ?
 draft: true
@@ -9,9 +11,9 @@ featured: true
 hidden: false
 image: assets/images/2019/11/12/58e16084a24d1_4F4BA18C759111B4A2A26C688B4A16AD57AC4C3003967F4FB4pimgpsh_fullsize_distr.jpg.9554f8f86cf67629f5f6f330a3559b6d_1_.jpg
 tags:
-- rk3399
 - ffmpeg
 - libaom
+- rk3399
 title: 'Stream For Cheap With RK3399 #3 - Compile RockChip''s FFMPEG fork'
 ---
 

@@ -1,15 +1,14 @@
 ---
+date: 2019-07-21 00:00:00 +0000
 author: Brah
-categories:
-- Financial
-description: Petite synthèse du status d'auto-entrepreneur en 2019
+categories: []
+description: How to create a repository-based blog
 draft: true
-featured: true
+featured: false
 hidden: true
-image: assets/images/2019-07-24-1.png
 tags:
-- BNC
-- Freelance
+- blog
+- howto
 title: Create a repo based blog
 ---
 

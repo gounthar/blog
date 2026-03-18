@@ -1,16 +1,16 @@
 ---
+date: 2022-12-01 00:00:00 +0000
 author: gounthar
 categories:
-- jenkins
-- CI
-- windows
+- CI/CD
+- Jenkins
 description: Can we easily rebuild a Jenkins MSI on our Windows machine?
 featured: true
 hidden: false
 image: assets/images/2022/12/01/WindowsTerminal_6nI8vtN2KH.png
 tags:
+- ci
 - jenkins
-- CI
 - windows
 title: Build a Jenkins MSI on your own Windows machine
 toc: true

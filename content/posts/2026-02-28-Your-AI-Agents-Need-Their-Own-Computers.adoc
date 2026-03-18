@@ -1,8 +1,8 @@
 ---
 author: Bruno Verachten
 categories:
-- ai
-- infrastructure
+- AI/ML
+- Infrastructure
 date: 2026-02-28 12:00:00 +0100
 description: Part 1 of 3 - Why the future of AI-assisted development runs on hypervisors
 excerpt: 'Part 1 of 3: AI agents are shifting from autocomplete tools to autonomous
@@ -11,12 +11,14 @@ excerpt: 'Part 1 of 3: AI agents are shifting from autocomplete tools to autonom
 featured: false
 image: assets/images/2026/02/28/blog-series-part1-header.jpg
 tags:
+- ai
 - ai agents
-- hypervisors
 - cloud infrastructure
 - development tools
-- XCP-ng
+- hypervisors
+- infrastructure
 - virtualization
+- xcp-ng
 title: Your AI Agents Need Their Own Computers
 ---
 

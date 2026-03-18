@@ -1,11 +1,7 @@
 ---
 author: Bruno Verachten
 categories:
-- XCP-ng
 - Infrastructure
-- Hypervisor
-- Scaleway
-- Automation
 date: 2026-03-05 10:00:00 +0000
 description: 'Installing XCP-ng on Scaleway Elastic Metal the hard way: QEMU disk
   passthrough, Dell firmware bugs, Open vSwitch networking, and a script that does
@@ -17,16 +13,17 @@ featured: true
 hidden: false
 image: assets/images/2026/03/05/blog-series-part2-header.jpg
 tags:
-- xcp-ng
-- xen
+- automation
 - bare-metal
-- scaleway
 - elastic-metal
 - hypervisor
-- qemu
 - infrastructure
+- qemu
+- scaleway
 - self-hosted
 - vmware-alternative
+- xcp-ng
+- xen
 title: 'Installing XCP-ng on Scaleway Elastic Metal: 30 Hours of Pain, 10 Minutes
   of Script'
 toc: true
@@ -38,7 +35,7 @@ _Photo by link:https://unsplash.com/@photosimon[Simon Infanger] on link:https://
 ____
 _Series: AI Agents on Self-Hosted Infrastructure_
 
-* link:{% post_url 2026-02-28-Your-AI-Agents-Need-Their-Own-Computers %}[Part 1: Your AI Agents Need Their Own Computers] — Why self-hosted beats cloud for AI agent workloads
+* link:/2026/02/28/your-ai-agents-need-their-own-computers/[Part 1: Your AI Agents Need Their Own Computers] — Why self-hosted beats cloud for AI agent workloads
 * _Part 2: Installing XCP-ng on Scaleway Elastic Metal_ (you are here)
 * Part 3: Three Agents, One Codebase, Zero Cloud Bills (coming soon)
 ____
@@ -53,7 +50,7 @@ _Yes, you can install XCP-ng on a bare-metal cloud server. No, it's not supporte
 
 == A quick disclaimer
 
-Remember link:{% post_url 2026-02-28-Your-AI-Agents-Need-Their-Own-Computers %}[Part 1], where I casually promised you a breezy walkthrough? Rent a server, install a hypervisor, spin up some agent VMs, Bob's your uncle. One paragraph, maybe two.
+Remember link:/2026/02/28/your-ai-agents-need-their-own-computers/[Part 1], where I casually promised you a breezy walkthrough? Rent a server, install a hypervisor, spin up some agent VMs, Bob's your uncle. One paragraph, maybe two.
 
 Yeah. Fate had other plans.
 
@@ -550,7 +547,7 @@ Someone already link:https://feature-request.scaleway.com/posts/1198/integration
 
 The infrastructure is ready. The agents get to work.
 
-In Part 3, three AI coding agents, each running in its own isolated XCP-ng VM, tackle a real development task in parallel. An orchestrator coordinates. PRs get created. Some things work. Some things don't. And the thesis from link:{% post_url 2026-02-28-Your-AI-Agents-Need-Their-Own-Computers %}[Part 1] either holds up or it doesn't.
+In Part 3, three AI coding agents, each running in its own isolated XCP-ng VM, tackle a real development task in parallel. An orchestrator coordinates. PRs get created. Some things work. Some things don't. And the thesis from link:/2026/02/28/your-ai-agents-need-their-own-computers/[Part 1] either holds up or it doesn't.
 
 ---
 

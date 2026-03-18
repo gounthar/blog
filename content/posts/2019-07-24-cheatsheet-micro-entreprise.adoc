@@ -1,15 +1,16 @@
 ---
+date: 2019-07-24 00:00:00 +0000
 author: Brah
-categories:
-- Financial
+categories: []
 description: Petite synthèse du status d'auto-entrepreneur en 2019
 draft: true
 featured: true
 hidden: true
 image: assets/images/2019-07-24-1.png
 tags:
-- BNC
-- Freelance
+- bnc
+- financial
+- freelance
 title: Cheat sheet de la micro-entreprise pour developpeurs freelance (2019)
 ---
 

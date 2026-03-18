@@ -1,11 +1,10 @@
 ---
 author: Bruno Verachten
 categories:
-- WebAssembly
-- Embedded
-- IoT
+- CI/CD
 - Docker
-- DevOps
+- Embedded
+- Web
 date: 2026-03-01 12:00:00 +0100
 description: '100 WebAssembly containers on a Raspberry Pi 3B+ with 903 MB of RAM:
   34 MB total, 164 KB per container. Measured every data point. Here''s how Wasm compares
@@ -17,23 +16,24 @@ featured: true
 hidden: false
 image: assets/images/2026/03/01/header-art3-honeycomb.jpg
 tags:
-- WebAssembly
-- Atym
-- Ocre
-- WAMR
-- Embedded
-- Docker
-- ARM
-- RaspberryPi
-- IoT
-- Containers
+- arm
+- atym
+- containers
+- devops
+- docker
 - EdgeComputing
+- embedded
+- iot
+- ocre
+- raspberry-pi
+- wamr
+- webassembly
 title: Running 100 Wasm Containers on a Raspberry Pi (with 903 MB of RAM)
 ---
 
 _Photo by link:https://unsplash.com/@wolfgang_hasselmann[Wolfgang Hasselmann] on link:https://unsplash.com/photos/macro-photography-of-honeycomb-T32PS4z2UbM[Unsplash]_
 
-In my link:{% post_url 2026-02-17-WebAssembly-on-Embedded-Devices-Atym %}[first article], I built WebAssembly containers with Atym and got application binaries under 23 KB. In the link:{% post_url 2026-02-24-WebAssembly-on-RISC-V-Banana-Pi-F3 %}[second], I proved the same `.wasm` ran on RISC-V without recompilation. Both articles tested single containers. Then someone link:https://www.linkedin.com/feed/update/urn:li:ugcPost:7430627435328729089?commentUrn=urn%3Ali%3Acomment%3A%28ugcPost%3A7430627435328729089%2C7430715521085644802%29&dashCommentUrn=urn%3Ali%3Afsd_comment%3A%287430715521085644802%2Curn%3Ali%3AugcPost%3A7430627435328729089%29[asked on LinkedIn] about multi-container scenarios: isolation, communication, memory overhead in medical and safety-critical environments. Fair question. Time to answer it.
+In my link:/2026/02/17/webassembly-on-embedded-devices-atym/[first article], I built WebAssembly containers with Atym and got application binaries under 23 KB. In the link:/2026/02/24/webassembly-on-risc-v-banana-pi-f3/[second], I proved the same `.wasm` ran on RISC-V without recompilation. Both articles tested single containers. Then someone link:https://www.linkedin.com/feed/update/urn:li:ugcPost:7430627435328729089?commentUrn=urn%3Ali%3Acomment%3A%28ugcPost%3A7430627435328729089%2C7430715521085644802%29&dashCommentUrn=urn%3Ali%3Afsd_comment%3A%287430715521085644802%2Curn%3Ali%3AugcPost%3A7430627435328729089%29[asked on LinkedIn] about multi-container scenarios: isolation, communication, memory overhead in medical and safety-critical environments. Fair question. Time to answer it.
 
 On embedded devices, "several containers" isn't a thought experiment. A factory sensor node might run a data collector, a local aggregator, and a watchdog. Three containers, talking in real time, on a board with less than a gigabyte of RAM. I installed Docker on this Pi to measure: the daemon alone eats 113 MB before your first container starts, and each container adds about 15 MB of overhead. On 903 MB, that math gets uncomfortable quickly.
 
@@ -604,7 +604,6 @@ Conversion notes:
 * AsciiDoc tables converted to Markdown pipe tables
 * Images converted with proper Jekyll asset paths (/assets/images/2026/03/01/)
 * Links converted from AsciiDoc link:url[text] format to Markdown link:url[text]
-* Cross-references to articles 1 and 2 use Jekyll post_url liquid tags
 * AsciiDoc quote block converted to Markdown blockquote
 * All 7 screenshots included with proper alt text and styling
 * No content loss or semantic changes

@@ -1,24 +1,22 @@
 ---
+date: 2020-07-06 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
-- 4B
+- AI/ML
+- Linux
+- SBC
 description: How to install Caffe on the Orange Pi 4B running Armbian ?
 draft: true
 featured: true
 hidden: true
 image: assets/images/pu7JQ6ratm.png
 tags:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
-- 4B
+- 4b
+- armbian
+- machine-learning
+- merrykombo
+- orangepi
+- rk3399
 title: Installing TensorFlow for the NPU on the Orange Pi 4B
 ---
 

@@ -1,10 +1,10 @@
 ---
 author: Bruno Verachten
 categories:
-- WebAssembly
-- RISC-V
+- Docker
 - Embedded
-- IoT
+- RISC-V
+- Web
 date: 2026-02-24 12:00:00 +0100
 description: 'Testing WebAssembly portability on RISC-V hardware: building WAMR and
   the Ocre runtime from source on a Banana Pi F3, and running the same .wasm binaries
@@ -16,18 +16,18 @@ featured: true
 hidden: false
 image: assets/images/2026/02/24/header-winding-road-landscape.jpg
 tags:
-- WebAssembly
-- RISC-V
-- Atym
-- Ocre
-- WAMR
-- Embedded
-- Banana Pi F3
-- SpacemiT K1
-- Docker
-- ARM
-- IoT
-- Containerization
+- arm
+- atym
+- banana-pi-f3
+- containers
+- docker
+- embedded
+- iot
+- ocre
+- risc-v
+- spacemit-k1
+- wamr
+- webassembly
 title: Can WebAssembly Run on RISC-V? Testing Atym Containers on a Banana Pi F3
 ---
 

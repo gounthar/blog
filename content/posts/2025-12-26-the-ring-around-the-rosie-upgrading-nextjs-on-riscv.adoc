@@ -1,10 +1,10 @@
 ---
+date: 2025-12-26 00:00:00 +0000
 author: Poddingue
 categories:
-- Technical
 - RISC-V
-- Next.js
 - Rust
+- Web
 description: A journey through failed cross-compilation attempts, cryptographic library
   roadblocks, and the eventual discovery of why --no-default-features stopped working
   in Next.js 14.x
@@ -17,15 +17,17 @@ featured: false
 hidden: false
 image: assets/images/2025/12/26/nextjs-14-upgrade-ring-header.jpg
 tags:
-- riscv64
-- nextjs
-- swc
-- rust
-- ring
-- rustls
-- native-tls
-- cross-compilation
 - banana-pi-f3
+- cross-compilation
+- native-tls
+- nextjs
+- ring
+- risc-v
+- riscv64
+- rust
+- rustls
+- swc
+- technical
 title: 'The Ring Around the Rosie: Upgrading Next.js on RISC-V from 13.5.6 to 14.2.35'
 toc: true
 ---

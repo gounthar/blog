@@ -1,11 +1,9 @@
 ---
 author: Poddingue
 categories:
-- H3
-- GPIO
-- I2C
-- OrangePi
-- Armbian
+- Embedded
+- Linux
+- SBC
 description: How to use an I2C screen to display broadcast progress on the OrangePi
   Zero running Armbian
 draft: true
@@ -13,11 +11,11 @@ featured: true
 hidden: false
 image: assets/images/2020/01/05/61MssWzM-tL._SX342__1_.jpg
 tags:
-- H3
+- armbian
 - GPIO
+- h3
 - I2C
-- OrangePi
-- Armbian
+- orangepi
 title: How to use an I2C screen to display broadcast progress on the OrangePi Zero
   running Armbian
 ---

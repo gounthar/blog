@@ -1,11 +1,10 @@
 ---
+date: 2025-12-10 00:00:00 +0000
 author: Bruno Verachten
 categories:
-- BuildKit
-- RISC-V
+- CI/CD
 - Docker
-- DevOps
-- Debugging
+- RISC-V
 description: Debugging BuildKit deployment on RISC-V64 after successful packaging
   - from GHCR access issues to worker initialization failures and CI test hangs
 excerpt: I successfully built and packaged BuildKit for RISC-V64. Users could download
@@ -16,15 +15,18 @@ hidden: false
 image: assets/2025/12/10/buildkit-debugging-header.jpg
 tags:
 - buildkit
-- riscv64
-- docker
 - containers
-- worker-initialization
-- runc
+- debugging
+- deployment
+- devops
+- docker
 - entrypoint
 - ghcr
-- deployment
 - post-deployment-debugging
+- risc-v
+- riscv64
+- runc
+- worker-initialization
 title: 'BuildKit for RISC-V64: When Your Package Works But Your Container Doesn''t'
 ---
 

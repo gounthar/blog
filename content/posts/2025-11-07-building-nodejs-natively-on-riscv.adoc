@@ -1,11 +1,10 @@
 ---
+date: 2025-11-07 00:00:00 +0000
 author: Poddingue
 categories:
-- Node.js
+- CI/CD
+- Infrastructure
 - RISC-V
-- Build Systems
-- Native Compilation
-- DevOps
 description: A detailed technical walkthrough of implementing native RISC-V 64-bit
   build support for Node.js, from forking the repository to publishing the first release
   after 8 critical bug fixes and 15.5 hours of compilation
@@ -13,15 +12,20 @@ featured: true
 hidden: false
 image: assets/images/2025/11/07/riscv-header.jpg
 tags:
-- nodejs
-- riscv64
-- native-build
-- ssh
 - automation
-- debugging
 - bananapi-f3
-- unofficial-builds
+- Build Systems
 - build-systems
+- debugging
+- devops
+- Native Compilation
+- native-build
+- node-js
+- nodejs
+- risc-v
+- riscv64
+- ssh
+- unofficial-builds
 title: 'Building Node.js Natively on RISC-V: A 15-Hour Journey from Fork to Release'
 ---
 

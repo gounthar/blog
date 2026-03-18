@@ -1,9 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
+- AI/ML
+- CI/CD
 - Docker
-- DevOps
-- AI
 date: 2026-01-15 10:00:00 +0100
 description: A Docker Captain's story about running local LLMs on unsupported AMD
   hardware thanks to community Docker images.
@@ -14,14 +14,16 @@ featured: false
 hidden: false
 image: assets/images/2026/01/15/docker-gpu-header.jpg
 tags:
-- docker
+- ai
 - amd
-- rocm
-- llm
-- gpu
-- gfx906
 - containers
+- devops
+- docker
 - docker-captain
+- gfx906
+- gpu
+- llm
+- rocm
 title: How Docker Gave My 'Unsupported' GPU a Second Life
 toc: true
 ---

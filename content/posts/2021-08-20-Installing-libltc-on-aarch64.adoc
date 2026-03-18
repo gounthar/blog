@@ -1,8 +1,9 @@
 ---
+date: 2021-08-20 00:00:00 +0000
 author: gounthar
 categories:
-- aarch64
-- sound
+- ARM
+- Multimedia
 description: How to generate a timecoded soundtrack
 draft: true
 featured: true

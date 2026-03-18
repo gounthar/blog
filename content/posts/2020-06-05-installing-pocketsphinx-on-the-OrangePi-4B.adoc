@@ -1,10 +1,10 @@
 ---
+date: 2020-06-05 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
+- AI/ML
+- Linux
+- SBC
 description: How to compile and install pocketsphinx on the OrangePi 4B running Armbian
   ?
 draft: true
@@ -12,10 +12,10 @@ featured: true
 hidden: false
 image: assets/images/mintty_7BHuf1Bm0d.png
 tags:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
+- armbian
+- machine-learning
+- merrykombo
+- rk3399
 title: 'Sphinx: Installing pocketsphinx and sphinxtrain on the OrangePi 4B'
 ---
 

@@ -1,24 +1,23 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- CI
-- miniJen
-- riscv
-- temurin
-- OpenJDK
+- CI/CD
+- Java
+- Jenkins
+- RISC-V
+- SBC
 date: 2023-02-23 21:43:53 +0100
 description: The smallest multi-cpu-arch Jenkins instance known to mankind is alive!
 featured: true
 hidden: false
 image: assets/images/2023/02/23/mq-pro.png
 tags:
+- ci
 - jenkins
-- CI
 - miniJen
-- riscv
+- openjdk
+- risc-v
 - temurin
-- OpenJDK
 title: miniJen and RISC-V
 toc: true
 ---

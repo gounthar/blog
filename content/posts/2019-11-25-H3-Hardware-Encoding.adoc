@@ -1,21 +1,22 @@
 ---
+date: 2019-11-25 00:00:00 +0000
 author: Poddingue
 categories:
-- H3
-- Armbian
-- h.264
-- OrangePi
-- Zero
+- Linux
+- Multimedia
+- SBC
 description: Work with Armbian behind a corporate proxy
 draft: true
 featured: true
 hidden: false
 image: assets/images/Allwinner_H3_BLock_Diagram_1_.png
 tags:
-- Armbian
+- armbian
 - h.264
+- h3
 - hardware_encoding
-- OrangePi
+- orangepi
+- zero
 title: Use x.264 hardware encoding on an OrangePi Zero running Armbian
 ---
 

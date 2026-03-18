@@ -6,3 +6,4 @@ CLAUDE.md
 CONTEXT.md
 *.credentials.json
 node_modules/
+layouts.bak/

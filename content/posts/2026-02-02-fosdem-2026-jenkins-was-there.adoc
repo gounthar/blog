@@ -1,8 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
+- CI/CD
+- Java
 - Jenkins
-- Conferences
 date: 2026-02-02 20:00:00 +0100
 description: 'Two days behind the Jenkins booth at FOSDEM 2026: visitor feedback,
   Blue Ocean deprecation, Pipeline Graph View, Groovy pipeline confessions, and the
@@ -14,18 +15,19 @@ featured: true
 hidden: false
 image: assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg
 tags:
-- fosdem
-- jenkins
-- open-source
+- blue-ocean
+- brussels
 - ci-cd
 - community
-- blue-ocean
-- pipeline-graph-view
-- java
-- groovy
-- stickers
-- brussels
+- conferences
+- fosdem
 - fosdem-2026
+- groovy
+- java
+- jenkins
+- open-source
+- pipeline-graph-view
+- stickers
 title: 'FOSDEM 2026: Jenkins Was There, and So Were You'
 toc: true
 ---
@@ -38,7 +40,7 @@ FOSDEM 2026. Brussels. The Université Libre de Bruxelles campus, with its graff
 
 This year, the Jenkins booth was on the ground floor instead of the first floor, sandwiched between Homebrew and GitLab (prime real estate, if you ask me). I got the impression they grouped booths by theme this time around, which was a nice change.
 
-image::{{ site.baseurl }}/assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg[Bruno Verachten (left) and Stéphane Merle (right) holding down the Jenkins booth at FOSDEM 2026]
+image::/assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg[Bruno Verachten (left) and Stéphane Merle (right) holding down the Jenkins booth at FOSDEM 2026]
 
 === 🛠 The Crew
 

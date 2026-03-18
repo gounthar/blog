@@ -1,9 +1,12 @@
 ---
+date: 2025-11-01 00:00:00 +0000
 author: Poddingue
 categories:
+- Android
+- CI/CD
 - Docker
-- DevOps
 - Infrastructure
+- RISC-V
 description: Infrastructure maintenance and modernization of the docker-adb project
   - removing EOL distributions, adding RISC-V support, and optimizing image sizes
   with multi-architecture builds
@@ -11,16 +14,17 @@ featured: true
 hidden: false
 image: assets/images/2025/11/01/marvin-radke-bcomWyYsQds-unsplash.jpg
 tags:
-- docker
 - adb
-- android
-- multi-arch
-- buildx
-- riscv
-- debian
 - alpine
+- android
+- buildx
+- debian
+- devops
+- docker
 - gitlab-ci
 - infrastructure
+- multi-arch
+- risc-v
 title: 'Spring Cleaning a 2.1M+ Pull Docker Project: From Buster to RISC-V'
 ---
 

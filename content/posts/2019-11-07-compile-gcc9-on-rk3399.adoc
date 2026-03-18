@@ -1,18 +1,17 @@
 ---
+date: 2019-11-07 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- GCC
-- OrangePi
+- SBC
 description: How to compile and install gcc 9.X on the OrangePi RK3399 ?
 draft: true
 featured: true
 hidden: false
 image: assets/images/gcc.cast.gif
 tags:
-- RK3399
-- GCC
-- OrangePi
+- gcc
+- orangepi
+- rk3399
 title: Compile GCC 9.X on the RK3399
 ---
 

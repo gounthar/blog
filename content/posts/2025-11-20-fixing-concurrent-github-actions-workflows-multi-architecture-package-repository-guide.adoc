@@ -1,8 +1,9 @@
 ---
 author: Poddingue
 categories:
-- DevOps
-- CI-CD
+- CI/CD
+- Infrastructure
+- RISC-V
 date: 2025-11-20 10:00:00 +0100
 description: Solve GitHub Actions concurrency conflicts, RPM packaging errors, and
   dependency issues in multi-architecture builds. Includes reset-and-restore pattern
@@ -11,28 +12,29 @@ featured: true
 hidden: false
 image: assets/images/2025/11/20/github-actions-header.jpg
 tags:
-- github-actions
-- rpm
-- debian
-- packaging
-- concurrency
-- multi-arch
-- automation
-- devops
-- riscv64
-- github-workflows
-- ci-cd-pipeline
-- package-repository
-- rpm-spec-file
-- debian-packaging
-- concurrent-git-operations
-- reset-and-restore-pattern
-- workflow-concurrency
-- multi-architecture-builds
-- github-pages-deployment
 - apt-repository
-- rpm-repository
 - arm64-packaging
+- automation
+- ci-cd
+- ci-cd-pipeline
+- concurrency
+- concurrent-git-operations
+- debian
+- debian-packaging
+- devops
+- github-actions
+- github-pages-deployment
+- github-workflows
+- multi-arch
+- multi-architecture-builds
+- package-repository
+- packaging
+- reset-and-restore-pattern
+- riscv64
+- rpm
+- rpm-repository
+- rpm-spec-file
+- workflow-concurrency
 title: 'Fixing Concurrent GitHub Actions Workflows: Multi-Architecture Package Repository
   Guide'
 toc: true

@@ -1,23 +1,21 @@
 ---
+date: 2020-06-22 00:00:00 +0000
 author: Poddingue
 categories:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
-- 4B
+- AI/ML
+- Linux
+- SBC
 description: How to install Caffe on the Orange Pi 4B running Armbian ?
 featured: true
 hidden: false
 image: assets/images/pu7JQ6ratm.png
 tags:
-- RK3399
-- Armbian
-- ML
-- MerryKombo
-- OrangePi
-- 4B
+- 4b
+- armbian
+- machine-learning
+- merrykombo
+- orangepi
+- rk3399
 title: Installing Caffe on the Orange Pi 4B
 ---
 

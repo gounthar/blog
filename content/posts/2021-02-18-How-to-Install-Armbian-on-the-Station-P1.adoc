@@ -1,28 +1,25 @@
 ---
+date: 2021-02-18 00:00:00 +0000
 author: Poddingue
 categories:
-- Armbian
 - Android
 - Linux
-- howto
-- Firefly
-- RK3399
-- stationp1
+- SBC
 description: How to install Armbian on your Station P1 without needing any other piece
   of hardware (even not a SDCard reader)
 featured: true
 hidden: false
 image: assets/images/2021/02/18/StationP1.jpg
 tags:
-- Armbian
-- Android
+- android
+- armbian
+- dd
+- firefly
+- howto
+- linux
+- rk3399
 - root
 - SDCard
-- Linux
-- dd
-- howto
-- Firefly
-- RK3399
 - stationp1
 title: How to install Armbian on the Station P1 starting from Android
 toc: true

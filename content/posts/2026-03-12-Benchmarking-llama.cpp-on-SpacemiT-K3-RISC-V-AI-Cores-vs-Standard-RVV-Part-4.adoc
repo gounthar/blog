@@ -1,10 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- LLM
-- RISC-V
+- AI/ML
 - Embedded
-- AI
+- RISC-V
 date: 2026-03-12 12:00:00 +0100
 description: 'Benchmarking llama.cpp on SpacemiT''s K3 RISC-V chip with three models:
   X100 cores hit 76 t/s, A100 AI cores are 30x slower on pp until vendor IME2 code
@@ -18,18 +17,21 @@ featured: true
 hidden: false
 image: assets/images/2026/03/12/header-k3-benchmark.jpg
 tags:
-- llama.cpp
-- riscv
-- ggml
-- inference
-- spacemit
-- k3
-- k1
+- ai
 - banana-pi
 - benchmark
+- embedded
+- ggml
 - ime
-- rvv
+- inference
+- k1
+- k3
+- llama.cpp
+- llm
+- risc-v
 - rva23
+- rvv
+- spacemit
 title: 'Benchmarking llama.cpp on SpacemiT K3: RISC-V AI Cores vs Standard RVV (Part
   4)'
 ---
@@ -42,7 +44,7 @@ link:https://en.wikipedia.org/wiki/SpacemiT[SpacemiT]'s link:https://canonical.c
 
 == Previously, on "Docker Captain vs. RISC-V"
 
-In link:{% post_url 2026-02-27-Running-a-Local-LLM-on-RISC-V-Building-llama.cpp-on-a-Banana-Pi-F3-Part-1 %}[Part 1], I built link:https://github.com/ggml-org/llama.cpp[llama.cpp] on a link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[Banana Pi F3] (link:https://www.spacemit.com/key-stone-k1[SpacemiT K1] link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC]) and got link:https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0[TinyLlama 1.1B] running at ~8.5 t/s. Not fast, but it worked. An link:https://en.wikipedia.org/wiki/Large_language_model[LLM] on link:https://riscv.org/[RISC-V], no GPU, no cloud API.
+In link:/2026/02/27/running-a-local-llm-on-risc-v-building-llama.cpp-on-a-banana-pi-f3-part-1/[Part 1], I built link:https://github.com/ggml-org/llama.cpp[llama.cpp] on a link:https://wiki.banana-pi.org/Banana_Pi_BPI-F3[Banana Pi F3] (link:https://www.spacemit.com/key-stone-k1[SpacemiT K1] link:https://en.wikipedia.org/wiki/System_on_a_chip[SoC]) and got link:https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0[TinyLlama 1.1B] running at ~8.5 t/s. Not fast, but it worked. An link:https://en.wikipedia.org/wiki/Large_language_model[LLM] on link:https://riscv.org/[RISC-V], no GPU, no cloud API.
 
 Since then, I've been building CI infrastructure around the fork: a self-hosted link:https://github.com/features/actions[GitHub Actions] runner on the Banana Pi itself, a release workflow that produces riscv64 binaries, and a daily sync workflow to keep up with upstream. The plumbing is in place.
 

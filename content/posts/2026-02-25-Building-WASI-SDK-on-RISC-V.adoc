@@ -1,9 +1,9 @@
 ---
 author: Bruno Verachten
 categories:
-- WebAssembly
-- RISC-V
 - Embedded
+- RISC-V
+- Web
 date: 2026-02-25 12:00:00 +0100
 description: Building the entire LLVM/Clang WASI SDK toolchain from source on a RISC-V
   single-board computer for self-hosted WebAssembly development.
@@ -15,14 +15,15 @@ featured: true
 hidden: false
 image: assets/images/2026/02/25/header-foundry-sparks.jpg
 tags:
-- wasm
-- riscv
-- wasi-sdk
-- llvm
-- clang
 - banana-pi
+- clang
 - embedded
 - iot
+- llvm
+- risc-v
+- wasi-sdk
+- wasm
+- webassembly
 title: 'Building WASI SDK on RISC-V: Self-Hosted WebAssembly Development on a Banana
   Pi F3'
 ---

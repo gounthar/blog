@@ -1,26 +1,27 @@
 ---
+date: 2025-11-14 00:00:00 +0000
 author: Poddingue
 categories:
-- RISC-V
+- AI/ML
 - Docker
-- AI
-- Packaging
+- RISC-V
 description: How we packaged Docker Engineering's cagent multi-agent AI runtime for
   RISC-V64, creating the first Linux distribution package for this powerful tool
 featured: true
 hidden: false
 image: assets/images/2025/11/14/cagent-header.jpg
 tags:
+- ai
+- bananapi
 - cagent
+- debian
+- docker
+- golang
+- multi-agent
+- Packaging
 - risc-v
 - riscv64
-- ai
-- multi-agent
-- docker
-- debian
 - rpm
-- golang
-- bananapi
 title: 'Bringing AI Agents to RISC-V64: The First cagent Distribution Package'
 ---
 

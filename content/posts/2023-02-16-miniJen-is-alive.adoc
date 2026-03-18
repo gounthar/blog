@@ -1,24 +1,23 @@
 ---
 author: gounthar
 categories:
-- jenkins
-- CI
-- miniJen
-- armv7
-- aarch64
-- riscv
+- ARM
+- CI/CD
+- Jenkins
+- RISC-V
+- SBC
 date: 2023-02-16 21:43:53 +0100
 description: The smallest multi-cpu-arch Jenkins instance known to mankind is alive!
 featured: true
 hidden: false
 image: assets/images/2023/02/23/fosdem_2023_booth_display.jpg
 tags:
-- jenkins
-- CI
-- miniJen
-- armv7
 - aarch64
-- riscv
+- armv7
+- ci
+- jenkins
+- miniJen
+- risc-v
 title: miniJen is alive!
 toc: true
 ---
