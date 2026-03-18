@@ -18,9 +18,8 @@ tags:
 - ci-cd
 - devops
 - docker
-- GitHub Actions
 - github-actions
-- Infrastructure
+- infrastructure
 - moby
 - risc-v
 - riscv64

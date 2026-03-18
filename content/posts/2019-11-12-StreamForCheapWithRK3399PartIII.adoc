@@ -13,7 +13,6 @@ image: assets/images/2019/11/12/58e16084a24d1_4F4BA18C759111B4A2A26C688B4A16AD57
 tags:
 - ffmpeg
 - libaom
-- RK3399
 - rk3399
 title: 'Stream For Cheap With RK3399 #3 - Compile RockChip''s FFMPEG fork'
 ---

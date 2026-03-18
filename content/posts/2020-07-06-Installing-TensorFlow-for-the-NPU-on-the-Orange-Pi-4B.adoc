@@ -11,12 +11,12 @@ featured: true
 hidden: true
 image: assets/images/pu7JQ6ratm.png
 tags:
-- 4B
+- 4b
 - armbian
 - machine-learning
 - merrykombo
 - orangepi
-- RK3399
+- rk3399
 title: Installing TensorFlow for the NPU on the Orange Pi 4B
 ---
 

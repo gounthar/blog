@@ -16,7 +16,7 @@ tags:
 - firefly
 - howto
 - linux
-- RK3399
+- rk3399
 - stationp1
 title: Installing asciicast2gif on aarch64 Debian bullseye
 toc: true

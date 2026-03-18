@@ -8,9 +8,9 @@ featured: true
 hidden: true
 image: assets/images/2019-07-24-1.png
 tags:
-- BNC
-- Financial
-- Freelance
+- bnc
+- financial
+- freelance
 title: Cheat sheet de la micro-entreprise pour developpeurs freelance (2019)
 ---
 

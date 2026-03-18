@@ -22,7 +22,6 @@ tags:
 - devops
 - docker
 - gitlab-ci
-- Infrastructure
 - infrastructure
 - multi-arch
 - risc-v

@@ -31,7 +31,7 @@ tags:
 - riscv64
 - self-hosted-runners
 - spacemit
-- Technical
+- technical
 - transitive-dependencies
 - vllm
 - wheels
@@ -54,7 +54,7 @@ image::/assets/images/2026/03/11/dependency-rabbit-hole-header.jpg[Exploring the
 
 _Photo by link:https://www.pexels.com/@bowovisuals[BOWOVISUALS] on link:https://www.pexels.com/photo/5823147/[Pexels]_
 
-_This is part two of the RISC-V wheel factory series. Part one: link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[Building a Python Wheel Factory for RISC-V]._
+_This is part two of the RISC-V wheel factory series. Part one: link:/2026/03/10/building-a-python-wheel-factory-for-risc-v/[Building a Python Wheel Factory for RISC-V]._
 
 == Act 1: The Ten-Second Lie
 
@@ -391,7 +391,7 @@ It's all the stuff _around_ the builds that eats your time.
 
 === What I'd Tell Past Me
 
-The wheel factory from link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[part one] solved a real problem.
+The wheel factory from link:/2026/03/10/building-a-python-wheel-factory-for-risc-v/[part one] solved a real problem.
 But it solved it for the packages I _knew_ about, on a machine that already had half the dependencies pre-installed.
 The clean-machine test exposed every assumption I'd baked in without realizing it.
 

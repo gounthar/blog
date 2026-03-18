@@ -9,7 +9,7 @@ hidden: true
 image: assets/images/2019-05-15-1.png
 tags:
 - 3Dprinting
-- DIY
+- diy
 title: 3D printing experience by a newbie
 ---
 

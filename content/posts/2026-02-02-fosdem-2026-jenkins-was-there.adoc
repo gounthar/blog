@@ -19,7 +19,7 @@ tags:
 - brussels
 - ci-cd
 - community
-- Conferences
+- conferences
 - fosdem
 - fosdem-2026
 - groovy
@@ -40,7 +40,7 @@ FOSDEM 2026. Brussels. The Université Libre de Bruxelles campus, with its graff
 
 This year, the Jenkins booth was on the ground floor instead of the first floor, sandwiched between Homebrew and GitLab (prime real estate, if you ask me). I got the impression they grouped booths by theme this time around, which was a nice change.
 
-image::{{ site.baseurl }}/assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg[Bruno Verachten (left) and Stéphane Merle (right) holding down the Jenkins booth at FOSDEM 2026]
+image::/assets/images/2026/02/02/fosdem-2026-jenkins-booth.jpg[Bruno Verachten (left) and Stéphane Merle (right) holding down the Jenkins booth at FOSDEM 2026]
 
 === 🛠 The Crew
 

@@ -20,7 +20,7 @@ tags:
 - devops
 - Native Compilation
 - native-build
-- Node.js
+- node-js
 - nodejs
 - risc-v
 - riscv64

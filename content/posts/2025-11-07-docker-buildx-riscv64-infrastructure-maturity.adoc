@@ -19,7 +19,7 @@ tags:
 - docker
 - docker-buildx
 - github-actions
-- Infrastructure
+- infrastructure
 - infrastructure-as-code
 - riscv64
 title: 'Docker Buildx for RISC-V64: When Infrastructure Just Works'

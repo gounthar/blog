@@ -11,7 +11,7 @@ hidden: false
 image: assets/images/whatever-name-I-choose.svg
 tags:
 - armbian
-- H3
+- h3
 - termtosvg
 title: Terminal recording on the OrangePi Zero
 ---

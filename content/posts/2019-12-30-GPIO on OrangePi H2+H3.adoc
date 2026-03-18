@@ -13,7 +13,7 @@ image: assets/images/2019/12/30/Screenshot_2020-01-05_GPIO_and_Armbian_for_Orang
 tags:
 - armbian
 - GPIO
-- H3
+- h3
 - orangepi
 title: How to use the GPIO on the OrangePi Zero running Armbian
 ---

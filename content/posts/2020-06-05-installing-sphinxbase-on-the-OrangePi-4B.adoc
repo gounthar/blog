@@ -14,7 +14,7 @@ tags:
 - armbian
 - machine-learning
 - merrykombo
-- RK3399
+- rk3399
 title: 'Sphinx: Installing sphinxbase on the OrangePi 4B'
 ---
 

@@ -27,7 +27,7 @@ tags:
 - rust
 - rustls
 - swc
-- Technical
+- technical
 title: 'The Ring Around the Rosie: Upgrading Next.js on RISC-V from 13.5.6 to 14.2.35'
 toc: true
 ---

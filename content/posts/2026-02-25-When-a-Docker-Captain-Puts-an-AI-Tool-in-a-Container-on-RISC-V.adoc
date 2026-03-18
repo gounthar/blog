@@ -15,7 +15,7 @@ hidden: false
 image: assets/images/2026/02/25/openclaw-doctor-riscv64.png
 tags:
 - ai
-- BananaPi F3
+- banana-pi-f3
 - buildkit
 - container
 - cross-compilation

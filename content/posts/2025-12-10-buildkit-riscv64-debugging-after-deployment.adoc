@@ -16,7 +16,7 @@ image: assets/2025/12/10/buildkit-debugging-header.jpg
 tags:
 - buildkit
 - containers
-- Debugging
+- debugging
 - deployment
 - devops
 - docker

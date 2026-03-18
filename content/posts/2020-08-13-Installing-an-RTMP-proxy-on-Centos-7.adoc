@@ -13,7 +13,7 @@ tags:
 - centos
 - ffmpeg
 - nginx
-- RTMP
+- rtmp
 title: Install an RTMP proxy to restream on Centos 7
 ---
 

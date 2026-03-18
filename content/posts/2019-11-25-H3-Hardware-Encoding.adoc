@@ -13,10 +13,10 @@ image: assets/images/Allwinner_H3_BLock_Diagram_1_.png
 tags:
 - armbian
 - h.264
-- H3
+- h3
 - hardware_encoding
 - orangepi
-- Zero
+- zero
 title: Use x.264 hardware encoding on an OrangePi Zero running Armbian
 ---
 

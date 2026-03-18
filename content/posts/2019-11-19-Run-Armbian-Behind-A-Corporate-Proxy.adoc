@@ -13,7 +13,7 @@ image: assets/images/closed-coming-soon-door-4291-1210x423_1_.jpg
 tags:
 - armbian
 - ffmpeg
-- H3
+- h3
 - proxy
 title: Stream thanks to FFmpeg under Armbian behind a corporate proxy
 ---

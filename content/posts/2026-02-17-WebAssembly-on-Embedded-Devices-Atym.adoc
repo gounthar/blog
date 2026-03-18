@@ -17,16 +17,16 @@ featured: true
 hidden: false
 image: assets/images/2026/02/17/header-green-pcb.jpg
 tags:
-- ARM
-- Atym
+- arm
+- atym
 - containers
 - devops
 - docker
 - embedded
 - iot
-- Ocre
+- ocre
 - risc-v
-- WAMR
+- wamr
 - webassembly
 title: 'WebAssembly on Embedded Devices: A Docker Captain Tries Atym'
 ---

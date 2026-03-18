@@ -13,7 +13,7 @@ tags:
 - android
 - firefly
 - kodi
-- RK3399
+- rk3399
 title: Firefly Station P1 first review
 ---
 

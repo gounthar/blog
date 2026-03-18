@@ -13,7 +13,7 @@ tags:
 - ffmpeg
 - libaom
 - orangepi
-- RK3399
+- rk3399
 title: 'Stream For Cheap With RK3399 #2 - Compile FFMPEG'
 ---
 

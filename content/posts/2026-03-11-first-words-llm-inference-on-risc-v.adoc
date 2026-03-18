@@ -24,7 +24,7 @@ tags:
 - risc-v
 - riscv64
 - spacemit
-- Technical
+- technical
 - transformers
 - vllm
 title: 'First Words: LLM Inference on RISC-V'
@@ -34,7 +34,7 @@ toc: true
 image::/assets/images/2026/03/11/first-words-inference-header.jpg[First LLM inference on RISC-V hardware]
 _Photo by link:https://www.pexels.com/@pixabay[Pixabay] on link:https://www.pexels.com/photo/355465/[Pexels]_
 
-_This is part three of the RISC-V wheel factory series. Part one: link:{% post_url 2026-03-10-Building-a-Python-Wheel-Factory-for-RISC-V %}[Building a Python Wheel Factory for RISC-V]. Part two: link:{% post_url 2026-03-11-the-dependency-rabbit-hole %}[The Dependency Rabbit Hole]._
+_This is part three of the RISC-V wheel factory series. Part one: link:/2026/03/10/building-a-python-wheel-factory-for-risc-v/[Building a Python Wheel Factory for RISC-V]. Part two: link:/2026/03/11/the-dependency-rabbit-hole/[The Dependency Rabbit Hole]._
 
 [source,python]
 ----
@@ -200,7 +200,7 @@ The gap between "vLLM imports" and "vLLM runs inference" is the C++ extension bu
 
 === What Optimized Native Code Can Do
 
-I covered building llama.cpp on this board in a link:{% post_url 2026-02-27-Running-a-Local-LLM-on-RISC-V-Building-llama.cpp-on-a-Banana-Pi-F3-Part-1 %}[separate article]. The short version: llama.cpp compiles with GCC, uses RVV intrinsics for matrix multiplication, supports quantized models, and runs an OpenAI-compatible API server.
+I covered building llama.cpp on this board in a link:/2026/02/27/running-a-local-llm-on-risc-v-building-llama.cpp-on-a-banana-pi-f3-part-1/[separate article]. The short version: llama.cpp compiles with GCC, uses RVV intrinsics for matrix multiplication, supports quantized models, and runs an OpenAI-compatible API server.
 
 Here are the numbers, measured with `llama-bench` on the same BananaPi F3, same day, clean system load, 8 threads:
 
@@ -334,5 +334,4 @@ If you want to help with any of this — especially the vLLM C++ extensions — 
 Converted from AsciiDoc to Jekyll markdown.
 Original file: /mnt/c/support/users/dev/riscv/vllm/article-first-words-inference.adoc
 Conversion date: 2026-03-11
-Notes: Part 3 of RISC-V wheel factory series. All AsciiDoc internal links converted to Jekyll post_url tags. Tables converted to markdown pipe format. Code blocks converted to fenced syntax with language identifiers. Pexels photo attribution preserved.
 -->

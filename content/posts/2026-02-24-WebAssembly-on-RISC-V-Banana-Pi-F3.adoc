@@ -16,17 +16,17 @@ featured: true
 hidden: false
 image: assets/images/2026/02/24/header-winding-road-landscape.jpg
 tags:
-- ARM
-- Atym
-- Banana Pi F3
+- arm
+- atym
+- banana-pi-f3
 - containers
 - docker
 - embedded
 - iot
-- Ocre
+- ocre
 - risc-v
-- SpacemiT K1
-- WAMR
+- spacemit-k1
+- wamr
 - webassembly
 title: Can WebAssembly Run on RISC-V? Testing Atym Containers on a Banana Pi F3
 ---

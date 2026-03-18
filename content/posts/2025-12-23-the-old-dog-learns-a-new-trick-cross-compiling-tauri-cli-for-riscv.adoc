@@ -15,9 +15,9 @@ image: assets/images/2025-12-23-tauri-cross-header.jpg
 tags:
 - armbian
 - cross-compilation
-- Cross-Platform
+- cross-platform
 - cross-rs
-- Development
+- development
 - github-actions
 - risc-v
 - riscv64

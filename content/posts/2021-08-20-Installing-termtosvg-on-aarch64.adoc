@@ -15,7 +15,7 @@ tags:
 - firefly
 - howto
 - linux
-- RK3399
+- rk3399
 - stationp1
 title: termtosvg on aarch64 Debian
 ---

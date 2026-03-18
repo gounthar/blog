@@ -17,7 +17,7 @@ tags:
 - firefly
 - howto
 - linux
-- RK3399
+- rk3399
 - root
 - SDCard
 - stationp1

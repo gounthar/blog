@@ -13,7 +13,7 @@ image: assets/images/2020/01/05/61MssWzM-tL._SX342__1_.jpg
 tags:
 - armbian
 - GPIO
-- H3
+- h3
 - I2C
 - orangepi
 title: How to use an I2C screen to display broadcast progress on the OrangePi Zero

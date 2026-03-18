@@ -33,7 +33,7 @@ title: What About iOS? Or, How a 30-Dollar Android Phone Embarrasses a 1000-Doll
 toc: true
 ---
 
-image::{{ site.baseurl }}/assets/images/2026/02/09/ios-equivalent-investigation-header.jpg[Header image]
+image::/assets/images/2026/02/09/ios-equivalent-investigation-header.jpg[Header image]
 
 _Photo by link:https://unsplash.com/@holmo[Holmo] on link:https://unsplash.com/photos/96w-2ZgEzG0[Unsplash]_
 

@@ -18,17 +18,16 @@ image: assets/images/2025/11/15/breakthrough-tree-silhouette.jpg
 tags:
 - banana-pi
 - debugging
-- Debugging
 - native-modules
 - nextjs
-- Open-Source
+- open-source
 - patch
 - performance
 - risc-v
 - riscv64
 - rust
 - swc
-- Technical
+- technical
 - web-development
 title: 'The One-Line Patch That Unlocked Next.js on RISC-V: A Detective Story'
 toc: true

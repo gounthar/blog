@@ -11,7 +11,7 @@ image: assets/images/gcc.cast.gif
 tags:
 - gcc
 - orangepi
-- RK3399
+- rk3399
 title: Compile GCC 9.X on the RK3399
 ---
 

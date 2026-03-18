@@ -15,9 +15,9 @@ image: assets/images/2025-12-22-riscv-header.jpg
 tags:
 - armbian
 - cross-compilation
-- Cross-Platform
+- cross-platform
 - debian
-- Development
+- development
 - docker
 - qemu
 - risc-v
