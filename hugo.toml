@@ -1,10 +1,11 @@
 baseURL = "https://bruno.verachten.fr"
 languageCode = "en"
-title = "bruno.verachten.fr"
-# No external theme — layouts are in layouts/
+title = "Bruno Verachten"
+theme = "ascii-press"
 summaryLength = 30
 timeZone = "Europe/Paris"
 enableRobotsTXT = true
+enableEmoji = true
 
 # Google Analytics (legacy UA — migrate to GA4 when ready)
 [services.googleAnalytics]
@@ -13,17 +14,14 @@ enableRobotsTXT = true
 [permalinks]
   [permalinks.page]
     posts = "/:year/:month/:day/:title/"
-  [permalinks.section]
-    posts = "/:year/:month/:day/:title/"
 
 [taxonomies]
   category = "categories"
   tag = "tags"
+  series = "series"
 
 [pagination]
   pagerSize = 6
-  # Hugo generates /page/2/ etc. Jekyll used /page2/
-  # We create server-side aliases via layouts/partials/pagination-aliases.html
   path = "page"
 
 # AsciiDoc rendering via external asciidoctor binary
@@ -39,34 +37,48 @@ enableRobotsTXT = true
   verbose = false
   workingFolderCurrent = true
   [markup.asciidocExt.attributes]
-    "source-highlighter" = "rouge"
+    "source-highlighter" = "highlightjs"
     "icons" = "font"
     "sectanchors" = ""
     "experimental" = ""
 
-# Syntax highlighting (Chroma — Hugo built-in)
+# Disable Hugo built-in code highlighting (ascii-press uses highlight.js)
 [markup.highlight]
-  style = "monokai"
-  lineNos = false
-  lineNumbersInTable = true
-  guessSyntax = true
+  codeFences = false
 
 [markup.goldmark.renderer]
   unsafe = true
 
 [params]
   description = "Articles regarding my daily work and my tinkering at home"
-  logo = "assets/images/logo.png"
-  favicon = "assets/images/logo.png"
   author = "Bruno Verachten"
-  authorGravatar = "f619f6978eab84209620fcf3543c63b9"
   authorEmail = "bruno@verachten.fr"
-  authorTwitter = "https://twitter.com/poddingue"
-  adsense = "disabled"
-  adsenseClient = "ca-pub-3412143450191416"
-  adsenseSlot = "1363087678"
-  lazyImages = false
-  youtubeURL = "https://www.youtube.com/channel/UCyrSW5yzz1gAHzN567cE2YA"
+  authorimage = "/images/logo.png"
+  dateformat = "2006-01-02"
+
+  # highlight.js
+  highlightjs = true
+  highlightjsstyle = "a11y-light"
+  highlightjsdarkstyle = "gruvbox-dark"
+
+  # Table of contents
+  toc = "tocbot"
+
+  mainSections = ["posts"]
+  landingLastPosts = 100
+
+  # sidebar
+  copyright = "Bruno Verachten"
+  since = 2015
+  showBuiltWith = false
+
+[params.social]
+  github = "gounthar"
+  linkedin = "bruno-verachten-2096449a"
+  twitter = "poddingue"
+  gravatar = "bruno@verachten.fr"
+  mastodon = "https://mastodon.social/@poddingue"
+  youtube = "UCyrSW5yzz1gAHzN567cE2YA"
 
 # RSS feed at /feed.xml to match Jekyll
 [outputFormats.RSS]
@@ -97,3 +109,38 @@ ignoreFiles = ["CLAUDE\\.md$", "CONTEXT\\.md$", "\\.env$"]
     allow = ['^(dart-)?sass(-embedded)?$', '^go$', '^git$', '^npx$', '^postcss$', '^tailwindcss$', '^asciidoctor$']
     osEnv = ['(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE|PROGRAMDATA|GEM_PATH|GEM_HOME|RUBY\w+)$']
 
+[menu]
+  [[menu.main]]
+    pre = "<span class='fa-icon'><i class='fas fa-home'></i></span><code>cd <em>~</em></code>"
+    url = "/"
+    weight = -100
+
+  [[menu.main]]
+    identifier = "post"
+    title = "All posts"
+    pre = "<span class='fa-icon'><i class='fas fa-stream'></i></span><code>ls <em>posts/*</em></code>"
+    url = "/posts/"
+    weight = 1
+
+  [[menu.main]]
+    identifier = "tags"
+    pre = "<span class='fa-icon'><i class='fas fa-tags'></i></span><code>grep -o <em>tags</em> posts/* | sort -u</code>"
+    title = "All tags"
+    url = "/tags/"
+    weight = 2
+
+  [[menu.main]]
+    identifier = "categories"
+    pre = "<span class='fa-icon'><i class='fas fa-folder'></i></span><code>ls <em>categories/</em></code>"
+    title = "All categories"
+    url = "/categories/"
+    weight = 3
+
+  [[menu.meta]]
+    identifier = "categories"
+    name = "Categories"
+    weight = 1
+  [[menu.meta]]
+    identifier = "tags"
+    name = "Tags"
+    weight = 2
