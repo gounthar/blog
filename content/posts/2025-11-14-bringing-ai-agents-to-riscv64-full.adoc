@@ -83,7 +83,7 @@ Table of Contents
 
 image::./images/cagent-header.jpg[Bringing AI Agents to RISC-V64]
 
-_Photo from <a href="https://unsplash.com/photos/4eFNfs7iBLc" target="_blank" rel="noopener">Unsplash</a> - Abstract geometric patterns representing the convergence of AI agents and architecture_
+_Photo from link:https://unsplash.com/photos/4eFNfs7iBLc[Unsplash] - Abstract geometric patterns representing the convergence of AI agents and architecture_
 
 [quote]
 ____
@@ -237,7 +237,7 @@ I created three workflows following our established patterns:
 
 Runs every Sunday at 06:00 UTC, building the latest cagent from the main branch.
 
-The complete workflow is available at <a href="https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/cagent-weekly-build.yml" target="_blank" rel="noopener">cagent-weekly-build.yml</a>.
+The complete workflow is available at link:https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/cagent-weekly-build.yml[cagent-weekly-build.yml].
 
 Key sections:
 
@@ -263,7 +263,7 @@ Note `CGO_ENABLED=0` - we want truly static binaries that don’t depend on glib
 
 Checks daily for new upstream releases and automatically triggers builds.
 
-The complete workflow is available at <a href="https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/track-cagent-releases.yml" target="_blank" rel="noopener">track-cagent-releases.yml</a>.
+The complete workflow is available at link:https://github.com/gounthar/docker-for-riscv64/blob/main/.github/workflows/track-cagent-releases.yml[track-cagent-releases.yml].
 
 Key logic:
 
@@ -1001,9 +1001,9 @@ And that’s exciting.
 
 == 10. Resources
 
-*   _Project Repository_: <a href="https://github.com/gounthar/docker-for-riscv64" class="bare">https://github.com/gounthar/docker-for-riscv64</a>
+*   _Project Repository_: link:https://github.com/gounthar/docker-for-riscv64[https://github.com/gounthar/docker-for-riscv64]
 
-*   _Upstream cagent_: <a href="https://github.com/docker/cagent" class="bare">https://github.com/docker/cagent</a>
+*   _Upstream cagent_: link:https://github.com/docker/cagent[https://github.com/docker/cagent]
 
 *   _APT Repository_: <a href="https://gounthar.github.io/docker-for-riscv64" class="bare">https://gounthar.github.io/docker-for-riscv64</a>
 

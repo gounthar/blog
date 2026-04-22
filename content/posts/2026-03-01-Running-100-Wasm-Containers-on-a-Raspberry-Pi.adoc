@@ -329,7 +329,7 @@ My first attempt failed with `error while pre-opening mapped directory /shared: 
 I had to trace the mount string through three layers of source code to understand what was going on:
 
 * _Ocre's container creation code_ takes the mount argument and converts single colons to double colons. So `A:B` becomes `A::B` before passing it to WAMR.
-* _WAMR's `wasm_runtime_common.c`_ (around line 3760) parses the `::` separator as `guest_visible_name::host_real_path`. Then it calls `realpath()` on the host path.
+* WAMR's `wasm_runtime_common.c` (around line 3760) parses the `::` separator as `guest_visible_name::host_real_path`. Then it calls `realpath()` on the host path.
 * I had been writing `/tmp/ocre-shared:/shared` (Docker-style: `host:guest`). WAMR was reading that as "guest sees `/tmp/ocre-shared`, host provides `/shared`," and calling `realpath("/shared")`, which doesn't exist on the host.
 
 The fix: flip the order. Ocre's mount format is `guest_path:host_path`, the opposite of Docker's convention. Once I wrote `/shared:/tmp/ocre-shared`, it worked immediately.
