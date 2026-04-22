@@ -1,0 +1,36 @@
+---
+name: Publish new posts to dev.to
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - 'content/posts/**'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Ruby and Asciidoctor
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install Asciidoctor
+        run: gem install asciidoctor --no-document
+
+      - name: Install Pandoc
+        run: sudo apt-get install -y pandoc
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Publish to dev.to
+        env:
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+        run: python3 scripts/devto-crosspost.py
