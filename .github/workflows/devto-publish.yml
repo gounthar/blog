@@ -12,9 +12,13 @@ name: Publish new posts to dev.to
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Setup Ruby and Asciidoctor
         uses: ruby/setup-ruby@v1
@@ -40,3 +44,14 @@ jobs:
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
           DEVTO_POSTS_DIR: ${{ github.workspace }}/content/posts
         run: python3 scripts/devto-crosspost.py
+
+      - name: Commit updated ID map
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          git add scripts/devto-ids.json
+          git diff --staged --quiet || \
+            git commit -m "chore: update devto-ids.json [skip ci]"
+          git push
