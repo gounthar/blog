@@ -31,7 +31,7 @@ REQUEST_DELAY = 1.5  # seconds between API writes to stay under rate limit
 
 BLOG_BASE_URL = "https://bruno.verachten.fr"
 DEVTO_API = "https://dev.to/api"
-POSTS_DIR = Path("/mnt/c/support/users/blog-hugo/content/posts")
+POSTS_DIR = Path(os.environ.get("DEVTO_POSTS_DIR") or Path(__file__).parent.parent / "content" / "posts")
 ADOC_BIN = (
     os.environ.get("DEVTO_ADOC_BIN")
     or shutil.which("asciidoctor")
@@ -379,6 +379,8 @@ def main():
     print(f"\nDone. {ok}/{len(missing)} {action}.")
     if not dry_run:
         print("Review at: https://dev.to/dashboard")
+    if ok < len(missing):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
