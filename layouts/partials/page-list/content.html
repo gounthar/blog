@@ -3,7 +3,7 @@
     <!-- create a list with all uppercase letters, sections -->
     {{ $letters := split "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" "" }}
     <!-- Count of items, to avoid index for too small numbers -->
-    {{ $itemCount := (len .Data.Pages) }}
+    {{ $itemCount := len .Data.Pages }}
 
     {{- if gt $itemCount .Site.Params.taxonomyIndexThreshold -}}
         {{ range .Data.Pages.ByTitle }}
