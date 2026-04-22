@@ -25,7 +25,7 @@ jobs:
         run: gem install asciidoctor --no-document
 
       - name: Install Pandoc
-        run: sudo apt-get install -y pandoc
+        run: sudo apt-get update -q && sudo apt-get install -y pandoc
 
       - name: Setup Python
         uses: actions/setup-python@v5

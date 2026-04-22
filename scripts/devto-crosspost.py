@@ -22,7 +22,9 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -40,11 +42,21 @@ ADOC_BIN = (
 MAX_TAGS = 4
 
 
+API_TIMEOUT = 30  # seconds
+
+
 def get_api_key() -> str:
     env_key = os.environ.get("DEVTO_API_KEY")
     if env_key:
         return env_key.strip()
-    return (Path.home() / "dev.to.key").read_text().strip()
+    key_path = Path.home() / "dev.to.key"
+    try:
+        return key_path.read_text().strip()
+    except FileNotFoundError:
+        raise SystemExit(
+            "No API key found. Set the DEVTO_API_KEY environment variable "
+            f"or create {key_path} with your dev.to API key."
+        )
 
 
 def devto_get(path: str, api_key: str) -> list | dict:
@@ -52,7 +64,7 @@ def devto_get(path: str, api_key: str) -> list | dict:
         f"{DEVTO_API}{path}",
         headers={"api-key": api_key, "User-Agent": "devto-crosspost/1.0"},
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=API_TIMEOUT) as resp:
         return json.loads(resp.read())
 
 
@@ -65,7 +77,7 @@ def devto_post(path: str, data: dict, api_key: str) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=API_TIMEOUT) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         print(f"  ERROR {e.code}: {e.read().decode()[:300]}", file=sys.stderr)
@@ -75,6 +87,8 @@ def devto_post(path: str, data: dict, api_key: str) -> dict:
 def fetch_existing_articles(api_key: str) -> list[dict]:
     published = devto_get("/articles/me?per_page=100", api_key)
     unpublished = devto_get("/articles/me/unpublished?per_page=100", api_key)
+    if not isinstance(published, list) or not isinstance(unpublished, list):
+        raise RuntimeError(f"Unexpected API response: {published!r} / {unpublished!r}")
     return published + unpublished
 
 
@@ -91,7 +105,7 @@ def devto_put(path: str, data: dict, api_key: str) -> dict:
         method="PUT",
     )
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=API_TIMEOUT) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         print(f"  ERROR {e.code}: {e.read().decode()[:300]}", file=sys.stderr)
@@ -139,7 +153,9 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     """Split YAML frontmatter from body. Returns (fm_dict, body_str)."""
     if not text.startswith("---"):
         return {}, text
-    end = text.index("---", 3)
+    end = text.find("---", 3)
+    if end == -1:
+        return {}, text
     fm = yaml.safe_load(text[3:end]) or {}
     body = text[end + 3:].strip()
     return fm, body
@@ -170,6 +186,8 @@ def adoc_to_gfm(body: str) -> str:
         [ADOC_BIN, "-b", "html5", "--safe", "-o", "-", "-"],
         input=body, capture_output=True, text=True,
     )
+    if r1h.returncode != 0:
+        raise RuntimeError(f"asciidoctor (html5) failed: {r1h.stderr[:200]}")
     r2h = subprocess.run(
         ["pandoc", "-f", "html", "-t", "gfm", "--wrap=none"],
         input=r1h.stdout, capture_output=True, text=True,
@@ -232,7 +250,6 @@ def normalize_tags(raw: list | str | None) -> list[str]:
 
 
 def make_cover_image(fm: dict) -> str | None:
-    import urllib.parse
     img = fm.get("image", "")
     if not img:
         return None
@@ -247,7 +264,6 @@ def make_originally_published_header(fm: dict, canonical_url: str) -> str:
     date_str = str(fm.get("date", "")).strip()
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", date_str)
     if m and canonical_url:
-        from datetime import date
         d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         friendly = d.strftime("%B %-d, %Y")
         return f"*Originally published on {friendly} at [{canonical_url}]({canonical_url})*\n\n---\n\n"
