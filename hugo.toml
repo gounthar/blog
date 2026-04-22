@@ -50,6 +50,7 @@ enableEmoji = true
   unsafe = true
 
 [params]
+  taxonomyIndexThreshold = 10
   description = "Articles regarding my daily work and my tinkering at home"
   author = "Bruno Verachten"
   authorEmail = "bruno@verachten.fr"
