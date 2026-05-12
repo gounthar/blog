@@ -1,0 +1,89 @@
+---
+author: Bruno Verachten
+categories:
+- Community
+- Open Hardware
+- Open Source
+date: 2026-05-12 10:00:00 +0000
+description: 'Ten years of volunteer work, one open hardware PowerPC board, and the community that refused to quit. The Power Progress Community story.'
+excerpt: In 2014, a small group of Italian volunteers decided to build an open hardware PowerPC laptop. Twelve years later, they''re still at it.
+featured: true
+hidden: false
+image: assets/images/2026/05/12/power-progress-community-header.jpg
+tags:
+- open-hardware
+- powerpc
+- community
+- open-source
+- non-x86
+title: 'Ten Years, One Bet on PowerPC: The Power Progress Community Story'
+---
+
+In 2014, a small group of Italian volunteers decided to build an open hardware https://en.wikipedia.org/wiki/PowerPC[PowerPC] laptop from scratch. No salary. No investor deck. No deadline. Just a shared conviction that the world needed an open computer built on an open architecture, running free software, designed by and for the community.
+
+Twelve years later, they're still at it. I recently spoke with https://www.sfscon.it/speakers/roberto-innocenti/[Roberto Innocenti], president of the https://powerprogress.org/[Power Progress Community], and the conversation stayed with me for days.
+
+'''
+
+== Who they are
+
+Power Progress Community is a non-profit registered in Italy. Every member is a volunteer. Nobody gets paid except the electronic engineers they hire for specific funded tasks. Roberto describes their "business plan" as deliberately flexible: no crowdfunding countdown clock, no tight time-to-market pressure. Just an open donation campaign they can sustain indefinitely.
+
+Their mission reads like something from the early free software movement. Solidarity-based knowledge. Freedom of choice. Technology designed to resist surveillance capitalism. Open hardware accessible to people far from the world of computing. They run coding workshops in Italian schools using repurposed old hardware. They partner with universities so students can design open hardware as thesis projects.
+
+This is not a startup. It's something older and stranger: a community running on passion.
+
+'''
+
+== The technology
+
+The project centers on a PowerPC laptop and now a desktop, built around the https://www.nxp.com/products/processors-and-microcontrollers/power-architecture/qoriq-communication-processors/t-series/qoriq-t2080-multicore-communication-processor:T2080[NXP T2080]. That's a 64-bit https://en.wikipedia.org/wiki/Power_Architecture[Power Architecture] chip with four dual-threaded e6500 cores and https://en.wikipedia.org/wiki/AltiVec[AltiVec] vector support. The desktop version, called the https://powerpc-notebook.org/[*Powerboard Tyche*], comes in https://en.wikipedia.org/wiki/MicroATX[Micro ATX] form factor with two https://en.wikipedia.org/wiki/PCI_Express[PCIe] x16 video card slots, two https://en.wikipedia.org/wiki/NVM_Express[NVMe] slots, and dual gigabit Ethernet.
+
+Why PowerPC? Roberto puts it bluntly: "The PowerPC architecture design is newer than the other successful CPU architectures: x86 (1978), MIPS (1981), ARM (1983) — PowerPC (1991)." More to the point, since August 2019 the https://en.wikipedia.org/wiki/Power_ISA[Power ISA] became fully open. Developers can now design chips based on the royalty-free specification. The architecture that once ran inside every Mac, every PlayStation 3, and every Nintendo Wii is now genuinely free silicon.
+
+The Powerboard Tyche schematics are published under the https://cern-ohl.web.cern.ch/[CERN Open Hardware Licence] 1.2. PCB source files are on https://gitlab.com/power-progress-community/[GitLab]. They're pursuing https://www.oshwa.org/[OSHWA] certification. NXP itself agreed to let them publish the T2080 reference design as open hardware. That last part is not a given with any chip manufacturer.
+
+'''
+
+== Twelve years in the making
+
+The timeline is a story of persistence against everything that can go wrong in open hardware.
+
+The project started in 2014 with a laptop idea. The formal association launched in 2016. By 2017 they were running their first crowdfunding campaign, partnering with https://www.acube-systems.biz/[ACube Systems] for electrical engineering and with https://slimbook.es/[Slimbook] (a Spanish Linux laptop maker) for the chassis. By 2022 they had physical prototypes.
+
+Then came the hard part.
+
+The prototype booted fine on NXP's reference development kit. It refused to boot on their custom board. For eighteen months, from November 2023 to April 2025, the team tried every fix they could think of. https://en.wikipedia.org/wiki/Complex_programmable_logic_device[CPLD] updates. Firmware comparisons. Desoldering chips to isolate the fault. The board still wouldn't boot.
+
+In May 2025, after consulting their donor community, they made a call: pivot to a desktop first. Simpler enclosure. Lower production cost. Merged design based on the updated NXP T2080 reference board. In June 2025, NXP provided the latest T2080 RDB design. In October, schematics were done. By March 2026, the PCB layout was complete.
+
+That pivot isn't a failure. It's twelve years of knowing when to adapt without dropping the goal.
+
+'''
+
+== Why this matters
+
+At https://vates.tech/[Vates], the company behind the https://xcp-ng.org/[XCP-ng] open source hypervisor, there's an ongoing effort to port https://xenproject.org/[Xen] to https://riscv.org/[RISC-V], another open instruction set architecture that barely existed a decade ago. XCP-ng itself isn't there yet. But the direction is clear: open silicon, community governance, computing that isn't owned by a handful of companies. Watching Power Progress Community work through a decade of non-x86 hardware development feels like the same conversation.
+
+There's also an audience overlap worth naming. The open source sysadmin and virtualization world is full of people who came from Amiga, PowerPC Macs, and older non-x86 systems. People who remember when computing was more architecturally diverse, and think it should be again. If that's you, or if you simply believe computing is healthier with more than two or three viable architectures, you probably want to know this project exists.
+
+'''
+
+== Where they are now and how to help
+
+The Powerboard Tyche desktop PCB is done. The https://www.kicad.org/[KiCad] schematics are published. What's left is funding physical prototypes. The campaign to cover prototyping and hardware testing needs roughly €3,500 to close. A small number relative to what's already been invested in engineering and community time.
+
+If you want to follow the project:
+
+* Project updates and timeline: https://powerpc-notebook.org/[powerpc-notebook.org]
+* Donation campaign: https://fundraising.powerpc-notebook.org/[fundraising.powerpc-notebook.org]
+* Community forum: https://forum.powerprogress.org/[forum.powerprogress.org]
+* GitLab (schematics, PCB sources): https://gitlab.com/power-progress-community/[gitlab.com/power-progress-community]
+
+Roberto has presented at https://www.sfscon.it/speakers/roberto-innocenti/[SFScon] (the South Tyrol Free Software Conference in Bolzano) every year since 2018. His 2025 talk covers the full story from laptop prototype struggles to the desktop pivot. The slides are https://www.sfscon.it/wp-content/uploads/2025/11/1762214372748sfscon_2025_Open_Hardware_PowerPC_Desktop.pdf[available here].
+
+'''
+
+Open hardware is slow work. Slower than software, slower than cloud services, slower than anything the venture capital cycle rewards. The Power Progress Community has been doing it anyway. Twelve years. Volunteer time. Donor funding. University partnerships. One prototype that wouldn't boot, and the stubbornness to redesign rather than quit.
+
+The PCB is done. I hope the prototype isn't far behind.
