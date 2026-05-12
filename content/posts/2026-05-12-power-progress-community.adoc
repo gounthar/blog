@@ -6,7 +6,7 @@ categories:
 - Open Source
 date: 2026-05-12 10:00:00 +0000
 description: 'Twelve years of volunteer work, one open hardware PowerPC board, and the community that refused to quit. The Power Progress Community story.'
-excerpt: In 2014, a small group of Italian volunteers decided to build an open hardware PowerPC laptop. Twelve years later, they''re still at it.
+excerpt: In 2014, a small group of Italian volunteers decided to build an open hardware PowerPC laptop. Twelve years later, they're still at it.
 featured: true
 hidden: false
 image: assets/images/2026/05/12/power-progress-community-header.jpg
@@ -22,6 +22,8 @@ title: 'Twelve Years, One Bet on PowerPC: The Power Progress Community Story'
 In 2014, a small group of Italian volunteers decided to build an open hardware https://en.wikipedia.org/wiki/PowerPC[PowerPC] laptop from scratch. No salary. No investor deck. No deadline. Just a shared conviction that the world needed an open computer built on an open architecture, running free software, designed by and for the community.
 
 Twelve years later, they're still at it. I recently spoke with https://www.sfscon.it/speakers/roberto-innocenti/[Roberto Innocenti], president of the https://powerprogress.org/[Power Progress Community], and the conversation stayed with me for days.
+
+_Photo by link:https://www.pexels.com/@113472439/[Сергей] on link:https://www.pexels.com/photo/view-of-a-winding-road-9695725/[Pexels]_
 
 '''
 
