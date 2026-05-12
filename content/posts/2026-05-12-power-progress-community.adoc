@@ -89,3 +89,4 @@ Roberto has presented at https://www.sfscon.it/speakers/roberto-innocenti/[SFSco
 Open hardware is slow work. Slower than software, slower than cloud services, slower than anything the venture capital cycle rewards. The Power Progress Community has been doing it anyway. Twelve years. Volunteer time. Donor funding. University partnerships. One prototype that wouldn't boot, and the stubbornness to redesign rather than quit.
 
 The PCB is done. I hope the prototype isn't far behind.
+
