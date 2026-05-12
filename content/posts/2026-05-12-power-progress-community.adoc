@@ -5,7 +5,7 @@ categories:
 - Open Hardware
 - Open Source
 date: 2026-05-12 10:00:00 +0000
-description: 'Ten years of volunteer work, one open hardware PowerPC board, and the community that refused to quit. The Power Progress Community story.'
+description: 'Twelve years of volunteer work, one open hardware PowerPC board, and the community that refused to quit. The Power Progress Community story.'
 excerpt: In 2014, a small group of Italian volunteers decided to build an open hardware PowerPC laptop. Twelve years later, they''re still at it.
 featured: true
 hidden: false
@@ -16,7 +16,7 @@ tags:
 - community
 - open-source
 - non-x86
-title: 'Ten Years, One Bet on PowerPC: The Power Progress Community Story'
+title: 'Twelve Years, One Bet on PowerPC: The Power Progress Community Story'
 ---
 
 In 2014, a small group of Italian volunteers decided to build an open hardware https://en.wikipedia.org/wiki/PowerPC[PowerPC] laptop from scratch. No salary. No investor deck. No deadline. Just a shared conviction that the world needed an open computer built on an open architecture, running free software, designed by and for the community.
@@ -55,7 +55,7 @@ Then came the hard part.
 
 The prototype booted fine on NXP's reference development kit. It refused to boot on their custom board. For eighteen months, from November 2023 to April 2025, the team tried every fix they could think of. https://en.wikipedia.org/wiki/Complex_programmable_logic_device[CPLD] updates. Firmware comparisons. Desoldering chips to isolate the fault. The board still wouldn't boot.
 
-In May 2025, after consulting their donor community, they made a call: pivot to a desktop first. Simpler enclosure. Lower production cost. Merged design based on the updated NXP T2080 reference board. In June 2025, NXP provided the latest T2080 RDB design. In October, schematics were done. By March 2026, the PCB layout was complete.
+In May 2025, after consulting their donor community, they made a call: pivot to a desktop first. Simpler enclosure. Lower production cost. Merged design based on the updated NXP T2080 reference board. In June 2025, NXP provided the latest T2080 RDB design. In October 2025, schematics were done. By March 2026, the PCB layout was complete.
 
 That pivot isn't a failure. It's twelve years of knowing when to adapt without dropping the goal.
 
