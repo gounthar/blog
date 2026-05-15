@@ -84,7 +84,7 @@ _K3 Core Types_
 
 Sixteen cores total, 32 GB shared RAM, kernel 6.18.3, link:https://gcc.gnu.org/[GCC] 15.2.0. Both core types share the same computational extensions: `zicbop`, `zicond`, `zfa`, `zawrs`, vector crypto, and standard link:https://github.com/riscvarchive/riscv-v-spec[RVV] (`v`) with float16 (`zvfh`). The only link:https://en.wikipedia.org/wiki/Instruction_set_architecture[ISA] difference: X100 has the hypervisor extension (`h`), A100 does not.
 
-The K1 I tested in Part 1 had 8 X60 cores at 1.6 GHz with vlen 128. The K3's X100 cores run at 2.4 GHz with vlen 256. Twice the vector width, 50% higher clock, newer microarchitecture. On paper, that's a pretty big jump.
+The K1 I tested in Part 1 had 8 X60 cores at 1.6 GHz with vlen 256. The K3's X100 cores run at 2.4 GHz with the same vlen 256. Same vector width, 50% higher clock, newer microarchitecture. On paper, that's still a real jump.
 
 The A100 "AI cores" are the wild card. 1024-bit vectors look like a big advantage on a spec sheet, but do they actually help llama.cpp?
 
@@ -184,7 +184,7 @@ Token generation tells a different story. It peaks at 4 threads (21.70 t/s), the
 
 Compared to Part 1's K1 result (8.5 t/s tg128 at 8 threads), the K3 X100 hits 19.70 t/s at the same thread count -- _2.3x faster_. At the optimal 4 threads, it reaches 21.70 t/s. For prompt processing, 76 t/s vs the K1's ~12.5 t/s (from Part 1): a _6x_ improvement in prefill speed.
 
-Where does this come from? Wider vectors (256 vs 128 bits), higher clock (2.4 vs 1.6 GHz), newer microarchitecture, better compiler. Hard to say how much each factor contributes, but the net result speaks for itself.
+Where does this come from? Higher clock (2.4 vs 1.6 GHz), newer microarchitecture, better compiler. Hard to say how much each factor contributes, but the net result speaks for itself.
 
 ---
 
@@ -730,6 +730,11 @@ I also tested `llama-server` with the link:https://platform.openai.com/docs/api-
 The OpenClaw integration and docker-compose stack articles are still in the queue. I haven't forgotten about them, I promise.
 
 The vendor toolchain situation needs work, but it's early days.
+
+[NOTE]
+====
+*Correction (2026-05-15)*: An earlier version of this post stated the K1 has vlen 128. Mark Zhuang (SpaceMiT) pointed out that K1 vlen is 256, same as the K3 X100. Updated the lines about vector width accordingly. The 6x prefill speedup vs K1 still holds; it just comes from higher clock, newer microarchitecture, and a better compiler, not from wider vectors.
+====
 
 ---
 
