@@ -73,7 +73,7 @@ There's also an audience overlap worth naming. The open source sysadmin and virt
 
 == Where they are now and how to help
 
-The Powerboard Tyche desktop PCB is done. The https://www.kicad.org/[KiCad] schematics are published. What's left is funding physical prototypes. The campaign to cover prototyping and hardware testing needs roughly €3,500 to close. A small number relative to what's already been invested in engineering and community time.
+The Powerboard Tyche desktop PCB design is done. The https://www.kicad.org/[KiCad] schematics are published. What's left is funding, in two steps. First, roughly €3,500 to balance the outstanding payment on the PCB design itself. Once that's settled, they can commit to the manufacturer and open the campaign to build the first five physical prototypes, which needs around €9,000 in total. Modest sums relative to what's already been invested in engineering and community time.
 
 If you want to follow the project:
 

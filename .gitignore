@@ -7,3 +7,4 @@ CONTEXT.md
 *.credentials.json
 node_modules/
 layouts.bak/
+social-posts/
