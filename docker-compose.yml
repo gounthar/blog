@@ -1,8 +1,8 @@
 services:
   hugo:
     build:
-      context: docker
-      dockerfile: hugo.Dockerfile
+      context: .
+      dockerfile: docker/hugo.Dockerfile
     command: hugo server --bind 0.0.0.0 --poll 1s
     ports:
       - "1313:1313"
