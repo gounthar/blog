@@ -27,18 +27,18 @@ sources:
     kind: dockerimage
     spec:
       image: hugomods/hugo
-      tagfilter: "^\\d+\\.\\d+\\.\\d+-exts$"
+      tagfilter: "^\\d+\\.\\d+\\.\\d+$"
       versionfilter:
-        kind: regex
-        pattern: "^\\d+\\.\\d+\\.\\d+-exts$"
+        kind: semver
 
 targets:
-  docker-compose:
-    name: "Update docker-compose.yml Hugo image"
-    kind: yaml
+  hugo-dockerfile:
+    name: "Update Hugo base image in docker/hugo.Dockerfile"
+    kind: dockerfile
     scmid: default
     sourceid: hugo-image
     spec:
-      file: docker-compose.yml
-      key: "$.services.hugo.image"
-      value: 'hugomods/hugo:{{ source "hugo-image" }}'
+      file: docker/hugo.Dockerfile
+      instruction:
+        keyword: "FROM"
+        matcher: "hugomods/hugo"
