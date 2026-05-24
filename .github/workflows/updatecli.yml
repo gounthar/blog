@@ -20,7 +20,7 @@ jobs:
         uses: updatecli/updatecli-action@v2
 
       - name: Run UpdateCLI
-        run: updatecli apply --config updatecli.d/
+        run: updatecli pipeline apply --config updatecli.d/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATECLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
