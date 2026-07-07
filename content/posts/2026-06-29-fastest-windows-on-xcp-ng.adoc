@@ -11,7 +11,7 @@ excerpt: I tried to install Windows on XCP-ng and lost the better part of two da
   VHD and skip the installer entirely.
 featured: false
 hidden: false
-image: assets/images/2026/06/29/04-oobe-hi-there.png
+image: assets/images/2026/06/29/00-header-fork-in-the-road.jpg
 tags:
 - homelab
 - hypervisor
@@ -25,15 +25,19 @@ title: 'The fastest Windows on XCP-ng is the one you don''t install'
 toc: true
 ---
 
+image::/assets/images/2026/06/29/00-header-fork-in-the-road.jpg[Two forest paths diverging, one the long way round and one the shortcut]
+
+_Photo by Jens Lelie on link:https://unsplash.com/photos/u0vgcIOQG08[Unsplash]._
+
 I needed a Windows box on XCP-ng for a side project, and I did the obvious thing first. I tried to install it.
 
 That was a mistake, and it took me the better part of two days to admit it.
 
-If you have ever fed a Windows ISO to an XCP-ng VM, you know the wall. Windows Setup boots, you click through the language screen, and then it stops dead on "A media driver your computer needs is missing." XCP-ng hands the VM its disk over the Xen paravirtual block bus, which shows up inside the guest as `xvda`, and the WinPE environment that drives Setup has never heard of it. It is the same situation as installing Windows on Proxmox or plain KVM without the VirtIO drivers loaded. The disk is right there, the installer just cannot see it, so the "where do you want to install Windows" screen is empty and "Next" stays greyed out.
+If you have ever fed a Windows ISO to an XCP-ng VM, you know the wall. Windows Setup boots, you click through the language screen, and then it stops dead on "A media driver your computer needs is missing." XCP-ng hands the VM its disk over the Xen link:https://en.wikipedia.org/wiki/Paravirtualization[paravirtual] block bus, which shows up inside the guest as `xvda`, and the link:https://en.wikipedia.org/wiki/Windows_Preinstallation_Environment[WinPE] environment that drives Setup has never heard of it. It is the same situation as installing Windows on link:https://en.wikipedia.org/wiki/Proxmox_Virtual_Environment[Proxmox] or plain link:https://en.wikipedia.org/wiki/Kernel-based_Virtual_Machine[KVM] without the link:https://wiki.libvirt.org/Virtio.html[VirtIO] drivers loaded. The disk is right there, the installer just cannot see it, so the "where do you want to install Windows" screen is empty and "Next" stays greyed out.
 
 On Proxmox you click "Load driver", point at the VirtIO floppy, and move on. On XCP-ng the equivalent storage driver (`xenvbd`, plus its bus parent `xenbus`) only ships inside the guest tools MSI, so getting it in front of WinPE is more work. Here is the short version of what I went through, because it is the reason the rest of this post exists.
 
-I extracted the PV drivers out of `XenTools-x64.msi` with `msitools` on a Linux box, dropped them into a `$WinPEDriver$` folder so WinPE would auto-load them at boot, and built a remastered install ISO. Then I learned that Windows ISOs store their payload in UDF, so the usual `xorriso` "add a file" trick copies almost nothing forward. So I did a full extract with `7z`, injected the drivers, and rebuilt a dual BIOS and UEFI bootable ISO. Then I learned that WinPE's ISO9660 driver cannot read a file larger than 4 GB, and the `install.wim` is 5.8 GB, which is exactly why Microsoft uses UDF in the first place. So I split the WIM with `wimsplit` into chunks under 4 GB. And because the VM is headless, I had to catch the "Press any key to boot from CD" prompt by spamming keystrokes at the firmware over QMP, since there is no keyboard at the firmware screen to press.
+I extracted the PV drivers out of `XenTools-x64.msi` with `msitools` on a Linux box, dropped them into a `$WinPEDriver$` folder so WinPE would auto-load them at boot, and built a remastered install ISO. Then I learned that Windows ISOs store their payload in link:https://en.wikipedia.org/wiki/Universal_Disk_Format[UDF], so the usual `xorriso` "add a file" trick copies almost nothing forward. So I did a full extract with `7z`, injected the drivers, and rebuilt a dual BIOS and UEFI bootable ISO. Then I learned that WinPE's link:https://en.wikipedia.org/wiki/ISO_9660[ISO9660] driver cannot read a file larger than 4 GB, and the `install.wim` is 5.8 GB, which is exactly why Microsoft uses UDF in the first place. So I split the link:https://en.wikipedia.org/wiki/Windows_Imaging_Format[WIM] with `wimsplit` into chunks under 4 GB. And because the VM is headless, I had to catch the "Press any key to boot from CD" prompt by spamming keystrokes at the firmware over link:https://wiki.qemu.org/Documentation/QMP[QMP], since there is no keyboard at the firmware screen to press.
 
 I got it working. The disk finally appeared, Setup ran, and then the fresh install bricked into Automatic Repair on first boot. At that point I stopped and asked myself the question I should have asked at the start.
 
@@ -45,7 +49,7 @@ Why am I installing Windows at all?
 
 == Microsoft hands you a finished disk
 
-The Microsoft Evaluation Center publishes Windows Server as a ready-made VHD, sitting right there next to the ISO. It is a sysprepped, fully installed copy of Windows on a virtual disk. No Setup, no driver injection, no keystroke roulette at a firmware prompt. You attach the disk to a VM, power it on, answer a couple of out-of-box questions, set a password, and you are looking at a desktop.
+The link:https://www.microsoft.com/en-us/evalcenter/[Microsoft Evaluation Center] publishes Windows Server as a ready-made link:https://en.wikipedia.org/wiki/VHD_(file_format)[VHD], sitting right there next to the ISO. It is a link:https://en.wikipedia.org/wiki/Sysprep[sysprepped], fully installed copy of Windows on a virtual disk. No Setup, no driver injection, no keystroke roulette at a firmware prompt. You attach the disk to a VM, power it on, answer a couple of out-of-box questions, set a password, and you are looking at a desktop.
 
 Two caveats before you reach for it, because they matter and I would rather you hear them now than after you have built something on top.
 
@@ -57,22 +61,22 @@ Mine was the Datacenter evaluation, build 26100. Here is the whole recipe.
 
 == Step 1: grab the VHD, not the ISO
 
-From the Evaluation Center, pick Windows Server 2025 and look for the *VHD* download rather than the ISO. Fill in the short form, and you get a roughly 11 GB `.vhdx` file. That file is the entire point: it is Windows already installed, captured as a disk image, waiting to be dropped onto a hypervisor.
+From the Evaluation Center, pick link:https://en.wikipedia.org/wiki/Windows_Server_2025[Windows Server 2025] and look for the *VHD* download rather than the ISO. Fill in the short form, and you get a roughly 11 GB `.vhdx` file. That file is the entire point: it is Windows already installed, captured as a disk image, waiting to be dropped onto a hypervisor.
 
 == Step 2: convert it, but not on dom0
 
 `xe vdi-import` understands raw and VHD, but not the newer VHDX container, so the file needs converting first. `qemu-img` does that in one line. My instinct was to run it on the XCP-ng host itself, since that is where the disk is going anyway.
 
-Do not do that. The way it fails is nasty, because it fails quietly. The `qemu-img` that ships in dom0 is a stripped-down build that only knows `raw` and `qcow2`. Point it at a VHDX and, in my case, it did not error out and tell me it could not read the format. It mis-detected the file as `raw`, reported the virtual size as equal to the file size (which is nonsense for a dynamic VHDX), and any conversion on top of that produces garbage. You will not find out until much later, when the VM refuses to boot, and you will not know why.
+Do not do that. The way it fails is nasty, because it fails quietly. The `qemu-img` that ships in link:https://wiki.xenproject.org/wiki/Dom0[dom0] is a stripped-down build that only knows `raw` and `qcow2`. Point it at a VHDX and, in my case, it did not error out and tell me it could not read the format. It mis-detected the file as `raw`, reported the virtual size as equal to the file size (which is nonsense for a dynamic VHDX), and any conversion on top of that produces garbage. You will not find out until much later, when the VM refuses to boot, and you will not know why.
 
-So convert on a normal machine that has a full `qemu-img`. Any modern Linux distribution has one; my WSL2 box was fine. A current `qemu-img` reads the VHDX correctly and reports the real geometry: a 64 GiB virtual disk with about 11 GB of actual data inside it.
+So convert on a normal machine that has a full `qemu-img`. Any modern Linux distribution has one; my link:https://en.wikipedia.org/wiki/Windows_Subsystem_for_Linux[WSL2] box was fine. A current `qemu-img` reads the VHDX correctly and reports the real geometry: a 64 GiB virtual disk with about 11 GB of actual data inside it.
 
 [source,bash]
 ----
 qemu-img convert -f vhdx -O vpc -o subformat=dynamic ws2025.vhdx ws2025.vhd
 ----
 
-The `-O vpc` is the VHD output format (the name is a leftover from Virtual PC), and `subformat=dynamic` keeps it thin, so you end up with a compact dynamic VHD that is about 11 GB on disk despite presenting a 64 GiB drive to the VM.
+The `-O vpc` is the VHD output format (the name is a leftover from link:https://en.wikipedia.org/wiki/Windows_Virtual_PC[Virtual PC]), and `subformat=dynamic` keeps it thin, so you end up with a compact dynamic VHD that is about 11 GB on disk despite presenting a 64 GiB drive to the VM.
 
 == Step 3: import the disk
 
@@ -99,7 +103,7 @@ If that reads roughly 11 G, the import worked, whatever the xe metric tells you.
 
 == Step 4: make the VM UEFI, not BIOS
 
-This is the gotcha that cost me the most time, and it cost me time because the internet lied to me with great confidence. Page after page describes the Windows Server evaluation "VHD" as a Generation 1 image, which in Hyper-V terms means BIOS firmware and an MBR partition table. So I dutifully built a BIOS VM, attached the disk, set it to boot, and started it.
+This is the gotcha that cost me the most time, and it cost me time because the internet lied to me with great confidence. Page after page describes the Windows Server evaluation "VHD" as a Generation 1 image, which in link:https://en.wikipedia.org/wiki/Hyper-V[Hyper-V] terms means BIOS firmware and an link:https://en.wikipedia.org/wiki/Master_boot_record[MBR] partition table. So I dutifully built a BIOS VM, attached the disk, set it to boot, and started it.
 
 The firmware found the disk. It listed it as "XS Virtual IDE Controller, Hard Drive 64 GB", printed "Boot device: Hard Disk, success", and then sat there. Forever. No error, no spinner, just a cursor and silence.
 
@@ -107,9 +111,9 @@ image::/assets/images/2026/06/29/02-bios-hang-boot-device-success.png["SeaBIOS p
 
 _Figure 2. The BIOS VM finds the disk and reports "Boot device: Hard Disk, success", then hangs. There is no MBR boot code on a GPT disk for it to run._
 
-The image is not Generation 1. For build 26100 it is GPT and UEFI, and you can prove it to yourself in about thirty seconds by looking at the first sectors of the converted VHD. You will find a protective MBR (a single partition entry of type `0xEE`, which is GPT's way of telling old tools "this whole disk is taken, hands off"), and the literal string `EFI PART` sitting at LBA 1, which is the GPT header signature. A BIOS VM finds the disk, looks at the MBR for boot code to run, finds only the protective stub, and has nothing to execute. Hence the polite hang.
+The image is not Generation 1. For build 26100 it is link:https://en.wikipedia.org/wiki/GUID_Partition_Table[GPT] and UEFI, and you can prove it to yourself in about thirty seconds by looking at the first sectors of the converted VHD. You will find a protective MBR (a single partition entry of type `0xEE`, which is GPT's way of telling old tools "this whole disk is taken, hands off"), and the literal string `EFI PART` sitting at LBA 1, which is the GPT header signature. A BIOS VM finds the disk, looks at the MBR for boot code to run, finds only the protective stub, and has nothing to execute. Hence the polite hang.
 
-The fix is two lines. Build the VM from the "Other install media" template (so XCP-ng does not impose an OS-specific default), then flip it to UEFI and turn off Secure Boot, because the eval image is not set up for a signed boot chain:
+The fix is two lines. Build the VM from the "Other install media" template (so XCP-ng does not impose an OS-specific default), then flip it to UEFI and turn off link:https://en.wikipedia.org/wiki/UEFI#Secure_Boot[Secure Boot], because the eval image is not set up for a signed boot chain:
 
 [source,bash]
 ----
@@ -119,7 +123,7 @@ xe vm-param-set uuid=<VM> platform:secureboot=false
 
 Attach the imported VDI as the bootable disk, give the VM a network interface, set the boot order to disk, and start it.
 
-First boot runs the usual sysprep "Getting ready" dance and reboots itself once partway through, while Windows specializes the image for this particular VM. Be patient here. The emulated Cirrus VGA that XCP-ng gives a fresh HVM guest is slow, so "Getting ready" can take close to ten minutes and it looks identical to a hang. If you want reassurance that it is actually working and not stuck, check `xentop` on the host: a VM that is busy specializing is burning CPU, a hung one is not. After the reboot you land at the out-of-box screens. The US region and keyboard defaults are fine to accept, then you set the built-in Administrator password, and you are at a Windows desktop.
+First boot runs the usual sysprep "Getting ready" dance and reboots itself once partway through, while Windows specializes the image for this particular VM. Be patient here. The emulated Cirrus VGA that XCP-ng gives a fresh link:https://en.wikipedia.org/wiki/Hardware-assisted_virtualization[HVM] guest is slow, so "Getting ready" can take close to ten minutes and it looks identical to a hang. If you want reassurance that it is actually working and not stuck, check `xentop` on the host: a VM that is busy specializing is burning CPU, a hung one is not. After the reboot you land at the out-of-box screens. The US region and keyboard defaults are fine to accept, then you set the built-in Administrator password, and you are at a Windows desktop.
 
 image::/assets/images/2026/06/29/03-getting-ready-uefi-boot.png["Windows boot screen with the four-square logo and a spinner above the text Getting ready."]
 
@@ -144,7 +148,7 @@ _Figure 5. The emulated network card has an inbox driver, so the VM pulls a DHCP
 
 == Step 5: the guest tools, and the one real trap
 
-The emulated NIC works, but you still want the XCP-ng guest tools. They bring the paravirtual network and storage drivers (`xennet` and `xenvbd`), which are faster than the emulated devices, and the management agent that reports the guest's IP back to the host so XAPI and Xen Orchestra can show you where the VM actually is on the network. Installing them is where the one true footgun of this whole exercise lives, so slow down for this part.
+The emulated NIC works, but you still want the XCP-ng guest tools. They bring the paravirtual network and storage drivers (`xennet` and `xenvbd`), which are faster than the emulated devices, and the management agent that reports the guest's IP back to the host so link:https://xapi-project.github.io/[XAPI] and Xen Orchestra can show you where the VM actually is on the network. Installing them is where the one true footgun of this whole exercise lives, so slow down for this part.
 
 There is a VM setting called `has-vendor-device`. The name sounds like exactly what you would want on: something for the PV drivers to bind to. That intuition is precisely wrong. I turned it on, rebooted with the network up, and Windows Update quietly reached out and installed *Citrix's* PV drivers underneath me, without asking. Because `has-vendor-device=true` is not "let the PV drivers bind". It _is_ the "Manage Citrix PV drivers via Windows Update" feature. Flip it on, give Windows a network, and Update treats that as permission to manage your Xen drivers for you.
 
@@ -170,4 +174,4 @@ _Figure 6. The payoff: a full Windows Server desktop on XCP-ng, and the installe
 
 I keep the converted VHD in a small image library now, with a plain text file next to it listing these exact steps. Next time I need a throwaway Windows on XCP-ng, it is a copy and an import away, and the hard part is already done.
 
-As for why I wanted a Windows VM on XCP-ng in the first place, that involves an Intel iGPU, GPU passthrough, and a hardware video encoder that only exists on the Windows side of the fence. But that is a story for the next post.
+As for why I wanted a Windows VM on XCP-ng in the first place, that involves an Intel iGPU, link:https://en.wikipedia.org/wiki/VGA_passthrough[GPU passthrough], and a hardware video encoder that only exists on the Windows side of the fence. But that is a story for the next post.
