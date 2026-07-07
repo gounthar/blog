@@ -7,10 +7,6 @@ timeZone = "Europe/Paris"
 enableRobotsTXT = true
 enableEmoji = true
 
-# Google Analytics (legacy UA — migrate to GA4 when ready)
-[services.googleAnalytics]
-  ID = "UA-46278016-1"
-
 [permalinks]
   [permalinks.page]
     posts = "/:year/:month/:day/:title/"
