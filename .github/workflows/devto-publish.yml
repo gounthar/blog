@@ -46,6 +46,20 @@ jobs:
           DEVTO_POSTS_DIR: ${{ github.workspace }}/content/posts
         run: python3 scripts/devto-crosspost.py
 
+      - name: Preserve IDs from any open ID-map PR
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        run: |
+          # A prior run may have proposed IDs on chore/devto-ids-update that are
+          # not on main yet. Merge them in so this run (checked out from main)
+          # does not drop them; current values win on any overlap.
+          if git fetch origin chore/devto-ids-update; then
+            git show origin/chore/devto-ids-update:scripts/devto-ids.json \
+              > /tmp/prev-devto-ids.json
+            jq -s '.[0] * .[1]' /tmp/prev-devto-ids.json \
+              scripts/devto-ids.json > /tmp/merged-devto-ids.json
+            mv /tmp/merged-devto-ids.json scripts/devto-ids.json
+          fi
+
       - name: Open PR for updated ID map
         if: ${{ !cancelled() && github.event_name == 'push' }}
         uses: peter-evans/create-pull-request@v7
