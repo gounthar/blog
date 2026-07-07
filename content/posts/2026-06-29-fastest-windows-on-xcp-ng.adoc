@@ -113,7 +113,7 @@ _Figure 2. The BIOS VM finds the disk and reports "Boot device: Hard Disk, succe
 
 The image is not Generation 1. For build 26100 it is link:https://en.wikipedia.org/wiki/GUID_Partition_Table[GPT] and UEFI, and you can prove it to yourself in about thirty seconds by looking at the first sectors of the converted VHD. You will find a protective MBR (a single partition entry of type `0xEE`, which is GPT's way of telling old tools "this whole disk is taken, hands off"), and the literal string `EFI PART` sitting at LBA 1, which is the GPT header signature. A BIOS VM finds the disk, looks at the MBR for boot code to run, finds only the protective stub, and has nothing to execute. Hence the polite hang.
 
-The fix is two lines. Build the VM from the "Other install media" template (so XCP-ng does not impose an OS-specific default), then flip it to UEFI and turn off link:https://en.wikipedia.org/wiki/UEFI#Secure_Boot[Secure Boot], because the eval image is not set up for a signed boot chain:
+The fix is two lines. Build the VM from the "Other install media" template (so XCP-ng does not impose an OS-specific default), then flip it to UEFI and turn off link:https://en.wikipedia.org/wiki/UEFI#Secure_Boot[Secure Boot], because this pool doesn't have Microsoft's UEFI Secure Boot certificates provisioned (via `secureboot-certs install`), and without them a Secure Boot guest has nothing to validate its signed bootloader against:
 
 [source,bash]
 ----
