@@ -1025,7 +1025,7 @@ You are free to use, modify, and distribute the code examples under either licen
 
 The cagent software itself is licensed under the Apache License 2.0. See the link:https://github.com/docker/cagent/blob/main/LICENSE[upstream repository] for details.
 
-------------------------------------------------------------------------
+'''
 
 _This work is part of the ongoing effort to bring Docker and modern development tools to RISC-V64 architecture. All code and packaging materials are available under open source licenses._
 
