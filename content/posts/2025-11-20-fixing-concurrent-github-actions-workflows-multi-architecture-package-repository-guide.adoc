@@ -864,10 +864,8 @@ Here's an example of the new APT installation section:
 [source,markdown]
 ----
 ==== Debian/Ubuntu (APT)
-----
 
-[source,bash]
-----
+```bash
 # Import GPG key
 curl -fsSL https://github.com/gounthar/docker-for-riscv64/releases/download/gpg-key/gpg-public-key.asc | \
   sudo gpg --dearmor -o /usr/share/keyrings/openscad-archive-keyring.gpg
@@ -879,12 +877,13 @@ echo "deb [signed-by=/usr/share/keyrings/openscad-archive-keyring.gpg] https://g
 # Update and install
 sudo apt-get update
 sudo apt-get install openscad
+```
+
+**Supported Distributions:**
+
+- Debian Trixie (13) and newer
+- Ubuntu 24.04 LTS and newer
 ----
-
-_Supported Distributions:_
-
-* Debian Trixie (13) and newer
-* Ubuntu 24.04 LTS and newer
 
 This gives users a complete, copy-paste-ready installation experience with clear version requirements.
 
