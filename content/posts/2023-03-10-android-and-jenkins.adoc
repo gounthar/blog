@@ -96,32 +96,32 @@ SSH daemon logs to Android system log, you can view them by running `logcat -s '
 Password authentication is enabled by default. This will allow you to get started with it much easier. Before proceeding, make sure that you understand that password authentication is less secure than a pubkey-based one.
 
 . Ensure that everything is up-to-date and package `openssh` is installed:
-
-    [source,bash]
++
+[source,bash]
 ----
-    pkg upgradepkg install openssh
-    
-----   
+pkg upgrade
+pkg install openssh
+----
++
+Please note that `$PREFIX` is a variable that points to the Termux installation directory. It is usually `/data/data/com.termux/files`.
 
-    Please note that `$PREFIX` is a variable that points to the Termux installation directory. It is usually `/data/data/com.termux/files`.
 . Password authentication is enabled by default in the configuration file. But you can still review it at (`$PREFIX/etc/ssh/sshd_config`), it should be like this:
++
+----
+PrintMotd yes
+PasswordAuthentication yes
+Subsystem sftp /data/data/com.termux/files/usr/libexec/sftp-server
+----
++
+If it's not looking like this, you will have to edit this file. Note that `vi` is not installed by default, but `nano` is. You can use it to edit the file.
 
-    ----
-    PrintMotd yes
-    PasswordAuthentication yes
-    Subsystem sftp /data/data/com.termux/files/usr/libexec/sftp-server 
-    
-----  
-
-    If it's not looking like this, you will have to edit this file. Note that `vi` is not installed by default, but `nano` is. You can use it to edit the file.
 . Set a new password. Execute command `passwd`. While the program allows a minimal password length of 1 character, the recommended password length is more than 8 to 10 characters. Passwords are not printed on the console.
-
-    ----
-    $ passwd New password: 
-    Retype new password: 
-    New password was successfully set.
-    
-----   
++
+----
+$ passwd New password:
+Retype new password:
+New password was successfully set.
+----
 
 === Setting up public key authentication
 
@@ -139,68 +139,58 @@ Alternatively, you can also find your IP address within Termux and type the foll
 . If you do not have ssh keys, you can generate them. In this example, we will generate an `RSA` key. On the PC, execute this command: `ssh-keygen -t rsa -b 2048 -f id_rsa` (replace `id_rsa` with the name of your key. For me it would be `ssh_key_for_jenkins_agent_2023-03-10`). \    
 The command shown above generates a private RSA key with a 2048-bit key length and saves it to the file `id_rsa`. In the same directory, you can find a file `id_rsa.pub` – it is a public key. \
 For me, the command was:
-
-    ```bash  
-    ssh-keygen -t rsa -b 2048 -f ssh_key_for_jenkins_agent_2023-03-10
-    Generating public/private rsa key pair.
-    Enter passphrase (empty for no passphrase):  
-    Enter same passphrase again:
-    Your identification has been saved in ssh_key_for_jenkins_agent_2023-03-10
-    Your public key has been saved in ssh_key_for_jenkins_agent_2023-03-10.pub
-    The key fingerprint is:SHA256:yoykbWyCHuqrANFBkO41vuXMC7kLhsVfe8caLWQEUqk user@PC
-    The key's randomart image is:
-    +---[RSA 2048]----+  
-[cols="1", options="header"]
-|===
++
+----
+ssh-keygen -t rsa -b 2048 -f ssh_key_for_jenkins_agent_2023-03-10
+Generating public/private rsa key pair.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in ssh_key_for_jenkins_agent_2023-03-10
+Your public key has been saved in ssh_key_for_jenkins_agent_2023-03-10.pub
+The key fingerprint is:SHA256:yoykbWyCHuqrANFBkO41vuXMC7kLhsVfe8caLWQEUqk user@PC
+The key's randomart image is:
++---[RSA 2048]----+
 | .+o ..o.
-
 | .. . ...
-
 | o .  .  .
-
 | + oE  .
-
 | o = o . S
-
 | o+ B.* = o
-
 | ++oo& = + +
-
 | = o=o+ . =
-
 | =+.o... .
++----[SHA256]-----+
+----
++
+The key was generated in the current directory, not in `$HOME/.ssh`. I tend to move the generated key in that `$HOME/.ssh` directory (`mv ssh_key_for_jenkins_agent_2023-03-10* ~/.ssh` for me). I then change the directory to `$HOME/.ssh` (`cd ~/.ssh`) and change the permissions of the key (`chmod 600 ssh_key_for_jenkins_agent_2023-03-10`).
+Important note: 2048 bit is the minimal key length that is considered safe. You can use higher values, but do not use higher than 4096 as the remote server may not support that big of a key.
 
-|===
-    +----[SHA256]-----+  
-    ```  
-
-    The key was generated in the current directory, not in `$HOME/.ssh`. I tend to move the generated key in that `$HOME/.ssh` directory (`mv ssh_key_for_jenkins_agent_2023-03-10* ~/.ssh` for me). I then change the directory to `$HOME/.ssh` (`cd ~/.ssh`) and change the permissions of the key (`chmod 600 ssh_key_for_jenkins_agent_2023-03-10`). \
-    Important note: 2048 bit is the minimal key length that is considered safe. You can use higher values, but do not use higher than 4096 as the remote server may not support that big of a key.
 . Copy the key to the remote machine (your Jenkins agent wannabee running Termux). Password authentication has to be enabled to install a public key on the remote machine.
-   Now do: `ssh-copy-id -p 8022 -i id_rsa IP_ADDRESS` (replace `id_rsa` with the name of your key and `IP_ADDRESS` with the IP address of your Android machine). \
-    \
-   Alternatively, you can manually copy the content inside `id_rsa.pub` (public key) which is already on PC and looks like `ssh-rsa <A LOT OF RANDOM STRINGS> user@host` and paste it to the Termux file `$HOME/.ssh/authorized_keys` (remote machine). \
-   Remember you would have first to connect through `ssh user@IP_ADDRESS -p 8022` (replace `IP_ADDRESS` with the IP address of your Android machine) so you can copy the content of the public key using any text editor available on PC and paste it inside an ssh session handled by Termux. \
-   What looks strange to me is that `user` could be just about anything. I tried to log in without supplying a user (which means I was using my PC username) and it worked. I also tried to log in with a different username, and it worked too. When issuing the `whoami` command inside Termux, it shows the username of the Termux user, which is `u0_a504` in my case. I don't know if this is a bug or a feature. \
- \
-    If everything went fine, you will see a message like this one:
-
-    [source,bash]
++
+Now do: `ssh-copy-id -p 8022 -i id_rsa IP_ADDRESS` (replace `id_rsa` with the name of your key and `IP_ADDRESS` with the IP address of your Android machine).
++
+Alternatively, you can manually copy the content inside `id_rsa.pub` (public key) which is already on PC and looks like `ssh-rsa <A LOT OF RANDOM STRINGS> user@host` and paste it to the Termux file `$HOME/.ssh/authorized_keys` (remote machine).
++
+Remember you would have first to connect through `ssh user@IP_ADDRESS -p 8022` (replace `IP_ADDRESS` with the IP address of your Android machine) so you can copy the content of the public key using any text editor available on PC and paste it inside an ssh session handled by Termux.
++
+What looks strange to me is that `user` could be just about anything. I tried to log in without supplying a user (which means I was using my PC username) and it worked. I also tried to log in with a different username, and it worked too. When issuing the `whoami` command inside Termux, it shows the username of the Termux user, which is `u0_a504` in my case. I don't know if this is a bug or a feature.
++
+If everything went fine, you will see a message like this one:
++
 ----
-    Number of key(s) added: 1
-    
+Number of key(s) added: 1
 ----
-
-    If your system has an ssh-agent, you should now link:https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=linux#adding-your-ssh-key-to-the-ssh-agent[add your newly generated key to the agent].  
-    Now try logging into the machine, with: `ssh -p '8022' 'IP_ADDRESS'` (replace `IP_ADDRESS` with the IP address of your Android machine) and check to make sure that only the key(s) you wanted were added.
-
-    If you don't have an agent running, you will have to use a slightly different command: `ssh -i id_rsa -p '8022' 'IP_ADDRESS'` (replace `id_rsa` with the name of your key and `IP_ADDRESS` with the IP address of your Android machine).  
-    That would give for me:
-
-    ```bash  
-    ssh -i ssh_key_for_jenkins_agent_2023-03-10 -p 8022 192.168.1.xx  
-    Welcome to Termux!
-    ```  
++
+If your system has an ssh-agent, you should now link:https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=linux#adding-your-ssh-key-to-the-ssh-agent[add your newly generated key to the agent].
+Now try logging into the machine, with: `ssh -p '8022' 'IP_ADDRESS'` (replace `IP_ADDRESS` with the IP address of your Android machine) and check to make sure that only the key(s) you wanted were added.
++
+If you don't have an agent running, you will have to use a slightly different command: `ssh -i id_rsa -p '8022' 'IP_ADDRESS'` (replace `id_rsa` with the name of your key and `IP_ADDRESS` with the IP address of your Android machine).
+That would give for me:
++
+----
+ssh -i ssh_key_for_jenkins_agent_2023-03-10 -p 8022 192.168.1.xx
+Welcome to Termux!
+----
 
 . From this point password authentication can be disabled. Edit with nano the file `$PREFIX/etc/ssh/sshd_config` and replace the line beginning with `PasswordAuthentication` with `PasswordAuthentication no`. \
 Back to the Termux app, execute the command `pkill sshd && sshd` to restart the `sshd` server with the updated configuration file. Of course, if you were to do that from your PC, you would be disconnected and the ssh server would not be restarted.
@@ -213,17 +203,19 @@ We all know that Jenkins is written in Java. We also know Android apps are writt
 I'm afraid we can't. The virtual machine that runs Android apps is not the same as the one that runs on your PC. We'll detail later on the main differences between the two.   
 The Android virtual machine (called dalvik) is available on Termux, but it is not capable of executing our agent.jar file. The `java` command is not available yet.
 
-```bash  
+[source,bash]
+----
 $ dalvikvm -showversion
 ART version 2.1.0 arm64
 $ java --version
 bash: /data/data/com.termux/files/usr/bin/java: No such file or directory
-```  
+----
 
 For the time being, let's just assume that we need to install Java on Termux.  
 Let's find out which java versions are available on Termux:
 
-```bash  
+[source,bash]
+----
 pkg update && pkg search openjdk
 Checking availability of current mirror:
 [*] https://packages-cf.termux.dev/apt/termux-main: ok  
@@ -235,22 +227,24 @@ openjdk-17-source/stable 17.0-25 all
   Source files for openjdk-17  
 openjdk-17-x/stable 17.0-25 aarch64
   Portion of openjdk-17 requiring X11 functionality
-```  
+----
 
 Nice. Jenkins supports Java 17 since link:https://www.jenkins.io/changelog-old/#v2.355[2.355] and link:https://www.jenkins.io/changelog-stable/#v2.346.1[2.346.1 LTS], so let's go with OpenJDK 17.
 
-```bash  
+[source,bash]
+----
 pkg install openjdk-17
-```  
+----
 
 Now the `java` command is available:
 
-```bash  
+[source,bash]
+----
 java --version
 openjdk 17-internal 2021-09-14
 OpenJDK Runtime Environment (build 17-internal+0-adhoc..src)  
 OpenJDK 64-Bit Server VM (build 17-internal+0-adhoc..src, mixed mode)
-```  
+----
 
 == Creating a Jenkins ssh agent
 
@@ -286,7 +280,8 @@ The only changes to the documentation I have made are:
 * I have used the `Android` label to make sure the job is run on the Android agent
 * I have used the `uname -a` command instead of the `echo $NODE_NAME` command
 
-```bash  
+[source,bash]
+----
 Started by user admin
 Running as SYSTEM[EnvInject] - Loading node environment variables.  
 Building remotely on Android Phone (aarch64 aarch64-unknown+check_lsb_release_installed aarch64-unknown+check_lsb_release_installed-unknown+check_lsb_release_installed android unknown+check_lsb_release_installed-unknown+check_lsb_release_installed unknown+check_lsb_release_installed) in workspace /data/data/com.termux/files/home/workspace/Android First Job
@@ -294,22 +289,24 @@ Building remotely on Android Phone (aarch64 aarch64-unknown+check_lsb_release_in
 + uname -a
 Linux localhost 4.4.192-perf+ #1 SMP PREEMPT Fri Dec 10 13:53:37 WIB 2021 aarch64 Android
 Finished: SUCCESS
-```  
+----
 
 We now have a working Jenkins agent running on Android thanks to Termux. Now what? Of course, we will be limited to the commands and packages that are link:https://wiki.termux.com/wiki/Package_Management[available] on Termux.   
 For example, I can't see `gcc` in the list of available packages, which could be troublesome.
 
-```bash  
+[source,bash]
+----
 pkg search gcc
 Checking availability of current mirror:
 [*] https://termux.astra.in.ua/apt/termux-main: ok  
 Sorting... Done
 Full Text Search... Done
-```  
+----
 
 No gcc? You're right, no gcc in the official Termux repository, but the Termux community comes to the rescue with some repositories that provide additional packages, like link:https://github.com/its-pointless/its-pointless.github.io[gcc]. After installing the repository, we can install gcc.
 
-```bash  
+[source,bash]
+----
 pkg search gcc
 Checking availability of current mirror:
 [*] https://termux.astra.in.ua/apt/termux-main: ok  
@@ -327,7 +324,7 @@ libgomp-7/termux 7.4.0-2 aarch64
   openmp library for gcc  
 libgomp-8/termux 8.3.0-3 aarch64
   openmp library for gcc-8
-```  
+----
 
 As you can see, we have a few gcc versions to try out. But... What if we need gcc 10 for example? I guess we would have to link:https://bruno.verachten.fr/2019/11/07/compile-gcc9-on-rk3399/[compile it ourselves] like in the good old days. Problem solved for gcc, but what about other packages?  
 We will somehow be limited by the availability of the packages on Termux. What if we could work around that limitation?   
