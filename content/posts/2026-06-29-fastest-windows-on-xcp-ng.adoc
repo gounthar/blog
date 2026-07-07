@@ -78,11 +78,11 @@ The `-O vpc` is the VHD output format (the name is a leftover from Virtual PC), 
 
 Copy the converted VHD over to the host. It does not need to live on dom0's root partition, which is usually tiny: put it on the storage repository mount, which has the room. Then create a VDI sized to match the disk's virtual size exactly, and import the file into it.
 
-That virtual size is the precise byte count, not a rounded "64 GB". A 64 GiB disk is `68719476736` bytes, and that is the number to give `vdi-create`:
+That virtual size is not the round 64 GiB you would expect, and this bit me. When `qemu-img` writes a dynamic VHD it rounds the virtual size up to the nearest CHS (cylinder, head, sector) geometry boundary, so a nominal 64 GiB disk comes out as `68720517120` bytes, not the arithmetic `68719476736`. The VDI has to match the VHD exactly, or be larger, or `vdi-import` rejects it for being too small. So give `vdi-create` the rounded number that `qemu-img` actually produced:
 
 [source,bash]
 ----
-xe vdi-create sr-uuid=<SR> name-label=ws2025 virtual-size=68719476736 type=user
+xe vdi-create sr-uuid=<SR> name-label=ws2025 virtual-size=68720517120 type=user
 xe vdi-import uuid=<VDI> filename=/run/sr-mount/<SR>/ws2025.vhd format=vhd
 ----
 
