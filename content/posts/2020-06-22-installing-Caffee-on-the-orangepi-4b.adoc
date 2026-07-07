@@ -255,6 +255,7 @@ solver_mode: CPU
 
 === Finally, run this example:
 
+----
 root@OrangePi:~/caffe# time sh examples/mnist/train_lenet.sh
 I0110 06:28:06.117972 25078 caffe.cpp:197] Use CPU.
 I0110 06:28:06.118988 25078 solver.cpp:45] Initializing solver from parameters:
@@ -290,6 +291,8 @@ I0110 07:25:55.010793 25078 caffe.cpp:250] Optimization Done.
 real 57m48.984s
 user 58m6.479s
 sys 0m1.977s
+----
+
 ⑦Operation conclusion
 According to the above results, the running time of the CPU is about 58 minutes, with
 an accuracy of about 99%.

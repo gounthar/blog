@@ -97,8 +97,7 @@ image::/assets/images/2021/09/01/libltc11-bullseye-armhf-files.png[libltc11-bull
 Yes, it's a library and not a standalone program. You can now develop something that will use this library, or ... install other tools that give you the opportunity to generate SMTPE encoded in sounds or sound files.
 One of them is link:https://github.com/x42/ltc-tools[ltc-tools].
 
-Installing ltc-tools
------------------------------------------------------------------
+== Installing ltc-tools
 
 Unfortunately this time, this tool hasn't made yet its way to the official Debian repositories, so you'll have to build it by yourself.
 
