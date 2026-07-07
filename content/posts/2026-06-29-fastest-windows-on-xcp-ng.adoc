@@ -138,6 +138,8 @@ One pleasant surprise: the network just works, before you have installed a singl
 [source,powershell]
 ----
 Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
 ----
 
 After the from-scratch ordeal, where every keystroke went through a flaky console bridge, having a plain SSH prompt into Windows felt like a small miracle.
