@@ -1,5 +1,5 @@
 baseURL = "https://bruno.verachten.fr"
-languageCode = "en"
+locale = "en"
 title = "Bruno Verachten"
 theme = "ascii-press"
 summaryLength = 30
