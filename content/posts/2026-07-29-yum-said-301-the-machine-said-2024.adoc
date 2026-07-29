@@ -50,7 +50,7 @@ The host did not know what day it was.
 
 == The redirect is real, and it is completely fine
 
-The first thing worth doing is proving the mirrors innocent, since that is where the message points. Following the chain by hand with link:https://en.wikipedia.org/wiki/CURL[curl]:
+The first thing worth doing is proving the mirrors innocent, since that is where the message points. Following the chain by hand with link:https://en.wikipedia.org/wiki/CURL[curl], from my laptop rather than from the host that was failing, which matters more than it sounds like it does and which I will come back to:
 
 [source,bash]
 ----
@@ -112,6 +112,8 @@ Sun Sep  8 10:49:04 CEST 2024
 September 2024. Twenty two months before the certificate it was being asked to trust had even been issued. The other host, checked in the same minute, was on the correct date with chrony synced to within 46 microseconds of its upstream.
 
 One variable, and it was the one nobody thinks to look at.
+
+This is also why that clean curl chain earlier came off my laptop. Run the same `curl -sIL` on the host with the 2024 clock and you do not get 301, 302, 200 and a tidy XML file. curl follows the 301 to HTTPS exactly as before, hits the same handshake yum was hitting, and stops there with `SSL certificate problem: certificate is not yet valid`. Which is, in fairness, the truth, and rather better than what yum told me. If you are following along on the broken box and wondering why your output looks nothing like mine, that is why, and you can take it as a free confirmation of the diagnosis.
 
 And a machine you have recently installed is exactly the machine most likely to be confidently wrong about the year. A dead link:https://en.wikipedia.org/wiki/Real-time_clock[RTC] battery, a board that came back from a power cut on its factory default date, an isolated segment where link:https://en.wikipedia.org/wiki/Network_Time_Protocol[NTP] never resolved. Nothing stops you, and everything else works.
 
@@ -211,21 +213,24 @@ The whole diagnostic is one command, and I want that on the record because of ho
 date
 ----
 
-If the date is wrong:
+If the date is wrong, the next command decides which of two quite different problems you have:
 
 [source,bash]
 ----
-systemctl status chronyd
 chronyc sources
+----
+
+If that lists sources, the daemon knows where to get the time and has simply not applied it yet, and you can step the clock straight away:
+
+[source,bash]
+----
 chronyc makestep
 date
 ----
 
-Or set NTP from `xsconsole`, which is the same thing with fewer chances to fat finger it.
-
 `makestep` is the step people skip, and it matters. chrony corrects offsets by slewing the clock gently rather than yanking it, which is the right behaviour when you are drifting by milliseconds and completely useless when you are out by two years. You can sit and watch a correctly configured host stay broken indefinitely without it.
 
-If `chronyc sources` came back empty, put the servers into `/etc/chrony.conf` before you restart anything, otherwise you will fix the clock now and quietly lose it again at the next boot:
+If `chronyc sources` came back with `Number of sources = 0`, which is the case this whole post is about, then `makestep` on its own will do exactly nothing and tell you it succeeded. There is no measured offset for it to step to, because there is nothing measuring. You have to give the daemon somewhere to look first. Put the servers into `/etc/chrony.conf`:
 
 ----
 server 0.centos.pool.ntp.org iburst
@@ -234,7 +239,21 @@ server 2.centos.pool.ntp.org iburst
 server 3.centos.pool.ntp.org iburst
 ----
 
-On an isolated network, point those at whatever local time source you have.
+On an isolated network, point those at whatever local time source you have. Then restart the daemon and check that the sources actually came up before you trust anything downstream of them:
+
+[source,bash]
+----
+systemctl restart chronyd
+chronyc sources
+chronyc makestep
+date
+----
+
+The stock config carries `makestep 1.0 3`, so once there are real sources chronyd will usually step the clock itself within its first few updates and the explicit `makestep` is belt to that braces. Running it costs nothing and saves you staring at `date` wondering how long to wait.
+
+Editing the file rather than just stepping the clock is the part worth not skipping. Fix the time without fixing the config and you have fixed it precisely until the next reboot, at which point the host quietly goes back to being wrong and you get to have this afternoon all over again.
+
+Or set NTP from `xsconsole`, which does the same thing with fewer chances to fat finger it.
 
 Then:
 
@@ -242,9 +261,12 @@ Then:
 ----
 yum clean all
 yum check-update
+yum update
 ----
 
-On my host that came straight back with the full 28 package July batch and exit code 0, with the repository file exactly as it shipped. Total elapsed time once I actually knew the cause: about a minute.
+On my host `check-update` came straight back with the full 28 package July batch, and `yum update` took it, with the repository file exactly as it shipped. Total elapsed time once I actually knew the cause: about a minute.
+
+Small thing worth knowing if you are scripting any of this, and pleasingly on theme for a post about misleading exit status: `yum check-update` returns 100 when there are updates waiting, not 0. Zero means there is nothing to do. Treat 100 as an error and you will have built yourself a second thing that reports the wrong state confidently.
 
 Which brings me to the thing I nearly did, and you probably will too. If you pinned a mirror by hand while you were flailing around, undo it and put `http://mirrors.xcp-ng.org` back. Hand pinning opts you out of the geo selection you saw in those duplicate link headers earlier, and much more importantly it opts you out of failover on the day that one mirror has a bad afternoon. It is exactly the sort of "temporary" edit that is still sitting there two years later, on the afternoon it finally costs you something.
 
