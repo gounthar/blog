@@ -1,0 +1,259 @@
+---
+author: Bruno Verachten
+categories:
+- Infrastructure
+date: 2026-07-29 10:00:00 +0200
+description: 'A yum update on my home lab XCP-ng host died on HTTPS Error 301 - Moved
+  Permanently. The mirrors were fine and the redirect was fine. The host thought it
+  was September 2024, so every certificate it was offered was not yet valid.'
+excerpt: One host refused the July update batch with a redirect error, another host
+  on the same LAN took the exact same batch without a murmur. The difference was two
+  years of wall clock, and a time daemon that was running perfectly with zero sources
+  configured.
+featured: false
+hidden: false
+image: assets/images/2026/07/29/00-header-rusted-clock.jpg
+tags:
+- chrony
+- debugging
+- homelab
+- ntp
+- tls
+- troubleshooting
+- xcp-ng
+- xen
+- yum
+title: 'yum said 301, the machine said 2024'
+toc: true
+---
+
+image::/assets/images/2026/07/29/00-header-rusted-clock.jpg["A rusted alarm clock propped against a peeling wall, hands still on the dial, long since stopped"]
+
+_Photo by Arash on link:https://unsplash.com/photos/an-old-rusty-clock-sitting-on-the-ground-D58BEHSeX64[Unsplash]._
+
+I sat down to put the July batch of updates on the link:https://en.wikipedia.org/wiki/XCP-ng[XCP-ng] 8.3 host in my home lab, which is normally a thirty second job with a coffee in the other hand, and got this instead:
+
+----
+http://mirrors.xcp-ng.org/8/8.3/base/x86_64/repodata/repomd.xml: [Errno 14] HTTPS Error 301 - Moved Permanently
+Trying other mirror.
+...
+failure: repodata/repomd.xml from xcp-ng-base: [Errno 256] No more mirrors to try.
+----
+
+Read that as an operator and there is exactly one conclusion on offer. The mirrors moved, the repo files are stale, someone upstream forgot to update something. It is the only story that message tells, and it tells it with real confidence.
+
+So I did what the message told me to do. I opened `/etc/yum.repos.d/xcp-ng.repo` and stared at the URLs. I ran `yum clean all`. I ran `rm -rf /var/cache/yum` for good measure. I was one text editor away from pinning a mirror by hand and bypassing whatever was broken instead of understanding it.
+
+None of it helped, and it cost me the better part of an afternoon, because every single word of that error message is about the wrong thing.
+
+The host did not know what day it was.
+
+== The redirect is real, and it is completely fine
+
+The first thing worth doing is proving the mirrors innocent, since that is where the message points. Following the chain by hand with link:https://en.wikipedia.org/wiki/CURL[curl]:
+
+[source,bash]
+----
+curl -sIL http://mirrors.xcp-ng.org/8/8.3/base/x86_64/repodata/repomd.xml
+----
+
+----
+http://mirrors.xcp-ng.org/...          301 -> https://mirrors.xcp-ng.org/...
+https://mirrors.xcp-ng.org/...         302 -> https://xcpng-mirror.as208069.net/...
+https://xcpng-mirror.as208069.net/...  200, 3117 bytes, application/xml
+----
+
+Two hops and then the file. The first hop is the plain link:https://en.wikipedia.org/wiki/HTTP_301[301] that pushes you from HTTP to HTTPS, which every sane public mirror does now. The second is link:https://github.com/etix/mirrorbits[MirrorBits] picking a mirror near you, and you can watch it think out loud in the headers it emits on the way past:
+
+----
+link: <https://xcpng.reloumirrors.net/...>; rel=duplicate; pri=1; geo=fr
+link: <https://rg2-xcpng-mirror.reptigo.fr/...>; rel=duplicate; pri=2; geo=fr
+link: <https://xcpng-mirror.as208069.net/...>; rel=duplicate; pri=3; geo=fr
+----
+
+That is a mirror network doing precisely what it is designed to do, ranking candidates by priority and by my geography, and handing me one. `curl -L` walks the whole thing and comes out the other side with a 200 and a valid XML file. Nothing moved. Nothing is down.
+
+Which means the 301 in that error message is not a fault report at all. It is a description of normal, healthy infrastructure, printed at the exact moment something completely different fell over.
+
+== Two boxes, one command, one variable
+
+There is a much cheaper version of that check, and if you have a second machine you should run it before you touch anything else. I have another host on the same LAN, same switch, same egress, same repo files. I ran the same update there.
+
+----
+Upgrade  28 Packages
+Total download size: 103 M
+----
+
+`xcp-ng-release 8.3.0-38`, `xen-hypervisor 4.17.6-9.3.1.xcpng8.3`, the whole `26.1.11-1.3` XAPI stack, straight down from `xcp-ng-updates` without a murmur.
+
+One command, and in one go I had eliminated a mirror outage, a bad repo file shipped upstream, a broken batch, DNS, my router, and my ISP. All of it, gone from the list. Whatever was wrong lived on the one host, and I had wasted my afternoon looking outward when the control test was sitting there in the next room.
+
+I keep relearning that lesson and I keep being surprised by it, so I am writing it down this time.
+
+== The certificate had a start date
+
+Once you know the fault is local, the next question is what the failing host does differently from the working one, and the answer turned out to be about link:https://en.wikipedia.org/wiki/Transport_Layer_Security[TLS].
+
+The mirrors use link:https://en.wikipedia.org/wiki/Let%27s_Encrypt[Let's Encrypt] certificates on a normal ninety day cycle. `mirrors.xcp-ng.org` and `updates.xcp-ng.org` were both valid from 2026-05-31 to 2026-08-29, and the mirror I was actually landing on, `xcpng-mirror.as208069.net`, from 2026-07-01 to 2026-09-29. All of them comfortably current.
+
+Here is the bit that I think trips everybody, including me. An link:https://en.wikipedia.org/wiki/X.509[X.509 certificate] does not just have an expiry date. It has a `notBefore` as well as a `notAfter`, and a host that believes it is living before that `notBefore` will refuse the handshake with `certificate is not yet valid`. That is a sentence most of us have simply never had to read, because in fifteen years of operations the failure has always run the other way round. Certificates expire. They do not un-expire.
+
+Then I ran the least imaginative command available on the failing host:
+
+[source,bash]
+----
+date
+----
+
+----
+Sun Sep  8 10:49:04 CEST 2024
+----
+
+September 2024. Twenty two months before the certificate it was being asked to trust had even been issued. The other host, checked in the same minute, was on the correct date with chrony synced to within 46 microseconds of its upstream.
+
+One variable, and it was the one nobody thinks to look at.
+
+And a machine you have recently installed is exactly the machine most likely to be confidently wrong about the year. A dead link:https://en.wikipedia.org/wiki/Real-time_clock[RTC] battery, a board that came back from a power cut on its factory default date, an isolated segment where link:https://en.wikipedia.org/wiki/Network_Time_Protocol[NTP] never resolved. Nothing stops you, and everything else works.
+
+== So why does yum lie about it?
+
+Because of two pieces of code in `python-urlgrabber` that were never really meant to meet each other.
+
+yum on link:https://wiki.xenproject.org/wiki/Dom0[dom0] fetches through urlgrabber sitting on top of pycurl. The header callback updates the object's idea of what it is downloading the instant it sees a `Location:` header, which is before anything at all has been attempted at the new address:
+
+[source,python]
+----
+if buf.lower().find(b'location') != -1:
+    location = b':'.join(buf.split(b':')[1:])
+    location = location.strip()
+    self.scheme = urlparse.urlsplit(location)[0]
+    self.url = location
+----
+
+So after that first 301, `self.scheme` is `https`. Perfectly reasonable so far.
+
+Then the transfer fails, and the exception handler goes to compose a message for me:
+
+[source,python]
+----
+code = self.http_code          # getinfo(RESPONSE_CODE), still 301
+errstr = str(e.args[1]) or pyerr2str.get(errcode, '<Unknown>')
+if code and not 200 <= code <= 299:
+    scheme = _bytes_repr(self.scheme)
+    msg = '%s Error %d - %s' % (scheme.upper(), code,
+                                scheme in ('http', 'https')
+                                and responses.get(code) or errstr)
+else:
+    msg = 'curl#%s - "%s"' % (errcode, errstr)
+----
+
+A TLS handshake that fails never gets as far as producing an HTTP response code, so `RESPONSE_CODE` is still sitting at `301` from the hop that succeeded. `scheme` is now `https` because the header callback moved it. The condition holds, the first branch fires, and `errstr` is thrown away without ever being printed.
+
+`errstr` was `SSL certificate problem: certificate is not yet valid`.
+
+What comes out instead is `HTTPS Error 301 - Moved Permanently`, which is the scheme of the hop that failed, the status code of the hop that worked, and the human readable text of neither of them.
+
+That also explains a piece of folklore you will find on the forum, which is that changing the repo URL to `https://` makes yum tell you the truth. It does, and it is worth understanding why, because it is not a fix. Point the repo straight at `https://` and there is no redirect at all, so `RESPONSE_CODE` is 0, the `else` branch runs, and libcurl's own honest message survives intact. Same failure, same host, same second. Different sentence.
+
+The general form of this is worth carrying around in your head, because it is not specific to XCP-ng or to these mirrors at all: *in yum, any transport failure that happens after a redirect is reported as the redirect*. TLS, DNS, connection refused, all of it gets the same treatment. If a yum error names a 3xx, the 3xx is the last thing that went right.
+
+== The best part: the time daemon was working perfectly
+
+I could have stopped at "set NTP", fixed the clock, taken the updates and gone to bed. I am glad I did not, because the interesting part was still underneath, and on this host NTP was already on.
+
+[source,bash]
+----
+systemctl is-active chronyd
+systemctl is-enabled chronyd
+----
+
+----
+active
+enabled
+----
+
+Service running. Service enabled, so it survives reboots. Network fine, DNS fine, egress fine. Every check an operator would actually think to run comes back green, and on that evidence you would confidently conclude that time is not your problem and go and look somewhere else. Which is what I had spent the afternoon doing.
+
+Then:
+
+[source,bash]
+----
+chronyc sources
+----
+
+----
+210 Number of sources = 0
+----
+
+Zero. Here is `/etc/chrony.conf` in its entirety, with the comments stripped out:
+
+----
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+----
+
+There is no `server` line. There is no `pool` line. link:https://en.wikipedia.org/wiki/Chrony[chronyd] had been up for a day and a half, running flawlessly, doing exactly and only what it had been told to do, which was nothing whatsoever.
+
+That is the failure mode worth naming out loud, because it is invisible from every angle except one. A time daemon with no sources is indistinguishable from a healthy time daemon unless you run `chronyc sources`, and nobody runs `chronyc sources` until they already suspect the clock. So the host serenely holds whatever date it was installed with, for as long as you care to leave it, and the first thing that ever tells you about it is a yum error about a redirect.
+
+My best guess at the origin is the installer's time step, where you can either hand it NTP servers or just set the date yourself. Choosing the second produces precisely this file. It is a reasonable thing for an installer to offer and a reasonable thing to pick when you are in a hurry, and the consequence turns up months later wearing a completely unrelated costume.
+
+So the check is not "is NTP running". Running is not the question. The question is `chronyc sources`, and if that says zero, you have found it.
+
+== The fix, which takes a minute
+
+The whole diagnostic is one command, and I want that on the record because of how long it took me to type it:
+
+[source,bash]
+----
+date
+----
+
+If the date is wrong:
+
+[source,bash]
+----
+systemctl status chronyd
+chronyc sources
+chronyc makestep
+date
+----
+
+Or set NTP from `xsconsole`, which is the same thing with fewer chances to fat finger it.
+
+`makestep` is the step people skip, and it matters. chrony corrects offsets by slewing the clock gently rather than yanking it, which is the right behaviour when you are drifting by milliseconds and completely useless when you are out by two years. You can sit and watch a correctly configured host stay broken indefinitely without it.
+
+If `chronyc sources` came back empty, put the servers into `/etc/chrony.conf` before you restart anything, otherwise you will fix the clock now and quietly lose it again at the next boot:
+
+----
+server 0.centos.pool.ntp.org iburst
+server 1.centos.pool.ntp.org iburst
+server 2.centos.pool.ntp.org iburst
+server 3.centos.pool.ntp.org iburst
+----
+
+On an isolated network, point those at whatever local time source you have.
+
+Then:
+
+[source,bash]
+----
+yum clean all
+yum check-update
+----
+
+On my host that came straight back with the full 28 package July batch and exit code 0, with the repository file exactly as it shipped. Total elapsed time once I actually knew the cause: about a minute.
+
+Which brings me to the thing I nearly did, and you probably will too. If you pinned a mirror by hand while you were flailing around, undo it and put `http://mirrors.xcp-ng.org` back. Hand pinning opts you out of the geo selection you saw in those duplicate link headers earlier, and much more importantly it opts you out of failover on the day that one mirror has a bad afternoon. It is exactly the sort of "temporary" edit that is still sitting there two years later, on the afternoon it finally costs you something.
+
+One worry you can put straight back down, because it stopped me for a few minutes before I did the fix. Dragging a host's clock forward by two years does not break the host's own certificate. XAPI issues it with a ten year validity, so a machine installed while it believed it was 2024 is holding one valid until 2034, and correcting the date lands comfortably inside that window. You do not need `xe host-refresh-server-certificate` for this. There is a real pool join certificate failure that looks alarming in a vaguely similar way, but it is a different animal and this is not it.
+
+== Somebody else got there first, in an hour
+
+The best evidence for all of this is not mine, and I want to be clear about that. There is link:https://xcp-ng.org/forum/topic/11558[a forum thread from last November] where the person who hit this worked the whole thing out themselves in under an hour, from the same host inside the same session, and left behind the three observations that make it airtight: the 301 with `http://` in the repo file, the honest `certificate is not yet valid` with `https://`, and then setting NTP and reverting to the original URL and watching it just work. I spent longer than they did and arrived at the same place. There is also link:https://xcp-ng.org/forum/topic/9560[topic 9560], from 2024, which is the same symptom on 8.2 and simply ends, with nobody ever having named the cause.
+
+Somebody suggested on that November thread that this deserved a page in the troubleshooting docs. They were right, and it did not happen at the time, which is more or less what the second thread looks like from the outside. There is a documentation change in review now that adds it under the common problems, next to the existing clock entry, plus a line in the update prerequisites saying the plain thing out loud: getting to the repositories needs a correct clock, and the error you get when you do not have one does not mention clocks. It is a small change and I have no idea yet whether it lands in the shape it is currently in, but it should at least mean that three minutes with a search engine gets you the answer rather than two forum threads and a shrug.
+
+The one line takeaway, because it is the line I wish I had read first: if yum blames a redirect, run `date` before you touch the repo file, and if the clock is wrong run `chronyc sources`, because a time daemon can be running, enabled, and pointed at absolutely nothing.
