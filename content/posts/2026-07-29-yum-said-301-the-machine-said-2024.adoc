@@ -264,7 +264,7 @@ yum check-update
 yum update
 ----
 
-On my host `check-update` came straight back with the full 28 package July batch, and `yum update` took it, with the repository file exactly as it shipped. Total elapsed time once I actually knew the cause: about a minute.
+On my host `check-update` came straight back with the full 28 package July batch, and `yum update` took the lot and exited 0, with the repository file exactly as it shipped. Total elapsed time once I actually knew the cause: about a minute.
 
 Small thing worth knowing if you are scripting any of this, and pleasingly on theme for a post about misleading exit status: `yum check-update` returns 100 when there are updates waiting, not 0. Zero means there is nothing to do. Treat 100 as an error and you will have built yourself a second thing that reports the wrong state confidently.
 
