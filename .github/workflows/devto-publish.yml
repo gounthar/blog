@@ -62,7 +62,7 @@ jobs:
 
       - name: Open PR for updated ID map
         if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           add-paths: scripts/devto-ids.json
           branch: chore/devto-ids-update
