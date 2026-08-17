@@ -9,7 +9,7 @@
 # Hugo releases. The plain image keeps shipping current Hugo Extended; we layer
 # Asciidoctor on top to match the production toolchain. The base tag below is
 # kept current automatically by updatecli (updatecli.d/hugo-image.yaml).
-FROM hugomods/hugo:0.164.0
+FROM hugomods/hugo:0.165.0
 
 RUN apk add --no-cache ruby \
     && gem install asciidoctor rouge --no-document
