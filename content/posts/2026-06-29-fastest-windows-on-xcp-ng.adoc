@@ -174,6 +174,84 @@ image::/assets/images/2026/06/29/05-ipconfig-dhcp.png["A Command Prompt running 
 
 _Figure 5. The emulated network card has an inbox driver, so the VM pulls a DHCP lease on first boot, before any paravirtual drivers are installed._
 
+== The flags that template did not set
+
+Added after publication, because a colleague's support question sent me back to look at my own VM.
+
+Building from "Other install media" is the right call for getting this disk to boot, and it has a cost I did not notice at the time. That template is deliberately generic, so it does not apply the link:https://docs.xcp-ng.org/vms/#enabling-viridian-extensions[Viridian settings] that the Windows templates do. Viridian is the platform's name for the Hyper-V enlightenments Windows expects to find, and the documentation is blunt about it: all six parameters should be true for proper operation of Windows.
+
+Put the two templates side by side and the gap is obvious:
+
+[source,bash]
+----
+xe template-param-get uuid=<Windows Server 2025 template> param-name=platform
+xe template-param-get uuid=<Other install media template> param-name=platform
+----
+
+The Windows Server 2025 template sets all six. "Other install media" sets `viridian: true` and stops there. My imported VM inherited the short version, so it had been running on one flag out of six the whole time.
+
+Check yours:
+
+[source,bash]
+----
+xe vm-param-get uuid=<VM> param-name=platform
+----
+
+If any of `viridian`, `viridian_time_ref_count`, `viridian_reference_tsc`, `viridian_apic_assist`, `viridian_crash_ctl` or `viridian_stimer` is missing, or present and set to `false`, set them with the VM shut down:
+
+[source,bash]
+----
+xe vm-param-set \
+  uuid=<VM> \
+  platform:viridian=true \
+  platform:viridian_time_ref_count=true \
+  platform:viridian_reference_tsc=true \
+  platform:viridian_apic_assist=true \
+  platform:viridian_crash_ctl=true \
+  platform:viridian_stimer=true
+----
+
+I did measure it in the end, because a claim like this is worth more than a shrug. Same VM, same host, the other four VMs on that host shut down. link:https://github.com/microsoft/diskspd[diskspd] 2.2, five iterations of each of these:
+
+[source,powershell]
+----
+diskspd.exe -c2G -d25 -W10 -b4K -r -o1 -t1 -Sh -L -w0 C:\bench\test.dat
+diskspd.exe -c2G -d20 -W5 -b4K -r -o8 -t4 -Sh -L -w0 C:\bench\test.dat
+----
+
+`-Sh` turns off Windows-side caching for that file. It does nothing about the layers below the guest, and neither did I, which matters further down. I measured at one flag, flipped to six, went back to one, then back to six, so that a reboot could not quietly take the credit. The first iteration of every run is discarded, because it reads off a warm cache and flatters whichever configuration happens to go first. That is not a theoretical worry: on the queue-depth-1 test the discarded iteration came back at 28.8 MiB/s, against 10.4 to 13.4 for the rest of the run.
+
+4K random read, medians of eight measurements per group:
+
+[cols="3,2,2", options="header"]
+|===
+| 4K random read | 1 of 6 flags | 6 of 6 flags
+
+| Queue depth 1, average latency | 0.312 ms | 0.195 ms
+| Queue depth 1, IOPS | 3,143 | 5,127
+| Queue depth 8 across 4 threads, IOPS | 45,147 | 71,674
+|===
+
+The two groups did not overlap, and the run-to-run spread went from roughly a quarter to a few percent.
+
+Then the honest part, because I would rather nobody changed a production VM on the strength of my afternoon. I flipped five flags at once, so I cannot tell you which one matters, or whether it is one of them or all five together. I cannot explain the mechanism either. I have no good story for why timer and APIC enlightenments would move 4K random read throughput this far, and I can invent one about reducing VM exits, but inventing one is precisely what I am trying to avoid here. It is also possible I measured something that merely correlates with the config change rather than the flags themselves.
+
+Add to that one VM, one host, and local disks rather than iSCSI or NFS. One of the four runs drifted upward partway through in a way that looks like host caching, which is exactly the layer I never controlled, and which is why the table gives medians and no percentages at all. Please do not quote these as a general figure, and if you know why the difference is this large, I would rather hear it than keep guessing.
+
+What I am confident about is the first half of this section, because it is only reading template parameters back. A VM built this way gets one flag instead of six, and putting the other five back is cheap.
+
+The documentation attributes a harder failure to the same missing synthetic timer: a Windows Server 2025 guest link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU]. The flags are the first thing that page tells you to check, and they only cover the host side of it. If you have ever set Windows boot parameters to disable the synthetic timer, those have to come back out too:
+
+[source,powershell]
+----
+bcdedit /deletevalue "{current}" useplatformclock
+bcdedit /deletevalue "{current}" useplatformtick
+----
+
+That wants an elevated prompt, and it wants a reboot: the BCD store is read at boot and nowhere else, so nothing changes until the guest comes back up.
+
+The same gap catches anything that did not come from a Windows template: a VM imported from a VHD like this one, or migrated in from VMware.
+
 == Step 5: the guest tools, and the one real trap
 
 The emulated NIC works, but you still want the XCP-ng guest tools. They bring the paravirtual network and storage drivers (`xennet` and `xenvbd`), which are faster than the emulated devices, and the management agent that reports the guest's IP back to the host so link:https://xapi-project.github.io/[XAPI] and Xen Orchestra can show you where the VM actually is on the network. Installing them is where the one true footgun of this whole exercise lives, so slow down for this part.
