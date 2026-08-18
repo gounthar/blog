@@ -197,7 +197,7 @@ Check yours:
 xe vm-param-get uuid=<VM> param-name=platform
 ----
 
-If `viridian_time_ref_count`, `viridian_reference_tsc`, `viridian_apic_assist`, `viridian_crash_ctl` or `viridian_stimer` are missing, set them with the VM shut down:
+If any of `viridian`, `viridian_time_ref_count`, `viridian_reference_tsc`, `viridian_apic_assist`, `viridian_crash_ctl` or `viridian_stimer` is missing, or present and set to `false`, set them with the VM shut down:
 
 [source,bash]
 ----
@@ -226,7 +226,13 @@ Eight measurements in each group, and the two groups do not overlap anywhere: th
 
 Caveats, because this is one VM on one host. The storage was local, not iSCSI or NFS, so your numbers will not be these numbers. One of the four runs drifted upward partway through in a way that looks like host-side caching, which is why the table quotes medians rather than peaks. Take the direction seriously and the exact percentages loosely.
 
-The documentation attributes a harder failure to the same missing synthetic timer: a Windows Server 2025 guest link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU]. Either way, it costs one command to rule out.
+The documentation attributes a harder failure to the same missing synthetic timer: a Windows Server 2025 guest link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU]. The flags are the first thing that page tells you to check, and they only cover the host side of it. If you have ever set Windows boot parameters to disable the synthetic timer, those have to come back out too:
+
+[source,powershell]
+----
+bcdedit /deletevalue "{current}" useplatformclock
+bcdedit /deletevalue "{current}" useplatformtick
+----
 
 The same gap catches anything that did not come from a Windows template: a VM imported from a VHD like this one, or migrated in from VMware.
 
