@@ -213,18 +213,24 @@ xe vm-param-set \
 
 I did measure it in the end, because a claim like this is worth more than a shrug. Same VM, same host, nothing else running on that host, link:https://github.com/microsoft/diskspd[diskspd] with caching disabled, five iterations per run. I measured at one flag, flipped to six, went back to one, then back to six, so that a reboot could not quietly take the credit. The first iteration of every run is discarded, because it reads off a warm cache and flatters whichever configuration happens to go first.
 
-[cols="3,2,2,1", options="header"]
+4K random read, medians of eight measurements per group:
+
+[cols="3,2,2", options="header"]
 |===
-| 4K random read | 1 of 6 flags | 6 of 6 flags | Change
+| 4K random read | 1 of 6 flags | 6 of 6 flags
 
-| Queue depth 1, average latency | 0.312 ms | 0.195 ms | -38%
-| Queue depth 1, IOPS | 3,143 | 5,127 | +63%
-| Queue depth 8 across 4 threads, IOPS | 45,147 | 71,674 | +59%
+| Queue depth 1, average latency | 0.312 ms | 0.195 ms
+| Queue depth 1, IOPS | 3,143 | 5,127
+| Queue depth 8 across 4 threads, IOPS | 45,147 | 71,674
 |===
 
-Eight measurements in each group, and the two groups do not overlap anywhere: the worst six-flag run beat the best one-flag run on both tests. The spread tightened as well. At one flag the runs wandered by about a quarter, at six they repeated to within a few percent, and I/O that is unpredictable is what people actually notice and complain about.
+The two groups did not overlap, and the run-to-run spread went from roughly a quarter to a few percent.
 
-Caveats, because this is one VM on one host. The storage was local, not iSCSI or NFS, so your numbers will not be these numbers. One of the four runs drifted upward partway through in a way that looks like host-side caching, which is why the table quotes medians rather than peaks. Take the direction seriously and the exact percentages loosely.
+Then the honest part, because I would rather nobody changed a production VM on the strength of my afternoon. I flipped five flags at once, so I cannot tell you which one matters, or whether it is one of them or all five together. I cannot explain the mechanism either. I have no good story for why timer and APIC enlightenments would move 4K random read throughput this far, and I can invent one about reducing VM exits, but inventing one is precisely what I am trying to avoid here. It is also possible I measured something that merely correlates with the config change rather than the flags themselves.
+
+Add to that one VM, one host, and local disks rather than iSCSI or NFS. One of the four runs drifted upward partway through in a way that looks like host caching, which is why the table gives medians and no percentages at all. Please do not quote these as a general figure, and if you know why the difference is this large, I would rather hear it than keep guessing.
+
+What I am confident about is the first half of this section, because it is only reading template parameters back. A VM built this way gets one flag instead of six, and putting the other five back is cheap.
 
 The documentation attributes a harder failure to the same missing synthetic timer: a Windows Server 2025 guest link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU]. The flags are the first thing that page tells you to check, and they only cover the host side of it. If you have ever set Windows boot parameters to disable the synthetic timer, those have to come back out too:
 
