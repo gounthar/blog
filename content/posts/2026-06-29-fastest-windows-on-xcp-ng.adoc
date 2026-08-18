@@ -211,7 +211,15 @@ xe vm-param-set \
   platform:viridian_stimer=true
 ----
 
-I did measure it in the end, because a claim like this is worth more than a shrug. Same VM, same host, nothing else running on that host, link:https://github.com/microsoft/diskspd[diskspd] with caching disabled, five iterations per run. I measured at one flag, flipped to six, went back to one, then back to six, so that a reboot could not quietly take the credit. The first iteration of every run is discarded, because it reads off a warm cache and flatters whichever configuration happens to go first.
+I did measure it in the end, because a claim like this is worth more than a shrug. Same VM, same host, the other four VMs on that host shut down. link:https://github.com/microsoft/diskspd[diskspd] 2.2, five iterations of each of these:
+
+[source,powershell]
+----
+diskspd.exe -c2G -d25 -W10 -b4K -r -o1 -t1 -Sh -L -w0 C:\bench\test.dat
+diskspd.exe -c2G -d20 -W5 -b4K -r -o8 -t4 -Sh -L -w0 C:\bench\test.dat
+----
+
+`-Sh` turns off Windows-side caching for that file. It does nothing about the layers below the guest, and neither did I, which matters further down. I measured at one flag, flipped to six, went back to one, then back to six, so that a reboot could not quietly take the credit. The first iteration of every run is discarded, because it reads off a warm cache and flatters whichever configuration happens to go first. That is not a theoretical worry: on the queue-depth-1 test the discarded iteration came back at 28.8 MiB/s, against 10.4 to 13.4 for the rest of the run.
 
 4K random read, medians of eight measurements per group:
 
@@ -228,7 +236,7 @@ The two groups did not overlap, and the run-to-run spread went from roughly a qu
 
 Then the honest part, because I would rather nobody changed a production VM on the strength of my afternoon. I flipped five flags at once, so I cannot tell you which one matters, or whether it is one of them or all five together. I cannot explain the mechanism either. I have no good story for why timer and APIC enlightenments would move 4K random read throughput this far, and I can invent one about reducing VM exits, but inventing one is precisely what I am trying to avoid here. It is also possible I measured something that merely correlates with the config change rather than the flags themselves.
 
-Add to that one VM, one host, and local disks rather than iSCSI or NFS. One of the four runs drifted upward partway through in a way that looks like host caching, which is why the table gives medians and no percentages at all. Please do not quote these as a general figure, and if you know why the difference is this large, I would rather hear it than keep guessing.
+Add to that one VM, one host, and local disks rather than iSCSI or NFS. One of the four runs drifted upward partway through in a way that looks like host caching, which is exactly the layer I never controlled, and which is why the table gives medians and no percentages at all. Please do not quote these as a general figure, and if you know why the difference is this large, I would rather hear it than keep guessing.
 
 What I am confident about is the first half of this section, because it is only reading template parameters back. A VM built this way gets one flag instead of six, and putting the other five back is cheap.
 
