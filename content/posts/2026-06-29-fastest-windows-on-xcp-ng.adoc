@@ -211,7 +211,22 @@ xe vm-param-set \
   platform:viridian_stimer=true
 ----
 
-I have not benchmarked the before and after, so I am not going to tell you this makes your VM faster. What I can tell you is what the documentation attributes to the missing pieces: a Windows Server 2025 guest with the synthetic timer disabled link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU], and the standing advice is to check these flags whenever a Windows VM misbehaves on performance or reliability. It costs one command to rule out.
+I did measure it in the end, because a claim like this is worth more than a shrug. Same VM, same host, nothing else running on that host, link:https://github.com/microsoft/diskspd[diskspd] with caching disabled, five iterations per run. I measured at one flag, flipped to six, went back to one, then back to six, so that a reboot could not quietly take the credit. The first iteration of every run is discarded, because it reads off a warm cache and flatters whichever configuration happens to go first.
+
+[cols="3,2,2,1", options="header"]
+|===
+| 4K random read | 1 of 6 flags | 6 of 6 flags | Change
+
+| Queue depth 1, average latency | 0.312 ms | 0.195 ms | -38%
+| Queue depth 1, IOPS | 3,143 | 5,127 | +63%
+| Queue depth 8 across 4 threads, IOPS | 45,147 | 71,674 | +59%
+|===
+
+Eight measurements in each group, and the two groups do not overlap anywhere: the worst six-flag run beat the best one-flag run on both tests. The spread tightened as well. At one flag the runs wandered by about a quarter, at six they repeated to within a few percent, and I/O that is unpredictable is what people actually notice and complain about.
+
+Caveats, because this is one VM on one host. The storage was local, not iSCSI or NFS, so your numbers will not be these numbers. One of the four runs drifted upward partway through in a way that looks like host-side caching, which is why the table quotes medians rather than peaks. Take the direction seriously and the exact percentages loosely.
+
+The documentation attributes a harder failure to the same missing synthetic timer: a Windows Server 2025 guest link:https://docs.xcp-ng.org/troubleshooting/windows-pv-tools/#windows-server-2025-hangs-randomly-with-0-cpu[hangs randomly at 0% CPU]. Either way, it costs one command to rule out.
 
 The same gap catches anything that did not come from a Windows template: a VM imported from a VHD like this one, or migrated in from VMware.
 
