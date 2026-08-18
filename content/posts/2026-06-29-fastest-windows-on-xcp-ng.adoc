@@ -240,6 +240,8 @@ bcdedit /deletevalue "{current}" useplatformclock
 bcdedit /deletevalue "{current}" useplatformtick
 ----
 
+That wants an elevated prompt, and it wants a reboot: the BCD store is read at boot and nowhere else, so nothing changes until the guest comes back up.
+
 The same gap catches anything that did not come from a Windows template: a VM imported from a VHD like this one, or migrated in from VMware.
 
 == Step 5: the guest tools, and the one real trap
