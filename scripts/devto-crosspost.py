@@ -5,6 +5,7 @@ Usage:
     python3 scripts/devto-crosspost.py [--dry-run] [--limit N] [--draft]
     python3 scripts/devto-crosspost.py --publish-drafts [--dry-run]
     python3 scripts/devto-crosspost.py --init-ids [--dry-run]
+    python3 scripts/devto-crosspost.py --update <post.adoc> [--dry-run]
 
 Options:
     --draft           Post new articles as drafts (default: publish immediately)
@@ -12,11 +13,14 @@ Options:
     --init-ids        Populate devto-ids.json from existing dev.to articles (one-time setup)
     --dry-run         Show what would happen without making changes
     --limit N         Process at most N missing articles (non-CI mode only)
+    --update FILE     Re-push one already-published post, ignoring the git diff
 
 CI behaviour (push to main):
     When GITHUB_ACTIONS=true and GITHUB_EVENT_NAME=push the script uses
     git diff HEAD^ HEAD to discover changed .adoc files, then publishes new
     ones (POST) or updates existing ones (PUT) based on devto-ids.json.
+    A PUT that 404s means the stored ID is stale: the article is looked up
+    again by title and devto-ids.json is corrected in place.
 
 Reads API key from DEVTO_API_KEY env var or ~/dev.to.key.
 """
@@ -134,6 +138,20 @@ def fetch_existing_articles(api_key: str) -> list[dict]:
 
 def fetch_existing_titles(api_key: str) -> set[str]:
     return {a["title"].strip().lower() for a in fetch_existing_articles(api_key)}
+
+
+def find_article_id_by_title(title: str, api_key: str) -> int | None:
+    """Locate an article by exact title, case-insensitively.
+
+    Used to recover when devto-ids.json points at an article that no longer
+    exists, which happens when an article is deleted and re-created: dev.to
+    issues a new ID and nothing tells us about it.
+    """
+    wanted = title.strip().lower()
+    for a in fetch_existing_articles(api_key):
+        if str(a.get("title", "")).strip().lower() == wanted:
+            return a["id"]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +334,24 @@ def process_post(
         if dry_run:
             print(f"  [DRY-RUN] Would update: {title}")
             return article_id
-        devto_put(f"/articles/{article_id}", payload, api_key)
+        try:
+            devto_put(f"/articles/{article_id}", payload, api_key)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            # The stored ID is gone. Find the article again by title and heal
+            # the map, rather than failing every future run on the same entry.
+            found = find_article_id_by_title(title, api_key)
+            if found is None:
+                raise RuntimeError(
+                    f"stored id {article_id} returns 404 and no article titled "
+                    f"{title!r} is on the account. Not posting a new one, because "
+                    f"a title lookup that misses is indistinguishable from a "
+                    f"deleted article and the wrong guess leaves a duplicate."
+                ) from e
+            print(f"  stale id {article_id} -> {found}, matched by title")
+            devto_put(f"/articles/{found}", payload, api_key)
+            article_id = found
         print(f"  UPDATED: {title}")
         time.sleep(REQUEST_DELAY)
         return article_id
@@ -359,6 +394,42 @@ def get_changed_adoc_files(posts_dir: Path) -> list[Path]:
             if p.exists():
                 changed.append(p)
     return changed
+
+
+def run_update(target: str, api_key: str, dry_run: bool) -> None:
+    """Force one already-published post through the update path.
+
+    run_ci only touches posts whose .adoc changed in the push, so a correction
+    that lands in the same commit as an unrelated failure has no second chance:
+    re-running the workflow re-runs the same empty diff. This is that second
+    chance, and it is the only way to re-push an update without a content edit
+    made purely to trigger one.
+    """
+    path = Path(target)
+    if not path.is_absolute() and not path.exists():
+        path = POSTS_DIR / path
+    if not path.exists():
+        print(f"No such post: {target}", file=sys.stderr)
+        sys.exit(1)
+
+    ids = load_ids()
+    article_id = ids.get(path.stem)
+    if article_id is None:
+        print(f"{path.stem} is not in {DEVTO_IDS_FILE.name}; it has never been "
+              f"published, so there is nothing to update.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"-> {path.name} (forced update)")
+    try:
+        new_id = process_post(path, api_key, dry_run, False, article_id)
+    except Exception as e:
+        print(f"  FAILED: {e}")
+        sys.exit(1)
+    if new_id is not None and new_id != article_id:
+        ids[path.stem] = new_id
+    if not dry_run:
+        save_ids(ids)
+        print(f"ID map saved to {DEVTO_IDS_FILE.name}")
 
 
 def run_ci(api_key: str, dry_run: bool, draft_mode: bool) -> None:
@@ -494,9 +565,12 @@ def main():
     publish_drafts = "--publish-drafts" in sys.argv
     do_init_ids = "--init-ids" in sys.argv
     limit = None
+    update_target = None
     for i, arg in enumerate(sys.argv):
         if arg == "--limit" and i + 1 < len(sys.argv):
             limit = int(sys.argv[i + 1])
+        if arg == "--update" and i + 1 < len(sys.argv):
+            update_target = sys.argv[i + 1]
 
     # Auto-detect CI push context
     ci_mode = os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_EVENT_NAME") == "push"
@@ -509,6 +583,10 @@ def main():
 
     if publish_drafts:
         publish_all_drafts(api_key, dry_run)
+        return
+
+    if update_target:
+        run_update(update_target, api_key, dry_run)
         return
 
     if ci_mode:
