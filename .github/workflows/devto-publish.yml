@@ -8,6 +8,14 @@ name: Publish new posts to dev.to
     paths:
       - 'content/posts/**'
   workflow_dispatch:
+    inputs:
+      post:
+        description: >-
+          Filename of one already-published post to re-push, e.g.
+          2026-06-29-fastest-windows-on-xcp-ng.adoc. Leave empty for the
+          normal run, which only publishes posts missing from dev.to.
+        required: false
+        default: ''
 
 jobs:
   publish:
@@ -44,10 +52,21 @@ jobs:
         env:
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
           DEVTO_POSTS_DIR: ${{ github.workspace }}/content/posts
-        run: python3 scripts/devto-crosspost.py
+          POST_INPUT: ${{ inputs.post }}
+        run: |
+          # POST_INPUT goes through the environment rather than being
+          # interpolated into this script, so a crafted dispatch input cannot
+          # run as shell.
+          if [ -n "$POST_INPUT" ]; then
+            python3 scripts/devto-crosspost.py --update "$POST_INPUT"
+          else
+            python3 scripts/devto-crosspost.py
+          fi
 
       - name: Preserve IDs from any open ID-map PR
-        if: ${{ !cancelled() && github.event_name == 'push' }}
+        if: >-
+          ${{ !cancelled()
+          && (github.event_name == 'push' || inputs.post != '') }}
         run: |
           # A prior run may have proposed IDs on chore/devto-ids-update that are
           # not on main yet. Merge them in so this run (checked out from main)
@@ -61,7 +80,9 @@ jobs:
           fi
 
       - name: Open PR for updated ID map
-        if: ${{ !cancelled() && github.event_name == 'push' }}
+        if: >-
+          ${{ !cancelled()
+          && (github.event_name == 'push' || inputs.post != '') }}
         uses: peter-evans/create-pull-request@v8
         with:
           add-paths: scripts/devto-ids.json
