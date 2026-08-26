@@ -149,7 +149,7 @@ One version caveat, because this leans on the host package behaving. Confirm you
 
 Attach the imported VDI as the bootable disk, give the VM a network interface, set the boot order to disk, and start it.
 
-First boot runs the usual sysprep "Getting ready" dance and reboots itself once partway through, while Windows specializes the image for this particular VM. Be patient here. The emulated Cirrus VGA that XCP-ng gives a fresh link:https://en.wikipedia.org/wiki/Hardware-assisted_virtualization[HVM] guest is slow, so "Getting ready" can take close to ten minutes and it looks identical to a hang. If you want reassurance that it is actually working and not stuck, check `xentop` on the host: a VM that is busy specializing is burning CPU, a hung one is not. After the reboot you land at the out-of-box screens. The US region and keyboard defaults are fine to accept, then you set the built-in Administrator password, and you are at a Windows desktop.
+First boot runs the usual sysprep "Getting ready" dance and reboots itself once partway through, while Windows specializes the image for this particular VM. Be patient here. The console is painfully slow while that happens, and that is a consequence of how we built this VM rather than something XCP-ng does to every guest. A VM created from the "Other install media" template has no `vga` key in its platform map, and with that key unset qemu hands the link:https://en.wikipedia.org/wiki/Hardware-assisted_virtualization[HVM] guest an emulated Cirrus adapter with 4 MB of video memory. "Getting ready" can take close to ten minutes on it, and it looks identical to a hang. The Windows templates set `vga: std` and `videoram: 8` instead. Hold that thought, because the same template choice is about to cost us something bigger. If you want reassurance that it is actually working and not stuck, check `xentop` on the host: a VM that is busy specializing is burning CPU, a hung one is not. After the reboot you land at the out-of-box screens. The US region and keyboard defaults are fine to accept, then you set the built-in Administrator password, and you are at a Windows desktop.
 
 image::/assets/images/2026/06/29/03-getting-ready-uefi-boot.png["Windows boot screen with the four-square logo and a spinner above the text Getting ready."]
 
@@ -189,6 +189,8 @@ xe template-param-get uuid=<Other install media template> param-name=platform
 ----
 
 The Windows Server 2025 template sets all six. "Other install media" sets `viridian: true` and stops there. My imported VM inherited the short version, so it had been running on one flag out of six the whole time.
+
+It is not only Viridian. Put the two platform maps side by side and the Windows template also sets `vga: std` and `videoram: 8`, which is the slow console from earlier in this post. One template choice, three defaults you do not get.
 
 Check yours:
 
@@ -250,7 +252,7 @@ bcdedit /deletevalue "{current}" useplatformtick
 
 That wants an elevated prompt, and it wants a reboot: the BCD store is read at boot and nowhere else, so nothing changes until the guest comes back up.
 
-The same gap catches anything that did not come from a Windows template: a VM imported from a VHD like this one, or migrated in from VMware.
+The same gap catches anything that did not come from a Windows template, such as a VM imported from a VHD like this one. Migrating in from VMware is less clear-cut than I first assumed: the link:https://docs.xcp-ng.org/vms/#enabling-viridian-extensions[documentation] says Viridian "is also enabled on V2V-migrated and Packer-created VMs if using the correct templates", so the outcome depends on what the migration landed on. I have not run a V2V import myself, so read the platform map rather than assuming it either way.
 
 == Step 5: the guest tools, and the one real trap
 
@@ -266,7 +268,9 @@ The supported path, straight from the XCP-ng docs, is the opposite of what the s
 . If Windows Update already grabbed the Citrix drivers (as mine had), run `XenClean.exe` from the guest tools CD as administrator. It rips out the Citrix drivers and reboots itself, no Safe Mode gymnastics required.
 . Then run `XenTools-x64.msi`.
 
-After XenClean, the tools install, and one reboot later every `+xen*+` device came up clean in Device Manager, the NIC switched over to the "XCP-ng PV Network Device", and the host started reporting the guest's IP. The PV driver version was 9.1.200.0. Done.
+After XenClean, the tools install, and one reboot later every `+xen*+` device came up clean in Device Manager, the NIC switched over to the "XCP-ng PV Network Device", and the host started reporting the guest's IP. The PV driver version was 9.1.200.0, the current release when I tested. Done.
+
+One component in that package is worth calling out separately if your VM is UEFI, which this one is: the XCP-ng Standard VGA Display Driver. The link:https://docs.xcp-ng.org/vms/#uefi-vm[documentation] says a UEFI VM needs it before Windows screen resolution can be changed from inside the OS at all, which is a fair description of the console I have grumbled about twice in this post. Whether it also shortens the "Getting ready" wait I have not measured, so treat that as the docs' claim about resolution and nothing more.
 
 The one-line takeaway, because it is the line I wish I had read first: leave `has-vendor-device` off, and let XCP-ng's MSI install the drivers. Turning it on hands your driver management to Windows Update and Citrix, and breaks the supported path.
 
