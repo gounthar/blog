@@ -24,7 +24,7 @@ toc: true
 
 image::/assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg["The Neues Rathaus on Marienplatz in Munich, its clock tower and Gothic spires lit gold by the evening sun against a clear blue sky"]
 
-Every September, part of the Xen community does something slightly radical: it stops talking through mailing lists and https://matrix.org/[Matrix] handles and spends three days in the same room. (Faces! Attached to the handles! It never stops being a little strange.) This year the room was in Munich, hosted by Renesas, from 15 to 17 September. Fourteen of us from Vates made the trip, more colleagues followed remotely, and we gave three talks.
+Every September, part of the Xen community does something slightly radical: it stops talking through mailing lists and https://matrix.org/[Matrix] handles and spends three days in the same room. (Faces! Attached to the handles! It never stops being a little strange.) This year the room was in Munich, hosted by https://www.renesas.com/[Renesas], from 15 to 17 September. Fourteen of us from https://vates.tech/[Vates] made the trip, more colleagues followed remotely, and we gave three talks.
 
 Here's what we said, what I heard, and why I came back more excited about RISC-V than I left. Which, if you know me, is quite a feat. The needle was already pretty far into the red.
 
@@ -32,11 +32,11 @@ Here's what we said, what I heard, and why I came back more excited about RISC-V
 
 Most of our work with the wider Xen community happens in writing, and that works. Honestly, it does. But some topics would take weeks to settle in a chat thread, and some would never come up at all, because nobody would think to raise them in the middle of a normal working day, somewhere between two rebases. Put the same people in one place for three days, and those topics surface on their own, over coffee, in a corridor, or at dinner. No `git send-email` required.
 
-Vates was one of the sponsors, but the Summit belongs to the Xen community, not to us. (Sponsoring an event doesn't buy you the room, and that's precisely what makes the room worth being in.) Silicon vendors, consultancies, universities, and embedded companies were all there, which made the conversations much wider than the ones we have among ourselves. Our own echo chamber has lovely acoustics, but it's still an echo chamber.
+Vates was one of the sponsors, but the https://xensummit2026.sched.com/[Summit] belongs to the Xen community, not to us. (Sponsoring an event doesn't buy you the room, and that's precisely what makes the room worth being in.) Silicon vendors, consultancies, universities, and embedded companies were all there, which made the conversations much wider than the ones we have among ourselves. Our own echo chamber has lovely acoustics, but it's still an echo chamber.
 
 == Three talks walk into a summit
 
-*XCP-ng State of the Union* (me, Tuesday 10:00). A round of everything that happened since the Spring Meetup in April (five months, roughly three geological eras in our line of work): the market around us, XCP-ng 8.3 LTS and https://en.wikipedia.org/wiki/Qcow[QCOW2], Xen Orchestra 6, the DevOps tooling, then Arm and RISC-V.
+*XCP-ng State of the Union* (me, Tuesday 10:00). A round of everything that happened since the Spring Meetup in April (five months, roughly three geological eras in our line of work): the market around us, https://xcp-ng.org/[XCP-ng] 8.3 LTS and https://en.wikipedia.org/wiki/Qcow[QCOW2], https://xen-orchestra.com/[Xen Orchestra] 6, the DevOps tooling, then Arm and RISC-V.
 
 One figure I was very happy to put on screen: Vates authored 104 commits to Xen 4.22, 10.9% of the release, making us its third-largest contributor, and more than half of those commits were RISC-V work. You can probably guess which part of that sentence made me happiest.
 
@@ -64,7 +64,7 @@ Baptiste has a sense of showmanship, and the enthusiasm, the stubbornness, and t
 
 And that audience matters. These were committers and maintainers, people who already follow the RISC-V port on the mailing list and know every patch series by name (and, I suspect, by version number). For them, the talk turned Xen on RISC-V from something ethereal into something concrete. From vaporware to hardware, if you'll forgive me.
 
-The title says the plan, and the plan has two lanes. Upstream, the port goes https://xenbits.xen.org/docs/unstable/features/dom0less.html[dom0less] first: Xen builds its guests itself at boot, from a static configuration. Downstream, Baptiste and Oleksii already run guests with several vCPUs, on https://www.qemu.org/[QEMU] and on real hardware: a HiFive Premier P550, and a SpacemiT K3 that a community contributor booted independently.
+The title says the plan, and the plan has two lanes. Upstream, the port goes https://xenbits.xen.org/docs/unstable/features/dom0less.html[dom0less] first: Xen builds its guests itself at boot, from a static configuration. Downstream, Baptiste and Oleksii already run guests with several vCPUs, on https://www.qemu.org/[QEMU] and on real hardware: a https://www.sifive.com/boards/hifive-premier-p550[HiFive Premier P550], and a https://www.spacemit.com/en/[SpacemiT] K3 that a community contributor booted independently.
 
 Then comes a full dom0 with the https://xenbits.xen.org/docs/unstable/man/xl.1.html[xl] toolstack, and that part works too: `xl info`, `xl list`, `xl create` and `xl console` are all there. Four commands. Doesn't sound like much? If you've typed them on x86 without a second thought, try picturing the work behind each one on a young architecture.
 
@@ -106,7 +106,7 @@ There are enough signals now to say: let's go. Or, since we were in Munich, _los
 
 == What's next
 
-* The talk recordings aren't out yet; they'll be linked here once the Xen Project publishes them. (Refresh responsibly.)
+* The talk recordings aren't out yet; they'll be linked here once the https://xenproject.org/[Xen Project] publishes them. (Refresh responsibly.)
 * Baptiste and Oleksii's work deserves more than a section in a recap, and a dedicated post is on the way.
 * If you want to follow the RISC-V port, or answer that call for reviewers (yes, I'm asking again; persistence is a feature, not a bug), the patch series are on the https://lists.xenproject.org/cgi-bin/mailman/listinfo/xen-devel[xen-devel mailing list].
 
