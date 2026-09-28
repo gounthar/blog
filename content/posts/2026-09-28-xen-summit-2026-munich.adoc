@@ -7,7 +7,7 @@ description: 'Xen Summit 2026 in Munich: three Vates talks, a RISC-V port that w
   QEMU to real boards, and a hallway track at least as good as the talks.'
 excerpt: Fourteen of us from Vates went to Munich for Xen Summit 2026. The talk everyone
   kept talking about was the RISC-V one, in the hardest slot of the conference.
-draft: true
+draft: false
 featured: false
 hidden: false
 image: assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg
