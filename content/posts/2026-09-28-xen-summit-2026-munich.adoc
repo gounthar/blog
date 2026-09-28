@@ -10,6 +10,7 @@ excerpt: Fourteen of us from Vates went to Munich for Xen Summit 2026. The talk 
 draft: true
 featured: false
 hidden: false
+image: assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg
 tags:
 - xen
 - xen-summit
@@ -20,6 +21,8 @@ tags:
 title: 'Xen Summit 2026 in Munich: the week RISC-V stopped being hypothetical'
 toc: true
 ---
+
+image::/assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg["The Neues Rathaus on Marienplatz in Munich, its clock tower and Gothic spires lit gold by the evening sun against a clear blue sky"]
 
 Every September, part of the Xen community stops talking through mailing lists and Matrix handles and spends three days in the same room. This year the room was in Munich, hosted by Renesas, from 15 to 17 September. Fourteen of us from Vates made the trip, more colleagues followed remotely, and we gave three talks.
 
