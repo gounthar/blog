@@ -24,7 +24,7 @@ toc: true
 
 image::/assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg["The Neues Rathaus on Marienplatz in Munich, its clock tower and Gothic spires lit gold by the evening sun against a clear blue sky"]
 
-Every September, part of the Xen community does something slightly radical: it stops talking through mailing lists and Matrix handles and spends three days in the same room. (Faces! Attached to the handles! It never stops being a little strange.) This year the room was in Munich, hosted by Renesas, from 15 to 17 September. Fourteen of us from Vates made the trip, more colleagues followed remotely, and we gave three talks.
+Every September, part of the Xen community does something slightly radical: it stops talking through mailing lists and https://matrix.org/[Matrix] handles and spends three days in the same room. (Faces! Attached to the handles! It never stops being a little strange.) This year the room was in Munich, hosted by Renesas, from 15 to 17 September. Fourteen of us from Vates made the trip, more colleagues followed remotely, and we gave three talks.
 
 Here's what we said, what I heard, and why I came back more excited about RISC-V than I left. Which, if you know me, is quite a feat. The needle was already pretty far into the red.
 
@@ -36,7 +36,7 @@ Vates was one of the sponsors, but the Summit belongs to the Xen community, not 
 
 == Three talks walk into a summit
 
-*XCP-ng State of the Union* (me, Tuesday 10:00). A round of everything that happened since the Spring Meetup in April (five months, roughly three geological eras in our line of work): the market around us, XCP-ng 8.3 LTS and QCOW2, Xen Orchestra 6, the DevOps tooling, then Arm and RISC-V.
+*XCP-ng State of the Union* (me, Tuesday 10:00). A round of everything that happened since the Spring Meetup in April (five months, roughly three geological eras in our line of work): the market around us, XCP-ng 8.3 LTS and https://en.wikipedia.org/wiki/Qcow[QCOW2], Xen Orchestra 6, the DevOps tooling, then Arm and RISC-V.
 
 One figure I was very happy to put on screen: Vates authored 104 commits to Xen 4.22, 10.9% of the release, making us its third-largest contributor, and more than half of those commits were RISC-V work. You can probably guess which part of that sentence made me happiest.
 
@@ -45,10 +45,10 @@ The RISC-V slide ended with a direct ask to the room: come and review the series
 *XCP-ng+Xen status update* (Teddy Astie, Tuesday 13:30). Teddy walked through the Xen work behind XCP-ng, and his list is long enough that I'll give it to you as a list rather than as one heroic sentence (the first draft of this post tried the heroic sentence; the sentence won):
 
 * general x86 improvements, including work in progress on guests with more than 128 vCPUs;
-* Arm for cloud, where XAPI support is partly working and some of it is already upstream;
-* confidential guests with AMD SEV, which work experimentally, with patches on the mailing list where help is welcome;
+* Arm for cloud, where https://xapi-project.github.io/[XAPI] support is partly working and some of it is already upstream;
+* confidential guests with https://www.amd.com/en/developer/sev.html[AMD SEV], which work experimentally, with patches on the mailing list where help is welcome;
 * PV-IOMMU;
-* and GPU virtualisation, through both virtio-gpu and SR-IOV vGPUs on AMD and Intel cards.
+* and GPU virtualisation, through both https://www.qemu.org/docs/master/system/devices/virtio/virtio-gpu.html[virtio-gpu] and https://en.wikipedia.org/wiki/Single-root_input/output_virtualization[SR-IOV] vGPUs on AMD and Intel cards.
 
 That's a lot of plates spinning. His https://hosted-files.sched.co/xensummit2026/5f/slides.pdf[slides] are on the Summit schedule.
 
@@ -64,9 +64,9 @@ Baptiste has a sense of showmanship, and the enthusiasm, the stubbornness, and t
 
 And that audience matters. These were committers and maintainers, people who already follow the RISC-V port on the mailing list and know every patch series by name (and, I suspect, by version number). For them, the talk turned Xen on RISC-V from something ethereal into something concrete. From vaporware to hardware, if you'll forgive me.
 
-The title says the plan, and the plan has two lanes. Upstream, the port goes dom0less first: Xen builds its guests itself at boot, from a static configuration. Downstream, Baptiste and Oleksii already run guests with several vCPUs, on QEMU and on real hardware: a HiFive Premier P550, and a SpacemiT K3 that a community contributor booted independently.
+The title says the plan, and the plan has two lanes. Upstream, the port goes https://xenbits.xen.org/docs/unstable/features/dom0less.html[dom0less] first: Xen builds its guests itself at boot, from a static configuration. Downstream, Baptiste and Oleksii already run guests with several vCPUs, on https://www.qemu.org/[QEMU] and on real hardware: a HiFive Premier P550, and a SpacemiT K3 that a community contributor booted independently.
 
-Then comes a full dom0 with the xl toolstack, and that part works too: `xl info`, `xl list`, `xl create` and `xl console` are all there. Four commands. Doesn't sound like much? If you've typed them on x86 without a second thought, try picturing the work behind each one on a young architecture.
+Then comes a full dom0 with the https://xenbits.xen.org/docs/unstable/man/xl.1.html[xl] toolstack, and that part works too: `xl info`, `xl list`, `xl create` and `xl console` are all there. Four commands. Doesn't sound like much? If you've typed them on x86 without a second thought, try picturing the work behind each one on a young architecture.
 
 They ended with a demo, pre-recorded in case the conference network let them down, creating a guest from dom0 and talking to it through its console. Is pre-recording cheating? No. That's experience. Anyone who has ever bet a live demo on conference Wi-Fi knows exactly why, and the knowledge is rarely acquired cheaply.
 
@@ -78,7 +78,7 @@ For years, RISC-V meant small boards for hobbyists and embedded work. That is ch
 
 https://github.com/riscv/riscv-profiles/blob/main/src/rva23-profile.adoc[RVA23] is a ratified set of mandatory extensions, and the hypervisor extension is one of them. An RVA23 chip is not automatically fast enough to be a server, but it has what virtualisation needs, in a form software can rely on. Once that baseline exists, hardware built for servers can follow, and a server that can't run a hypervisor is not much use in a datacenter (a very expensive space heater, at best).
 
-So the real question for Xen is whether a type-1 hypervisor will be ready when that hardware arrives. Showing up to the party after the cake is gone is never a great look. That is what Baptiste and Oleksii are working on: making sure we're there before the candles are lit.
+So the real question for Xen is whether a https://en.wikipedia.org/wiki/Hypervisor[type-1 hypervisor] will be ready when that hardware arrives. Showing up to the party after the cake is gone is never a great look. That is what Baptiste and Oleksii are working on: making sure we're there before the candles are lit.
 
 == The hallway track: no slides, all signal
 
@@ -96,7 +96,7 @@ The atmosphere was friendly and generous, with the kind of good-natured competit
 
 == Why I care (and why the bridle stays off)
 
-I'm not a visionary. But I do have a decent memory, and I've seen this pattern before: about fifteen years ago, with Arm, a new architecture went from "interesting" to "real" in a few years, and the people who had their software ready early were the ones who mattered. I think RISC-V can go further than Arm did, because the ISA itself is open. Open ISA, open hypervisor: I do like the symmetry.
+I'm not a visionary. But I do have a decent memory, and I've seen this pattern before: about fifteen years ago, with Arm, a new architecture went from "interesting" to "real" in a few years, and the people who had their software ready early were the ones who mattered. I think RISC-V can go further than Arm did, because the https://en.wikipedia.org/wiki/Instruction_set_architecture[ISA] itself is open. Open ISA, open hypervisor: I do like the symmetry.
 
 Is getting ready early a gamble? Sure.
 
