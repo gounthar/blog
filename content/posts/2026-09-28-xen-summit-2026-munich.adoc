@@ -1,0 +1,113 @@
+---
+author: Bruno Verachten
+categories:
+- Community
+date: 2026-09-28 10:00:00 +0200
+description: 'Xen Summit 2026 in Munich: three Vates talks, a RISC-V port that went from
+  QEMU to real boards, and a hallway track at least as good as the talks.'
+excerpt: Fourteen of us from Vates went to Munich for Xen Summit 2026. The talk everyone
+  kept talking about was the RISC-V one, in the hardest slot of the conference.
+draft: false
+featured: false
+hidden: false
+image: assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg
+tags:
+- xen
+- xen-summit
+- risc-v
+- xcp-ng
+- conference
+- community
+title: 'Xen Summit 2026 in Munich: RISC-V takes the graveyard slot and wakes the room'
+toc: true
+---
+
+image::/assets/images/2026/09/28/00-header-munich-neues-rathaus.jpg["The Neues Rathaus on Marienplatz in Munich, its clock tower and Gothic spires lit gold by the evening sun against a clear blue sky"]
+
+Every September, part of the Xen community does something slightly radical: it stops talking through mailing lists and https://matrix.org/[Matrix] handles and spends three days in the same room. (Faces! Attached to the handles! It never stops being a little strange.) This year the room was in Munich, hosted by https://www.renesas.com/[Renesas], from 15 to 17 September. Fourteen of us from https://vates.tech/[Vates] made the trip, more colleagues followed remotely, and we gave three talks.
+
+Here's what we said, what I heard, and why I came back more excited about RISC-V than I left. Which, if you know me, is quite a feat. The needle was already pretty far into the red.
+
+== Why leave the comfort of the mailing list?
+
+Most of our work with the wider Xen community happens in writing, and that works. Honestly, it does. But some topics would take weeks to settle in a chat thread, and some would never come up at all, because nobody would think to raise them in the middle of a normal working day, somewhere between two rebases. Put the same people in one place for three days, and those topics surface on their own, over coffee, in a corridor, or at dinner. No `git send-email` required.
+
+Vates was one of the sponsors, but the https://xensummit2026.sched.com/[Summit] belongs to the Xen community, not to us. (Sponsoring an event doesn't buy you the room, and that's precisely what makes the room worth being in.) Silicon vendors, consultancies, universities, and embedded companies were all there, which made the conversations much wider than the ones we have among ourselves. Our own echo chamber has lovely acoustics, but it's still an echo chamber.
+
+== Three talks walk into a summit
+
+*XCP-ng State of the Union* (me, Tuesday 10:00). A round of everything that happened since the Spring Meetup in April (five months, roughly three geological eras in our line of work): the market around us, https://xcp-ng.org/[XCP-ng] 8.3 LTS and https://en.wikipedia.org/wiki/Qcow[QCOW2], https://xen-orchestra.com/[Xen Orchestra] 6, the DevOps tooling, then Arm and RISC-V.
+
+One figure I was very happy to put on screen: Vates authored 104 commits to Xen 4.22, 10.9% of the release, making us its third-largest contributor, and more than half of those commits were RISC-V work. You can probably guess which part of that sentence made me happiest.
+
+The RISC-V slide ended with a direct ask to the room: come and review the series, because more reviewers move it faster. Yes, I stood in front of a room full of reviewers and asked for reviewers. Subtle, I am not. Several people came to find me afterwards (more on that below, and it's the good kind of afterwards).
+
+*XCP-ng+Xen status update* (Teddy Astie, Tuesday 13:30). Teddy walked through the Xen work behind XCP-ng, and his list is long enough that I'll give it to you as a list rather than as one heroic sentence (the first draft of this post tried the heroic sentence; the sentence won):
+
+* general x86 improvements, including work in progress on guests with more than 128 vCPUs;
+* Arm for cloud, where https://xapi-project.github.io/[XAPI] support is partly working and some of it is already upstream;
+* confidential guests with https://www.amd.com/en/developer/sev.html[AMD SEV], which work experimentally, with patches on the mailing list where help is welcome;
+* PV-IOMMU;
+* and GPU virtualisation, through both https://www.qemu.org/docs/master/system/devices/virtio/virtio-gpu.html[virtio-gpu] and https://en.wikipedia.org/wiki/Single-root_input/output_virtualization[SR-IOV] vGPUs on AMD and Intel cards.
+
+That's a lot of plates spinning. His https://hosted-files.sched.co/xensummit2026/5f/slides.pdf[slides] are on the Summit schedule.
+
+*Xen on RISC-V: From Dom0less to xl* (Baptiste Le Duc and Oleksii Kurochko, Wednesday 17:00). This is the talk I keep telling people about (whether they asked or not), so it gets its own section.
+
+== The graveyard slot, resurrected
+
+Anyone who has spoken at a conference knows the last slot of day two. The shared dinner is next, the room is tired, and half the audience is already thinking about beer. In Munich. You can hardly blame them.
+
+Baptiste and Oleksii got the room back anyway.
+
+Baptiste has a sense of showmanship, and the enthusiasm, the stubbornness, and the plain joy the two of them put into this work came through in every slide. The audience applauded in the middle of the talk, more than once. Mid-talk applause, at 17:00 on day two, from hypervisor people. Let that sink in for a second.
+
+And that audience matters. These were committers and maintainers, people who already follow the RISC-V port on the mailing list and know every patch series by name (and, I suspect, by version number). For them, the talk turned Xen on RISC-V from something ethereal into something concrete. From vaporware to hardware, if you'll forgive me.
+
+The title says the plan, and the plan has two lanes. Upstream, the port goes https://xenbits.xen.org/docs/unstable/features/dom0less.html[dom0less] first: Xen builds its guests itself at boot, from a static configuration. Downstream, Baptiste and Oleksii already run guests with several vCPUs, on https://www.qemu.org/[QEMU] and on real hardware: a https://www.sifive.com/boards/hifive-premier-p550[HiFive Premier P550], and a https://www.spacemit.com/en/[SpacemiT] K3 that a community contributor booted independently.
+
+Then comes a full dom0 with the https://xenbits.xen.org/docs/unstable/man/xl.1.html[xl] toolstack, and that part works too: `xl info`, `xl list`, `xl create` and `xl console` are all there. Four commands. Doesn't sound like much? If you've typed them on x86 without a second thought, try picturing the work behind each one on a young architecture.
+
+They ended with a demo, pre-recorded in case the conference network let them down, creating a guest from dom0 and talking to it through its console. Is pre-recording cheating? No. That's experience. Anyone who has ever bet a live demo on conference Wi-Fi knows exactly why, and the knowledge is rarely acquired cheaply.
+
+Baptiste wrote up the P550 story in https://xcp-ng.org/blog/2026/09/03/xen-on-risc-v-just-ran-on-real-hardware/[Xen on RISC-V just ran on real hardware!], including why a core designed before the hypervisor extension was ratified made it harder than it sounds (and "harder than it sounds" is doing a lot of heavy lifting in that sentence). Their https://hosted-files.sched.co/xensummit2026/5c/xen-riscv-from-dom0less-to-xl.pdf[slides] are on the Summit schedule.
+
+== RVA23: a profile, and not the LinkedIn kind
+
+For years, RISC-V meant small boards for hobbyists and embedded work. That is changing, and the reason isn't a chip. It's a profile.
+
+https://github.com/riscv/riscv-profiles/blob/main/src/rva23-profile.adoc[RVA23] is a ratified set of mandatory extensions, and the hypervisor extension is one of them. An RVA23 chip is not automatically fast enough to be a server, but it has what virtualisation needs, in a form software can rely on. Once that baseline exists, hardware built for servers can follow, and a server that can't run a hypervisor is not much use in a datacenter (a very expensive space heater, at best).
+
+So the real question for Xen is whether a https://en.wikipedia.org/wiki/Hypervisor[type-1 hypervisor] will be ready when that hardware arrives. Showing up to the party after the cake is gone is never a great look. That is what Baptiste and Oleksii are working on: making sure we're there before the candles are lit.
+
+== The hallway track: no slides, all signal
+
+The corridor conversations were at least as exciting as the talks. No slides, no timer, nobody waving a "five minutes left" sign at you.
+
+Several people came over after my talk because, as one of them put it, they had noticed my "unbridled enthusiasm" for RISC-V. Fair enough. Guilty as charged. I'm not sure anyone has ever managed to put a bridle on it, least of all me. From those conversations:
+
+* a university lab that runs real RISC-V hardware in the loop for its CI, which is exactly what a port like ours needs;
+* an embedded engineer who would love to see Xen on RISC-V in safety-critical systems one day;
+* and, my favourite detail, people swapping links to order RISC-V boards on the spot, because everyone is waiting for hardware.
+
+Nothing says "this is getting real" quite like hypervisor people doing their shopping in the corridor.
+
+The atmosphere was friendly and generous, with the kind of good-natured competition where everyone leaves wanting to push a bit harder. Friendly rivalry: the renewable energy of open source.
+
+== Why I care (and why the bridle stays off)
+
+I'm not a visionary. But I do have a decent memory, and I've seen this pattern before: about fifteen years ago, with Arm, a new architecture went from "interesting" to "real" in a few years, and the people who had their software ready early were the ones who mattered. I think RISC-V can go further than Arm did, because the https://en.wikipedia.org/wiki/Instruction_set_architecture[ISA] itself is open. Open ISA, open hypervisor: I do like the symmetry.
+
+Is getting ready early a gamble? Sure.
+
+Call it a calculated RISC.
+
+There are enough signals now to say: let's go. Or, since we were in Munich, _los geht's_.
+
+== What's next
+
+* The talk recordings aren't out yet; they'll be linked here once the https://xenproject.org/[Xen Project] publishes them. (Refresh responsibly.)
+* Baptiste and Oleksii's work deserves more than a section in a recap, and a dedicated post is on the way.
+* If you want to follow the RISC-V port, or answer that call for reviewers (yes, I'm asking again; persistence is a feature, not a bug), the patch series are on the https://lists.xenproject.org/cgi-bin/mailman/listinfo/xen-devel[xen-devel mailing list].
+
+Thanks to the Xen Project team and to Renesas for organising the Summit, and to everyone who came to talk to us, enthusiasm bridled or not.
