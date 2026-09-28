@@ -27,9 +27,9 @@ Here is what we said, what I heard, and why I came back more excited about RISC-
 
 == Why a hypervisor summit is worth the trip
 
-Most of our work with the wider Xen community happens in writing, and that works. But some topics would take weeks to settle in a chat thread, and some would never come up at all, because nobody would think to raise them in the middle of a normal working day. Put the same people in one place for three days and those topics surface on their own, over coffee, in a corridor, or at dinner.
+Most of our work with the wider Xen community happens in writing, and that works. But some topics would take weeks to settle in a chat thread, and some would never come up at all, because nobody would think to raise them in the middle of a normal working day. Put the same people in one place for three days, and those topics surface on their own, over coffee, in a corridor, or at dinner.
 
-Vates was one of the sponsors, but the Summit belongs to the Xen community, not to us. Silicon vendors, consultancies, universities and embedded companies were all in the room, and that made the conversations much wider than the ones we have among ourselves.
+Vates was one of the sponsors, but the Summit belongs to the Xen community, not to us. Silicon vendors, consultancies, universities, and embedded companies were all in the room, and that made the conversations much wider than the ones we have among ourselves.
 
 == Our three talks
 
@@ -43,7 +43,7 @@ Vates was one of the sponsors, but the Summit belongs to the Xen community, not 
 
 Anyone who has spoken at a conference knows the last slot of day two. The shared dinner is next, the room is tired, and half the audience is already thinking about beer.
 
-Baptiste and Oleksii got the room back anyway. Baptiste has a sense of showmanship, and the enthusiasm, the stubbornness and the plain joy the two of them put into this work came through in every slide. The audience applauded in the middle of the talk, more than once.
+Baptiste and Oleksii got the room back anyway. Baptiste has a sense of showmanship, and the enthusiasm, the stubbornness, and the plain joy the two of them put into this work came through in every slide. The audience applauded in the middle of the talk, more than once.
 
 That audience matters. These were committers and maintainers, people who already follow the RISC-V port on the mailing list and know every patch series by name. For them, the talk turned Xen on RISC-V from something ethereal into something concrete.
 
@@ -83,4 +83,4 @@ There are enough signals now to say: let's go.
 * Baptiste and Oleksii's work deserves more than a section in a recap, and a dedicated post is on the way.
 * If you want to follow the RISC-V port, or answer that call for reviewers, the patch series are on the https://lists.xenproject.org/cgi-bin/mailman/listinfo/xen-devel[xen-devel mailing list].
 
-Thanks to Cody Zuschlag of the Xen Project and to Renesas for organising the Summit, and to everyone who came to talk to us.
+Thanks to the Xen Project team and to Renesas for organising the Summit, and to everyone who came to talk to us.
