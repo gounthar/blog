@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -226,18 +227,54 @@ def fix_image_urls(text: str) -> str:
     return text
 
 
+def _hugo_path_char(s: str, i: int, r: str) -> bool:
+    """Mirror of Hugo's isAllowedPathCharacter (common/paths/path.go)."""
+    if r == " ":
+        return False
+    cat = unicodedata.category(r)
+    if cat[0] in "LM" or cat == "Nd" or r in "./\\_#~-@":
+        return True
+    return r == "%" and i + 2 < len(s) and all(
+        c in "0123456789abcdefABCDEF" for c in s[i + 1:i + 3])
+
+
+def hugo_urlize(title: str) -> str:
+    """What Hugo puts in a :title permalink segment.
+
+    Ports paths.Sanitize: disallowed characters are dropped, a run of
+    whitespace becomes one hyphen, then the result is lowercased and
+    path-escaped ('#' becomes %23). Hugo keeps '.', so "llama.cpp" stays
+    "llama.cpp", which a plain slugifier gets wrong.
+    """
+    out: list[str] = []
+    prepend = was_hyphen = False
+    for i, r in enumerate(title):
+        if _hugo_path_char(title, i, r):
+            was_hyphen = r == "-"
+            if prepend:
+                if not was_hyphen:
+                    out.append("-")
+                prepend = False
+            out.append(r)
+        elif out and not was_hyphen and r.isspace():
+            prepend = True
+    return urllib.parse.quote("".join(out).lower(), safe="/-._~$&+,:;=@%")
+
+
 def make_canonical_url(fm: dict, filepath: Path) -> str:
-    """Derive canonical URL from frontmatter date + filename slug."""
+    """Derive the canonical URL the way Hugo builds the permalink.
+
+    hugo.toml sets posts = "/:year/:month/:day/:title/", so the slug comes
+    from the title, not the filename. Deriving it from the filename gave
+    62 of 77 posts a canonical URL that 404s.
+    """
     date_str = str(fm.get("date", "")).strip()
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", date_str)
-    if not m:
+    title = str(fm.get("title", "")).strip()
+    if not m or not title:
         return ""
     year, month, day = m.groups()
-    stem = filepath.stem
-    slug = re.sub(r"^\d{4}-\d{2}-\d{2}-?", "", stem)
-    slug = slug.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
-    return f"{BLOG_BASE_URL}/{year}/{month}/{day}/{slug}/"
+    return f"{BLOG_BASE_URL}/{year}/{month}/{day}/{hugo_urlize(title)}/"
 
 
 def normalize_tags(raw: list | str | None) -> list[str]:
