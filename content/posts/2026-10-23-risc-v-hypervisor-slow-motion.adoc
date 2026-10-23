@@ -9,7 +9,7 @@ excerpt: 'In November 2025, at KubeCon in Atlanta, we showed XCP-ng on Ampere. S
 draft: false
 featured: false
 hidden: false
-image: assets/images/2026/10/23/03-xo6-riscv-desktop-console.png
+image: assets/images/2026/10/23/00-header-long-exposure-river.jpg
 tags:
 - risc-v
 - xcp-ng
@@ -19,6 +19,10 @@ tags:
 title: 'A RISC-V hypervisor in slow motion: XCP-ng and Xen Orchestra, from inside QEMU'
 toc: true
 ---
+
+image::/assets/images/2026/10/23/00-header-long-exposure-river.jpg["A river rushing over boulders between green wooded hills, the water blurred to a white haze by a long exposure"]
+
+_Photo by John Thomas on link:https://unsplash.com/photos/river-in-between-green-trees-under-blue-sky-during-daytime-GYCV4cxDtmc[Unsplash]._
 
 In November 2025, at https://www.cncf.io/kubecon-cloudnativecon-events/[KubeCon] in Atlanta, we showed https://xcp-ng.org/blog/2025/11/13/xcp-ng-on-arm-with-ampere/[XCP-ng on Ampere]: an https://amperecomputing.com/products/processors[Ampere Altra]-based System76 Thelio Astra running XCP-ng, managed by Xen Orchestra. A real Arm machine, doing real hypervisor things, in front of real people.
 
