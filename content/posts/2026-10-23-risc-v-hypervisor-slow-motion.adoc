@@ -1,0 +1,186 @@
+---
+author: Bruno Verachten
+categories:
+- Open Hardware
+- Virtualization
+date: 2026-10-23 10:00:00 +0200
+description: 'A month of getting XCP-ng and Xen Orchestra to manage a RISC-V host and its guests, inside QEMU: networking, VM restarts and an XFCE desktop in the console tab.'
+excerpt: 'In November 2025, at KubeCon in Atlanta, we showed XCP-ng on Ampere. So in October we set ourselves the same goal on RISC-V.'
+draft: false
+featured: false
+hidden: false
+image: assets/images/2026/10/23/00-header-long-exposure-river.jpg
+tags:
+- risc-v
+- xcp-ng
+- xen-orchestra
+- xen
+- qemu
+title: 'A RISC-V hypervisor in slow motion: XCP-ng and Xen Orchestra, from inside QEMU'
+toc: true
+---
+
+image::/assets/images/2026/10/23/00-header-long-exposure-river.jpg["A river rushing over boulders between green wooded hills, the water blurred to a white haze by a long exposure"]
+
+_Photo by John Thomas on link:https://unsplash.com/photos/river-in-between-green-trees-under-blue-sky-during-daytime-GYCV4cxDtmc[Unsplash]._
+
+In November 2025, at https://www.cncf.io/kubecon-cloudnativecon-events/[KubeCon] in Atlanta, we showed https://xcp-ng.org/blog/2025/11/13/xcp-ng-on-arm-with-ampere/[XCP-ng on Ampere]: an https://amperecomputing.com/products/processors[Ampere Altra]-based System76 Thelio Astra running XCP-ng, managed by Xen Orchestra. A real Arm machine, doing real hypervisor things, in front of real people.
+
+So in October we set ourselves the same goal on RISC-V. (One new architecture a year is clearly not enough for some of us, and by "some of us" I mostly mean me.) The target was a host that Xen Orchestra can manage, and a guest on it running containers: Docker first, then https://kubernetes.io/[Kubernetes] with https://k3s.io/[K3s].
+
+Did we get there?
+
+In QEMU, yes. Xen Orchestra lists the RISC-V host and its VMs, opens their consoles, shows their stats, starts and stops them. A https://www.debian.org/[Debian] guest on that host runs Docker, and K3s reports `Ready` about a minute after starting. And as a bonus, the same guest shows an https://www.xfce.org/[XFCE] desktop in Xen Orchestra's console tab.
+
+Now, before anyone gets excited and starts shopping for boards: unlike the Arm demo, all of this runs in QEMU, emulated on an x86 machine. Since early October, that x86 machine has been pretending to be a RISC-V machine, with a lot of dedication and very little speed. We have not run this full stack on a RISC-V board yet. This is a prototype, research and development in the wild, and what follows is a progress report rather than an announcement (I'm repeating that to myself as much as to you, because my enthusiasm has a habit of slipping its leash).
+
+== The people who did the hard part first
+
+None of what follows exists without these people, so they come first.
+
+https://xcp-ng.org/blog/author/baptleduc/[Baptiste Le Duc] and https://xcp-ng.org/blog/author/oleksii/[Oleksii Kurochko] have been porting the Xen hypervisor itself to RISC-V for a while now, and the xcp-ng.org blog has followed them: Xen https://xcp-ng.org/blog/2026/09/03/xen-on-risc-v-just-ran-on-real-hardware/[booted a guest on real RISC-V hardware] in September. Then Zheng Zhang (http://english.is.cas.cn/[ISCAS], the Institute of Software, Chinese Academy of Sciences) took those patches and booted Xen on his own https://xcp-ng.org/blog/2026/09/29/xen-on-riscv-boots-on-the-spacemit-k3-our-first-rva23-board/[SpacemiT K3], the first https://github.com/riscv/riscv-profiles/blob/main/src/rva23-profile.adoc[RVA23] board Xen runs on.
+
+The original version of this story on xcp-ng.org was written together with Baptiste, https://xcp-ng.org/blog/author/yann-sionneau/[Yann Sionneau] and https://xcp-ng.org/blog/author/julian/[Julian Vetter], so their names belong up here too.
+
+So where does my October fit in?
+
+A hypervisor is not a virtualization platform. XCP-ng is Xen plus a https://wiki.xenproject.org/wiki/Dom0[dom0] with its whole package set, plus https://xapi-project.github.io/[XAPI], the toolstack that Xen Orchestra talks to. Baptiste's trees already carry the RISC-V Xen, the RISC-V toolstack (XAPI, https://xapi-project.github.io/new-docs/xenopsd/index.html[xenopsd], xenguest), the dom0 kernel, and the dom0 image build. Since early October, we have been working on the layer around them: package that stack for riscv64, boot it, fix what breaks along the way, and get Xen Orchestra to manage the result. The unglamorous plumbing, in other words, which happens to be my favourite kind.
+
+A word on method, because I'd rather say it now than have someone find out later: I built much of this with heavy help from AI coding assistants, so expect parts of it to change as the patches go through upstream review.
+
+== What works today
+
+The stack runs in QEMU with 3 harts and 5 GiB of RAM. The dom0 is https://wiki.almalinux.org/development/almalinux-os-kitten-10.html[AlmaLinux Kitten] running the riscv64 https://en.wikipedia.org/wiki/RPM_Package_Manager[RPMs] of our latest build round, round 19, Xen and the dom0 kernel included. Xen Orchestra 6.9.1 is a riscv64 build of its own (https://github.com/gounthar/xen-orchestra-riscv64[gounthar/xen-orchestra-riscv64]). On October 20th, on that round, it gave:
+
+* the host and its VMs in the inventory
+* host and VM consoles
+* host and VM stats (the graphs are in the XO 5 interface, which XO 6 links to)
+* start, clean shutdown, force shutdown, and start again
+* a Debian 13 (trixie) guest with a disk on a https://docs.xcp-ng.org/storage/[storage repository] and a network that reaches the internet
+* an XFCE desktop in the VM's console tab
+
+That fourth line looks boring. It wasn't, and I'll come back to it.
+
+image::/assets/images/2026/10/23/01-xo6-riscv-vm-boot-console.png["Xen Orchestra 6 console tab for the VM riscv1-trixie, showing systemd boot messages including the Xen guest agent service, ending at the prompt \"Debian GNU/Linux 13 riscv1-trixie hvc0\" and \"riscv1-trixie login:\"."]
+
+_Figure 1. A Debian 13 RISC-V guest booting to a login prompt, in the Xen Orchestra 6 console._
+
+image::/assets/images/2026/10/23/02-xo5-riscv-vm-stats.png["Xen Orchestra 5 Stats tab for the VM riscv1-trixie on host xcp-ng-riscv64, with four charts over ten minutes: CPU usage, memory usage rising to about 700 MiB, network throughput for two interfaces, and disk read and write throughput."]
+
+_Figure 2. CPU, memory, network, and disk statistics for the same guest, in Xen Orchestra 5._
+
+Inside that guest, on a kernel built with the container options, Docker runs riscv64 containers and K3s reports `Ready`.
+
+Is it polished? Not quite. On one start, Xen Orchestra showed no IP address for the guest for more than five minutes, although the guest had its lease after 24 seconds. Xen Orchestra reports the guest's disk as 1 GiB when the guest sees 8 GiB (a rounding error of a mere factor of eight), and Docker pulls sometimes need a retry.
+
+The packages are public, as experimental and unsigned releases in https://github.com/gounthar/xcpng-riscv64-rpms[gounthar/xcpng-riscv64-rpms]: 19 build rounds so far, published from round 10. They come from https://xcp-ng.org/blog/author/yann/[Yann Dirson]'s https://github.com/xcp-ng/meta-xcpng[meta-xcpng] https://docs.yoctoproject.org/bitbake/[BitBake] layer, with a riscv64 port of ours on top that is not part of his layer. (Yann Dirson, not to be confused with Yann Sionneau above. Yes, there are two Yanns in this story. No, it doesn't get easier.)
+
+In a riscv64 AlmaLinux Kitten container, with the Kitten repositories and the latest round, this resolves and installs:
+
+[source,bash]
+----
+dnf install xen-hypervisor xen-tools kernel-xcpng-riscv64 xcp-networkd xcp-ng-release-config
+----
+
+Let me be careful about what that means, because it's easy to read too much into a green `dnf` run. It proves the packaging, not that the stack runs. And like the Xen Orchestra build, these packages are a personal, unsupported, and not production-ready project. Please don't put them anywhere near anything you care about.
+
+== Starting a VM twice in one boot
+
+Remember that boring-looking line about "start again"?
+
+For the first few days, we could start exactly one VM per boot. Shut it down, and the next start never ran. One VM per boot is not so much a virtualization platform as a very elaborate bootloader.
+
+The dead guest was never freed, and it took a fix on each side. In Xen, the RISC-V functions that release a dead domain's resources were still stubs, and foreign mappings never dropped the page reference they take. In the dom0 kernel, the function that should unmap a guest's pages returned success without telling Xen anything, so about 28 MB of every dead guest stayed pinned. (A function that reports success without doing the work: we've all worked with one, and some of us have written one.)
+
+With both fixes, we ran three start, shutdown, start cycles in a row, and free memory came back to its baseline each time. Both fixes are merge requests on Baptiste's trees, waiting for his review.
+
+== Getting the guest on the network
+
+No network, no container images, so this one stood squarely between me and Docker. The first networked guest gave up right away:
+
+[source]
+----
+grant table add_to_physmap failed, err=-38
+----
+
+`-38` is `ENOSYS` (the kernel's polite way of saying "never heard of it"). Xen on RISC-V did not yet implement the call a guest uses to grow its https://xenbits.xen.org/docs/unstable/misc/grant-tables.txt[grant table], and a network frontend needs 512 grants to start. The Arm port has that case; RISC-V did not.
+
+We expected one patch and needed three: the missing case in Xen, a scratch page for grant seeding in libxenguest, and an init function in the RISC-V Linux port that returned an error and stopped grant table setup halfway. (Expect one, get three. If you've done any porting work, you're nodding right now.) After those, the guest was able to ping the dom0, and later reached the internet. These are also merge requests on Baptiste's trees, waiting for review.
+
+== A desktop in the console tab
+
+Both consoles in Xen Orchestra (XO) were text-only at first. Perfectly respectable, and perfectly black and white.
+
+Julian Vetter had already solved this for the Arm port, so we borrowed his approach: QEMU runs in dom0 only as a Xen https://wiki.xenproject.org/wiki/Paravirtualization_%28PV%29[PV backend], the guest uses Xen's PV framebuffer, and Xen Orchestra connects to it like any other console.
+
+On RISC-V that meant building a riscv64 QEMU from his XCP-ng QEMU branch plus two RISC-V patches, teaching xenopsd's RISC-V builder to start it, and enabling the keyboard and mouse frontend in the guest kernel. Then one setting on the VM:
+
+[source]
+----
+platform:vfb=true
+----
+
+And XFCE shows up in the console tab.
+
+image::/assets/images/2026/10/23/03-xo6-riscv-desktop-console.png["Xen Orchestra 6 showing the VM riscv2-desktop in the XCP-ng on RISC-V pool. The Console tab displays an XFCE desktop with a terminal where uname -a prints a Linux 6.18 riscv64 kernel."]
+
+_Figure 3. An XFCE desktop on a RISC-V guest, in the Xen Orchestra 6 console tab. `uname -a` reports riscv64._
+
+I know a desktop is not what anyone runs a hypervisor for. It does make a better demo than a login prompt.
+
+video::QWqo_HBfjik[youtube]
+
+And once there's a desktop, you know what has to run on it. On October 6th, https://www.chocolate-doom.org/[Chocolate Doom] 3.1.0 ran in that same console tab, with the https://freedoom.github.io/[Freedoom] Phase 1 game data (not id's WAD), both straight from Debian trixie's riscv64 repositories. Installing the two packages took 6 minutes 39 seconds under emulation.
+
+The console's first trick was to sit on its loading logo forever. Xen Orchestra reaches a VM's console through XAPI's https://en.wikipedia.org/wiki/WebSocket[websocket] proxy, and that proxy only accepted sockets named `vnc-N`, while the PV framebuffer's QEMU names its socket `pv-vnc-N`. Once XAPI accepted that name too (build round 13), the logo gave way to the desktop. Then the mouse pointer kept drifting to the right, because QEMU doesn't tell the guest's virtual keyboard driver how big the screen is. Telling the guest kernel directly fixed it:
+
+[source]
+----
+xen_kbdfront.ptr_size=1280,800
+----
+
+image::/assets/images/2026/10/23/04-xo6-riscv-doom-console.png["Xen Orchestra 6 Console tab for the VM riscv2-desktop, showing an XFCE desktop with a Chocolate Doom 3.1.0 window running Freedoom Phase 1."]
+
+_Figure 4. Freedoom on a RISC-V guest, in the Xen Orchestra 6 console tab, on October 6th, on an earlier build round._
+
+video::UFdyKklygsc[youtube]
+
+_The same run on video, recorded on 2026-10-06._
+
+Is it playable? I honestly don't know: nobody measured the frame rate, and under emulation I wouldn't bet on it. But it runs, and some traditions have to be respected.
+
+== One fix that came from upstream
+
+For a while, Xen Orchestra would lose the RISC-V pool every time XAPI was restarted, and only a restart of xo-server would bring it back.
+
+That one, we didn't have to fix ourselves: Xen Orchestra 6.9.0 fixed it. Since we updated, xo-server reconnects on its own, about 20 seconds after a XAPI restart. (I'd love to take credit for that one. I can't. All I did was update.)
+
+== What emulation costs
+
+QEMU emulating RISC-V on x86 is slow, and it shows.
+
+That minute for K3s is emulation time. A guest reads its disk at about 800 KB/s. Yes, kilobytes, per second, and I'll let that sink in slowly, at roughly the speed of the disk. A clean shutdown takes about 20 seconds. The packages are built under emulation too: the https://ocaml.org/[OCaml] build alone takes 72 minutes (plenty of time to reconsider a few life choices).
+
+None of those figures say anything about how RISC-V hardware performs. They only explain why we want to switch to using a real hardware board.
+
+== What's next
+
+Three directions, none of them dated (on purpose: a date in a blog post reads like a promise, and this is a prototype):
+
+* *Real RISC-V hardware.* Our boot path still assumes QEMU's virtual machine layout. Booting the full stack on a board, as our Arm demo did on Ampere, is the next milestone.
+* *Upstreaming.* Our patches go to Baptiste's Xen, Linux, and toolstack trees first, for review, then upstream from there. Some are merged in his trees; most are still waiting.
+* *Reproducible package builds.* Native builds on a RISC-V board instead of emulation, and a riscv64 port that fits meta-xcpng cleanly.
+
+== How to help
+
+Don't have a RISC-V board? This stack hasn't met one yet either, so you're in good company.
+
+You don't need one to contribute. Start with the packages: in a riscv64 AlmaLinux Kitten container, download the latest round and install it as a local repository, as the https://github.com/gounthar/xcpng-riscv64-rpms[repository's README] shows, and run the install command above. That only proves they install, but a dependency that does not resolve or a file in the wrong place is a bug, and telling us about it on the https://xcp-ng.org/forum/[forum] is already a contribution.
+
+If you know RISC-V, virtualization, or packaging, you are welcome to review Baptiste's https://gitlab.com/xen-project/people/baptleduc/xen[Xen tree], https://github.com/baptleduc/linux-xen-riscv[Linux tree], and https://github.com/baptleduc/xen-api[xen-api fork]. (Yes, this is me asking for reviewers again. I'm told persistence is a feature.)
+
+== What I'm taking away from October
+
+An emulator number is an emulator number: 800 KB/s disk reads say something about QEMU on x86 and nothing about RISC-V silicon. When RISC-V is missing something, look at the Arm port first, because the grant table case was already there, and so was Julian's console approach. Budget for three patches when you expect one. Update before you debug, since the XAPI reconnect problem had been fixed in Xen Orchestra 6.9.0 all along, waiting for me to notice. And a package that installs is not a stack that runs.
+
+_This is my personal retelling of a post published on the XCP-ng blog, written with a bit more mischief than the house voice allows. The original, co-authored with Baptiste Le Duc, Yann Sionneau and Julian Vetter, lives on xcp-ng.org: https://xcp-ng.org/blog/2026/10/23/xcp-ng-and-xen-orchestra-on-risc-v-a-progress-report-from-the-emulator/[XCP-ng and Xen Orchestra on RISC-V: a progress report from the emulator]._
