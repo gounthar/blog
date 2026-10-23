@@ -258,7 +258,11 @@ def hugo_urlize(title: str) -> str:
             out.append(r)
         elif out and not was_hyphen and r.isspace():
             prepend = True
-    return urllib.parse.quote("".join(out).lower(), safe="/-._~$&+,:;=@%")
+    # Go lowercases rune by rune with simple case mapping: no final sigma
+    # ("ΟΣ" -> "οσ"), and "İ" -> "i" where Python's str.lower() gives two
+    # code points. Taking the first one matches it.
+    lowered = "".join(c.lower()[0] for c in out)
+    return urllib.parse.quote(lowered, safe="/-._~$&+,:;=@%")
 
 
 def make_canonical_url(fm: dict, filepath: Path) -> str:
@@ -274,7 +278,11 @@ def make_canonical_url(fm: dict, filepath: Path) -> str:
     if not m or not title:
         return ""
     year, month, day = m.groups()
-    return f"{BLOG_BASE_URL}/{year}/{month}/{day}/{hugo_urlize(title)}/"
+    # A title with nothing left after sanitising (emoji only) leaves Hugo
+    # with the bare date path.
+    slug = hugo_urlize(title)
+    base = f"{BLOG_BASE_URL}/{year}/{month}/{day}/"
+    return f"{base}{slug}/" if slug else base
 
 
 def normalize_tags(raw: list | str | None) -> list[str]:
