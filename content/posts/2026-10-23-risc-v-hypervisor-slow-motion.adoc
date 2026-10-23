@@ -126,6 +126,25 @@ I know a desktop is not what anyone runs a hypervisor for. It does make a better
 
 video::QWqo_HBfjik[youtube]
 
+And once there's a desktop, you know what has to run on it. On October 6th, Chocolate Doom 3.1.0 ran in that same console tab, with the Freedoom Phase 1 game data (not id's WAD), both straight from Debian trixie's riscv64 repositories. Installing the two packages took 6 minutes 39 seconds under emulation.
+
+The console's first trick was to sit on its loading logo forever. Xen Orchestra reaches a VM's console through XAPI's websocket proxy, and that proxy only accepted sockets named `vnc-N`, while the PV framebuffer's QEMU names its socket `pv-vnc-N`. Once XAPI accepted that name too (build round 13), the logo gave way to the desktop. Then the mouse pointer kept drifting to the right, because QEMU doesn't tell the guest's virtual keyboard driver how big the screen is. Telling the guest kernel directly fixed it:
+
+[source]
+----
+xen_kbdfront.ptr_size=1280,800
+----
+
+image::/assets/images/2026/10/23/04-xo6-riscv-doom-console.png["Xen Orchestra 6 Console tab for the VM riscv2-desktop, showing an XFCE desktop with a Chocolate Doom 3.1.0 window running Freedoom Phase 1."]
+
+_Figure 4. Freedoom on a RISC-V guest, in the Xen Orchestra 6 console tab, on October 6th, on an earlier build round._
+
+video::UFdyKklygsc[youtube]
+
+_The same run on video, recorded on 2026-10-06._
+
+Is it playable? I honestly don't know: nobody measured the frame rate, and under emulation I wouldn't bet on it. But it runs, and some traditions have to be respected.
+
 == One fix that came from upstream
 
 For a while, Xen Orchestra would lose the RISC-V pool every time XAPI was restarted, and only a restart of xo-server would bring it back.
