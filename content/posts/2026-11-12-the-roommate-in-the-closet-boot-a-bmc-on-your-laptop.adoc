@@ -51,7 +51,9 @@ So what does it take to finally see their face?
 
 == A whole computer that never sleeps
 
-Let's be precise about what we're dealing with, because "the little management board" undersells it. A BMC (baseboard management controller) is a complete computer inside your server: its own processor, its own operating system, its own network port. It powers the server on and off, gives you a console, mounts an ISO remotely. And it keeps running while the server itself is switched off.
+Let's be precise about what we're dealing with, because "the little management board" undersells it. A BMC (baseboard management controller) is a complete computer inside your server: its own processor, its own operating system, its own network port. It powers the server on and off, gives you a console, mounts an ISO remotely.
+
+And it keeps running while the server itself is switched off.
 
 Which OS? At Cloud Nord nearly nobody in the room knew, and before preparing the talk I didn't either. By default, on servers from the big vendors, it's proprietary firmware. Some of its features can even be licensed separately, depending on the model (on one machine I was lent, mounting an ISO needed a paid licence). Closed code, and sometimes closed features on top of it.
 
@@ -93,11 +95,11 @@ head -c $((134217728 - $(stat -c %s bletchley.mtd))) /dev/zero \
   | tr '\0' '\377' >> bletchley.mtd
 ----
 
-Why `tr` and not just zeros? Because erased flash reads as all ones, so that's what blank flash should look like to the machine.
+Why `tr` and not just zeros? Because blank flash isn't zeros. Erased, it reads as all ones, so that's what the machine should see.
 
 === Get QEMU without installing it
 
-You can simply install your distro's `qemu-system-arm` package. I wanted to keep my system clean (I have enough mysterious packages already), so I unpacked the Debian 13 packages into a directory instead:
+The easy way: install your distro's `qemu-system-arm` package. I wanted to keep my system clean (I have enough mysterious packages already), so I unpacked the Debian 13 packages into a directory instead:
 
 [source,bash]
 ----
@@ -153,7 +155,7 @@ Linux 6.18.60-4a2f1ea
 
 There it is. A Linux kernel, a version string you can trace back to a commit in the OpenBMC tree, and a target machine name. Ten seconds of typing, and I know more about this BMC than about any BMC I've ever plugged into a rack.
 
-Now the same question through the front door, Redfish, the standard management API. From your laptop (`-k` because this BMC's certificate isn't one your laptop trusts):
+Now the same question through the front door: Redfish, the standard management API. From your laptop (`-k` because this BMC's certificate isn't one your laptop trusts):
 
 [source,bash]
 ----
@@ -188,11 +190,11 @@ It doesn't make your production BMCs any more open. (Sorry. I checked.) But it c
 
 == Monday morning: put the roommate in their own cave
 
-In the talk, Oslo's buses went into a mountain cave to cut it off from the world. Your BMC deserves a cave of its own:
+In the talk, Oslo's buses went into a mountain cave to cut them off from the world. Your BMC deserves a cave of its own:
 
 * *A separate management network.* Never the production network.
 * *Default accounts changed.* Yes, `0penBmc` too, the moment it's anywhere but your laptop.
-* *Before your next purchase, check OpenBMC's supported platforms.* If your machine is on the list, this floor has an open door. Ask the salesperson too; the answer alone will tell you something.
+* *Before your next purchase, check OpenBMC's supported platforms.* If your machine is on the list, this floor has an open door. Ask the salesperson too. Their answer alone will tell you something.
 
 == Takeaways
 
