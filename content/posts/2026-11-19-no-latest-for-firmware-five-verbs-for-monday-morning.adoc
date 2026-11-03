@@ -1,0 +1,181 @@
+---
+layout: post
+title: 'No :latest for firmware: five verbs for Monday morning'
+author: Bruno Verachten
+date: 2026-11-19 10:00:00 +0100
+categories:
+- Security
+- Infrastructure
+tags:
+- firmware
+- security
+- fwupd
+- tpm
+- keylime
+- lvfs
+- bmc
+- confidential-computing
+- devops
+- cloud-nord
+series: ["Above This Line"]
+toc: true
+description: 'The practical floor of the Above This Line series: five verbs (Inventory, Measure, Attest, Pin, Isolate) to stop trusting closed firmware blindly, with a printable checklist and a box for cloud-native readers.'
+excerpt: 'You know the digest of every image you run in production. Do you know the version of a single firmware in the same rack? Five verbs for Monday morning, none of which turns red into green.'
+image: ""
+featured: false
+hidden: false
+draft: true
+---
+
+.Above This Line: the lift directory
+****
+* 0. link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[The lift ride]
+* -1. One setting changed, two lines moved (coming soon)
+* -2. link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[The roommate in the closet]
+* *▶ Monday morning. No `:latest` for firmware* (you are here)
+* RISC-V. Down to the last binary (coming soon)
+****
+
+Previously on Above This Line: in link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], we went from the VM down to the silicon and found the bottom of the building red: closed firmware, closed processors, keys held by someone else. Then in link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[the roommate in the closet], we booted an open BMC on a laptop and asked it who it was. Lovely. But your production rack is still red at the bottom. So what do you actually do about it on Monday?
+
+[TODO: header image. A Monday-morning desk: a coffee mug, a head torch, and a printed checklist with five boxes, one already ticked.]
+
+== Monday morning, coffee in hand
+
+You know the digest of every image you run in production. You have SBOMs, scanners, a policy that rejects anything unsigned. If someone pushes `:latest` to prod, a bot complains before a human even notices. (Bless that bot.)
+
+Now, quick: which firmware version is the BIOS of your third database server running? Its BMC? Its network cards?
+
+Yeah. Me neither, for most of my machines.
+
+First, let's set expectations. I'm not going to ask you to flash coreboot onto production on Monday. Your security officer would track me down, and they'd be right to. The red floors stay red. What we can change is whether we see them.
+
+« On ne rend pas le rouge vert, on le rend visible. » _We don't turn red into green. We make it visible._
+
+Visible, measured, and no longer trusted blindly. That's the whole programme, in link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[five verbs]: Inventory, Measure, Attest, Pin, Isolate. None of them is exotic. You already do all five for containers. We're just going to point them one floor lower (well, four floors lower).
+
+== 1. Inventory: you can't watch what you don't know you have
+
+The dumbest verb, and the most underrated. On any Linux machine, two commands get you started:
+
+[source,bash]
+----
+fwupdmgr get-devices      # firmware that fwupd can see
+sudo dmidecode -t bios    # the system firmware version
+----
+
+link:https://github.com/fwupd/fwupd[fwupd] is the firmware update daemon on Linux, and `get-devices` lists every device it can see on the machine, with its firmware version: the system firmware, and whatever else fwupd knows how to talk to on that particular box. `dmidecode` reads the system firmware's own tables and tells you its vendor, version and release date. What should you look for? Version numbers you can compare across machines, anything that doesn't match the rest of the fleet, and anything you didn't know was there. (That last category is usually the interesting one.)
+
+Then the BMC. Go and get its firmware version too. If it speaks Redfish, the manager resource reports a `FirmwareVersion` field (we saw one answer in the BMC post, on the emulated board). If it doesn't, the web interface will tell you, somewhere.
+
+And then the important bit: put all of it in the same inventory as everything else. Same database, same dashboards, same review as your container SBOMs. Firmware isn't a separate religion. It's software that happens to run before yours.
+
+How many lines should you expect? On one real server I looked at for the talk, counting the BIOS, the BMC, the network cards, the disk controller and the drives, I got to at least ten distinct firmware images in one box. Ten. In one box. Most of them closed.
+
+One more line that's easy to forget: what's missing. That same server had no TPM. "No TPM" is not an absence of data. It's an inventory line, and as we'll see in a minute, it's the line that tells you what you can't do next.
+
+== 2. Measure: the bouncer and the camera
+
+Secure Boot and measured boot sound like the same thing. They aren't.
+
+Secure Boot is the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2068s[bouncer]. Anything not signed by a key it knows doesn't get in. « Tu as des baskets, tu rentres pas. » _You're wearing sneakers, you're not getting in._ It decides at the door, and it doesn't keep a record of who it let through.
+
+Measured boot is the security camera. It lets everyone in, but it films them: each step of the boot is measured and recorded in the TPM, and the event log tells the whole story afterwards. On Linux, you can read that log with link:https://github.com/tpm2-software/tpm2-tools[tpm2-tools]:
+
+[source,bash]
+----
+sudo tpm2_eventlog /sys/kernel/security/tpm0/binary_bios_measurements
+----
+
+I'm not showing you what comes out in this post, on purpose. That's the next one: in the floor -1 post, I swap two boot entries in a machine's firmware, reboot, and count what moves in the log. (Place your bets now. One line? More? None?)
+
+And the server with no TPM from the inventory? No TPM, no camera. You measure nothing. Which is why that inventory line matters: it's the first thing on the list of things you can't do on that box.
+
+== 3. Attest: a camera nobody watches is decoration
+
+A security camera that records to a disk nobody ever looks at is a very expensive piece of decoration. Same with measurements. They're only useful if someone, somewhere else, compares them against what you expect.
+
+That's link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2230s[remote attestation]. And there's a project for exactly that, in a foundation you already know: link:https://keylime.dev/[Keylime], a link:https://www.cncf.io/projects/keylime/[CNCF project] (Sandbox level), Apache 2.0, born at MIT's Lincoln Laboratory. An agent on each machine sends its TPM measurements. A verifier, on another machine, compares them with your policy. If they stop matching, the verifier link:https://keylime.readthedocs.io/en/latest/design/overview.html[sends revocation messages]. What happens next depends on how you wire it in: you can listen for those events and pull the node out of rotation, put it in quarantine, page someone. Zero trust, but going all the way down to the firmware.
+
+Now, be careful about what this buys you. Attestation tells you that something changed. It doesn't tell you the firmware is trustworthy. It doesn't tell you the firmware is open. A closed blob stays closed; it just stops changing behind your back without you knowing. That's not "everything's fine" versus "everything's broken". It's "something moved". Which, for a floor you can't read, is already a lot.
+
+== 4. Pin: friends don't let friends use latest
+
+You refuse `:latest` in production for your images. Why would you accept it for firmware? link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2262s[Friends don't let friends use latest], and that goes for the BIOS too.
+
+So, pin. Know which version you run, choose when it changes, and change it on purpose. The link:https://fwupd.org/lvfs/[LVFS] is the portal where hardware vendors upload their firmware updates for fwupd to apply. Where your hardware is supported, get it from there, rather than from a binary downloaded by hand from some download page at two in the morning, straight onto a production box. (We've all been tempted. Two in the morning is when all the bad ideas look reasonable.)
+
+Then do what you'd do for any other software: canary it. Put the new version on an isolated test machine first, check that nothing odd happens, and only then roll it out to production. Boring. Effective. Exactly what you already do for everything above floor 0.
+
+And if your vendor doesn't publish on LVFS? Ask them. Ask what the new versions are, whether you can test them, whether they're signed and attested. While you're at it, ask for a firmware SBOM. They may not have one. The question alone moves things. Remember TP-Link in the hub post: an FCC consent decree committed it to work with the open source community, and on an Archer A7 sold in the US, OpenWrt installs from TP-Link's own update page. I can't prove the two are connected. But asking certainly didn't hurt.
+
+== 5. Isolate: the roommate gets their own cave
+
+The fifth verb brings back our link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2327s[roommate in the closet], the BMC.
+
+Raise your hand if at least one of your servers has its BMC on the same network as production. (You don't have to answer. Your security officer might be reading this.)
+
+Oslo put its buses at the bottom of a mountain cave to cut it off from the world. Your BMC deserves a cave of its own:
+
+* a separate management network, never the production one;
+* restricted access, so only the people and machines that need it can reach it;
+* default accounts changed (no, not later, now);
+* and before your next purchase, check the list of platforms OpenBMC supports. If your machine is on it, that's one of the rare floors with an open alternative already. Ask the salesperson too. Their answer alone will tell you something.
+
+== If your servers live at someone else's place
+
+Cloud-native folks, I haven't forgotten you. link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2395s[All of this concerns you too.] Floors -1 to -4 still exist under your cluster. You just don't hold the keys anymore. So what can you do on Monday?
+
+*One: turn on the virtual TPM.* The three big clouds each offer one: link:https://docs.cloud.google.com/compute/shielded-vm/docs/shielded-vm[Shielded VM] at Google, link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nitrotpm.html[NitroTPM] at AWS, link:https://learn.microsoft.com/en-us/azure/virtual-machines/trusted-launch[Trusted Launch] at Azure. Same grid for all three, no ranking. Your VM does its own measured boot, and you can attest its boot chain. Its own chain, mind you. Not the host's firmware underneath.
+
+*Two: confidential VMs.* On AMD it's SEV-SNP, on Intel it's TDX. The processor encrypts your VM's private memory, and the host should only see noise. Managed Kubernetes nodes can run that way too, for example with link:https://docs.cloud.google.com/kubernetes-engine/docs/how-to/confidential-gke-nodes[Confidential GKE Nodes]. And on AMD, guess who produces the link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report]? The SEV firmware, running in the PSP, our old acquaintance from floor -3. You trust the host less and the chip maker more. That's progress. It isn't openness.
+
+*Three: ask your provider.* Who updates the firmware and the BMCs of my hosts? How often? With what proof? Same as the firmware SBOM: just asking the question moves the line a little.
+
+== The printable checklist
+
+Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I won't tell.)
+
+*Inventory*
+
+* [ ] Run `fwupdmgr get-devices` and `dmidecode -t bios` on every machine type in the fleet
+* [ ] Record each BMC's firmware version
+* [ ] Store it all next to your container SBOMs, missing TPMs included
+
+*Measure*
+
+* [ ] Check which machines have a TPM, and which don't
+* [ ] Read one event log with `tpm2_eventlog`, just to see what's in it
+
+*Attest*
+
+* [ ] Try Keylime on two test machines: one agent, one verifier
+* [ ] Decide what a revocation event should actually do to a node
+
+*Pin*
+
+* [ ] Check which of your machines get firmware through LVFS
+* [ ] Canary every firmware update on an isolated test box first
+* [ ] Ask each vendor for a firmware SBOM
+
+*Isolate*
+
+* [ ] Move every BMC to a separate management network
+* [ ] Change every default account
+* [ ] Check OpenBMC's supported platforms before the next purchase
+
+== Takeaways
+
+* _Inventory first._ A firmware you don't know about is a firmware you can't watch, and "no TPM" is a line in the inventory too.
+* _The bouncer isn't the camera._ Secure Boot refuses at the door; measured boot records who came in.
+* _Watch the camera._ Attestation only tells you something changed. That's exactly what you need from a floor you can't read.
+* _No `:latest` for firmware._ LVFS where you can, a canary box always, and a polite question to every vendor.
+* _Give the BMC its own cave._ Separate network, restricted access, no default passwords.
+
+None of these verbs makes the management engine readable. Red stays red. But you go from "I trust it" to "I know when it changes", and for anyone who runs infrastructure, that's a big deal.
+
+`audit("monday") = ? · but now you'll know when it changes`
+
+Next in the series: floor -1, where I change one boot setting on a real machine and catch it on camera.
+
+The link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[talk video] (in French, the five verbs start here) and the link:https://speakerdeck.com/gounthar/100-percent-open-source-au-dessus-de-cette-ligne[slides], sources in the appendix, are online.
