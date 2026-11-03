@@ -1,0 +1,199 @@
+---
+layout: post
+title: "Down to the last binary: what's really on my Banana Pi F3"
+author: Bruno Verachten
+date: 2026-12-03 10:00:00 +0100
+categories:
+- RISC-V
+- Security
+tags:
+- risc-v
+- firmware
+- opensbi
+- u-boot
+- armbian
+- banana-pi
+- spacemit
+- open-source
+- security
+- cloud-nord
+series: ["Above This Line"]
+toc: true
+description: 'The last floor of the Above This Line series: walking the boot chain of a RISC-V board with read-only commands, and finding the one binary that nobody rebuilt.'
+excerpt: 'RISC-V is where the bottom of the stack starts to open. My most open board still had a binary on it that nobody in the room had rebuilt. Including me.'
+image: ""
+featured: false
+hidden: false
+draft: true
+---
+
+.Above This Line: the lift directory
+****
+* 0. link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[The lift ride]
+* -1. link:/2026/11/26/one-setting-changed-two-lines-moved-catching-firmware-changes-with-your-tpm/[One setting changed, two lines moved]
+* -2. link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[The roommate in the closet]
+* Monday morning. link:/2026/11/19/no-latest-for-firmware-five-verbs-for-monday-morning/[No `:latest` for firmware]
+* *▶ RISC-V. Down to the last binary* (you are here)
+****
+
+Previously on Above This Line: in link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], we went from the VM down to the silicon on x86 and found the bottom floors red, with a closed processor answering on floor -3. At the end of the talk I promised some good news, and it was RISC-V: same lift, different building, and the bottom finally starts to open.
+
+This post is the honest version of that good news.
+
+My most open board still had a binary on it that nobody in the room had rebuilt. Including me. Especially me.
+
+[TODO: header image. Bruno's Banana Pi BPI-F3 on a desk, the SpacemiT K1 chip visible, no serial number or MAC label in frame.]
+
+== Same lift, other building
+
+On link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2526s[stage], I drew the RISC-V building with the same floors as the x86 one. On a RISC-V server, the spec asks for UEFI, and server data sheets list a BMC, so on paper the upper floors look just like yours. (On paper. What actually ships is another conversation.)
+
+My board isn't a server, though. I've been knocking on doors for a RISC-V server for a while (no luck yet, if any vendor is reading). On a dev board like the BPI-F3, there's no UEFI and no BMC. The pieces are a first-stage loader, link:https://github.com/riscv-software-src/opensbi[OpenSBI] and U-Boot.
+
+OpenSBI is the green floor of this building. It's the firmware sitting just below the OS, in M-mode, the most privileged mode on the chip, providing services to the kernel or the hypervisor. It's the open source reference implementation, BSD-2-Clause. `audit = 0`.
+
+Think of it as the building's caretaker. You can read the caretaker's whole job description, every line of it. But the caretaker still has keys to every flat. Readable doesn't mean outside your trust base. That's exactly the problem the link:https://github.com/epfl-dcsl/flashpoint[Flashpoint] research project at EPFL looks at: a small ISA extension to isolate that M-mode code and measure it into a TPM, demonstrated in QEMU and on an FPGA. Research, mind you. No shipping chip has that extension.
+
+So the caretaker is readable. What about everyone else in the building?
+
+== Walking the boot chain, read-only
+
+Everything below was read on 3 November 2026, over ssh, on two of my BPI-F3 boards running Armbian. Nothing was written, flashed or rebooted. Every command is one you can run on yours. (Without sudo, even. My boards are paranoid about me, and rightly so.)
+
+=== U-Boot: where did it come from?
+
+Armbian leaves a little metadata file next to the bootloader it ships:
+
+[source,bash]
+----
+cat /usr/lib/linux-u-boot-current-bananapif3/u-boot-metadata.sh
+ls /usr/lib/linux-u-boot-current-bananapif3/
+----
+
+On board A, the one from the talk, it names the source repository, a tag and a revision:
+
+----
+UBOOT_GIT_SOURCE=https://gitee.com/bianbu-linux/uboot-2022.10.git
+----
+
+with the tag `k1-bl-v2.2.7-release` and revision `c6f2746cb7993a6fb6c9f51b2bff318921e13f98`. When I cloned that tag for the talk, in October 2026, it pointed at exactly that commit, and the 3 November read shows the same revision. The first-stage loader, the DDR memory initialisation and U-Boot are C code under GPL, and the DDR init directory has no `.a`, `.bin` or `.o` hiding in it. That's the best answer a bootloader can give you: here's the source, here's the commit, go read it.
+
+One honest caveat. That the installed `FSBL.bin` and `u-boot.itb` in that directory are the exact build of that commit, I haven't reconstructed. Source and commit: verified. Binary reproducibility: not tested.
+
+=== OpenSBI: which version?
+
+`fw_dynamic.itb` sits in the same directory, and it holds OpenSBI. Which version? My first reflex:
+
+[source,bash]
+----
+strings /usr/lib/linux-u-boot-current-bananapif3/fw_dynamic.itb | grep -i opensbi
+----
+
+That gives you a dozen lines: "OpenSBI fw_dynamic Firmware", some FIT and domain config names, and the format string `OpenSBI v%d.%d`. Notice what's missing: an actual version number. The digits are filled in at runtime, so the version simply isn't recoverable this way. The boot log would tell you, but it had rotated and I didn't have sudo for `dmesg`. So: version unknown. I'd rather tell you that than guess.
+
+Where it was built from, though, is public. Per link:https://github.com/armbian/build/blob/main/config/sources/families/spacemit.conf[Armbian's build config] for this family, OpenSBI is built from a contributor's tree rather than from the upstream project. Open source either way, just not the upstream branch.
+
+=== The second core
+
+Here's where it got interesting. This chip has a second, small processor, a 32-bit RISC-V core, and Linux starts it through remoteproc:
+
+[source,bash]
+----
+for r in /sys/class/remoteproc/remoteproc*; do
+  cat "$r/name" "$r/firmware" "$r/state"
+done
+----
+
+----
+rcpu_rproc
+esos.elf
+running
+----
+
+A second core, running a firmware called `esos.elf`. What is it, and where does it come from?
+
+[source,bash]
+----
+file /lib/firmware/esos.elf
+sha256sum /lib/firmware/esos.elf
+dpkg -S /lib/firmware/esos.elf
+strings /lib/firmware/esos.elf | grep -i 'rt-thread team'
+----
+
+`file` says it's a 32-bit RISC-V ELF, not stripped. Its sha256 is `3b3ef5ba9b404c6500bfc0f7f1efc0cb7fdde818450b7beddac1c00f29898537`. It belongs to the `armbian-bsp-cli-bananapif3-current` package, and its strings say "Copyright by rt-thread team": a small real-time system, RT-Thread, running alongside Linux on the same chip.
+
+So who built it? Not my distribution. Armbian's build doesn't compile `esos.elf`; it copies a prebuilt file from its own tree, added by link:https://github.com/armbian/build/commit/432435faa8[a commit dated 2024-06-25] titled "Add boot firmware blob esos.elf". The sha256 on my board matches the file in Armbian's build tree.
+
+(The binary also contains build paths from the machine it was compiled on. I'm not printing them. They identify a person, and that person did nothing wrong.)
+
+=== Can this chip host a hypervisor?
+
+Last check, for the hypervisor fans (hello):
+
+[source,bash]
+----
+grep ^isa /proc/cpuinfo | sort | uniq -c
+grep -c ^processor /proc/cpuinfo
+----
+
+Eight harts, and no `h` in the ISA string. No hypervisor extension, so no Xen on this chip anyway. Bit of a shame for a hypervisor person's favourite board. (I'll live.)
+
+And the very bottom, the boot ROM etched into the chip? I haven't read it. I can't. That floor stays a question mark.
+
+== The twist: two boards, one binary
+
+I didn't stop at one board. Board B runs a newer image, and a lot has moved:
+
+* Board A: Armbian 25.11.2, kernel 6.6.99.
+* Board B: Armbian 26.8.3, kernel 6.18.44.
+
+Board B's U-Boot doesn't even come from the same place anymore: a contributor's repository on GitHub, tag `k1-bl-v2.2.9-release`, revision `d61c8c77e241`, against `k1-bl-v2.2.7-release` from the gitee repository on board A. The ISA string grew too (it adds `zaamo` and `zalrsc`). Kernel, bootloader, source repository: all changed.
+
+And `esos.elf`?
+
+Byte for byte the same. Same sha256, `3b3ef5ba...8537`, same package, still running.
+
+New kernel, new bootloader, new source repository, and the one binary that didn't move is the one nobody rebuilds. And the funny part: its source exists. SpacemiT publishes it, under Apache-2.0, at link:https://gitee.com/spacemit-buildroot/esos[spacemit-buildroot/esos], and that repository holds no prebuilt binary under `bsp/spacemit`. Does that published source rebuild this exact file? I haven't tested it, so I can't tell you.
+
+Published source is not the same thing as what shipped.
+
+== Nobody did anything wrong
+
+Let me be very clear, because this could read like a scandal and it isn't one. This is how firmware tends to ship when a distribution supports a lot of boards and time is short: a working binary goes into the tree so the board boots, and it keeps working, so nobody has a reason to touch it. (If you've never committed a "temporary" binary that outlived its welcome, you're a better person than me.) The vendor published the source. The distribution shipped a binary that boots. Both did their job.
+
+What's missing is the step in between, the one that turns "the source exists" into "this binary comes from that source". And that step is open to anyone. You could:
+
+* clone the published source, build it, and compare the result with the shipped `esos.elf`;
+* or simply ask upstream which commit and toolchain produced it.
+
+Either way, you'd move this binary from "trust me" to "check me". (If you do, tell me. I'll happily update this post.)
+
+== An open ISA is not an open core
+
+Zoom out from my board, and the same lesson holds one floor further down. The RISC-V link:https://docs.riscv.org/reference/isa/v20260120/unpriv/unpriv-index.html[instruction set] is an open specification anyone can read and implement. But the core built on it? Depends.
+
+SiFive sells the link:https://www.sifive.com/cores/performance-p550[P550] as licensed IP: open ISA, closed core. CVA6, at OpenHW, publishes its RTL, the actual blueprints of the core, and the hypervisor extension has been in that RTL since link:https://github.com/openhwfoundation/cva6/releases/tag/v5.1.0[v5.1.0], even if trying it on an FPGA still goes through a closed vendor tool. I used to think an open ISA meant open hardware. It doesn't. Two different things.
+
+On the SpacemiT K3, which announces H, AIA and an IOMMU, only 8 of its 16 cores have the H extension. link:https://missingno.tech[Julien Aubé] ran the commands on his K3 for me (thank you, Julien): on that one board, AIA is there and Linux sees no IOMMU.
+
+The software is following. My colleagues have Doom running on Xen on RISC-V, emulated in QEMU on an x86 machine: a prototype, not yet on real hardware.
+
+And without a board? Scaleway rents bare-metal RISC-V, the link:https://www.scaleway.com/en/elastic-metal-rv1/[EM-RV1]. According to link:https://www.scaleway.com/en/blog/risc-v-servers-in-the-cloud/[Scaleway's description], it boots U-Boot, OpenSBI, then Linux, with "minimal proprietary code" at the very bottom. The same line as on my board, then. RISE's link:https://github.com/riseproject-dev/riscv-runner/blob/main/website/docs/getting-started/labels.md[GitHub runners] run on these machines by default.
+
+== Closing the series
+
+That's the last floor. We went down the x86 building and found red at the bottom. We made the red visible instead of pretending it was green. And in the other building, we found floors that open when you knock, and one small binary that nobody has rebuilt yet.
+
+« L'open source, c'est une direction. Pas une case à cocher. » _Open source is a direction. Not a checkbox._
+
+== Takeaways
+
+* _Read the metadata your distribution leaves behind._ `u-boot-metadata.sh` tells you the repository, tag and revision in one `cat`.
+* _Check every core, not just the big ones._ `/sys/class/remoteproc` shows the processors you forgot your chip had.
+* _Hash what ships, then compare across images._ Two boards and a `sha256sum` told me more than any data sheet.
+* _Say "unknown" when it's unknown._ The OpenSBI version wasn't in `strings`, and the post says so.
+* _Published source is a promise, a rebuild is a proof._ If you have an afternoon, rebuild `esos.elf` and compare.
+
+`audit("bananapi-f3") = ? · source published, binary not rebuilt`
+
+Thanks for riding the lift with me, all the way down. The link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2631s[talk video] (in French, the second core shows up here) and the link:https://speakerdeck.com/gounthar/100-percent-open-source-au-dessus-de-cette-ligne[slides], sources in the appendix, are online.

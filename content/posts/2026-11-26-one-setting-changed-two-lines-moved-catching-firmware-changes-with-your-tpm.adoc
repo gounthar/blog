@@ -1,0 +1,182 @@
+---
+layout: post
+title: 'One setting changed, two lines moved: catching firmware changes with your TPM'
+author: Bruno Verachten
+date: 2026-11-26 10:00:00 +0100
+categories:
+- Security
+- Infrastructure
+tags:
+- tpm
+- measured-boot
+- firmware
+- uefi
+- tpm2-tools
+- fwupd
+- security
+- homelab
+- cloud-nord
+series: ["Above This Line"]
+toc: true
+description: 'Floor -1 of the Above This Line series: reading a TPM event log before and after changing a single firmware setting, with a control boot in between, to see exactly what the camera recorded.'
+excerpt: 'I swapped two boot entries in my Intel NUC''s firmware and asked the TPM what it saw. Place your bets: how many lines of the event log move?'
+image: ""
+featured: false
+hidden: false
+draft: true
+---
+
+.Above This Line: the lift directory
+****
+* 0. link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[The lift ride]
+* *▶ -1. One setting changed, two lines moved* (you are here)
+* -2. link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[The roommate in the closet]
+* Monday morning. link:/2026/11/19/no-latest-for-firmware-five-verbs-for-monday-morning/[No `:latest` for firmware]
+* RISC-V. Down to the last binary (coming soon)
+****
+
+Previously on Above This Line: in link:/2026/11/19/no-latest-for-firmware-five-verbs-for-monday-morning/[the Monday-morning post], we went through five verbs for living with floors you can't open. The second one was _Measure_, and I promised to stop talking about it and actually do it. This is that post. One machine, one firmware setting, three boots, and a TPM that writes everything down.
+
+[TODO: header image. A small Intel NUC on a lab shelf with a USB cable running to an IP KVM, and a terminal on screen showing two lines of a diff, one red and one green.]
+
+== The bouncer and the camera
+
+At Cloud Nord I link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2068s[explained the difference] with a nightclub. Secure Boot is the bouncer. « Tu as des baskets, tu rentres pas. » _You're wearing sneakers, you're not getting in._ It decides at the door, and it doesn't keep a list of who came in.
+
+Measured boot is the security camera. It doesn't stop anyone. It films. Each stage of the boot is measured (hashed) and extended into the TPM's Platform Configuration Registers, the PCRs, and the firmware keeps an event log of what it measured, in order. Change something before the OS starts, and the footage changes.
+
+What the bouncer can't do is tell you that something changed when everything was still properly signed. So I built a little experiment around exactly that. A change the bouncer would wave through without blinking. Would the camera catch it?
+
+== The setup: a live system, because the hypervisor doesn't show me the TPM
+
+The machine is my Intel NUC, the same one from link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], with Boot Guard enabled, a TPM 2.0, and a hypervisor installed on its disk. First surprise (and first detour): the hypervisor's control domain doesn't expose the event log at all. There's no `/sys/kernel/security/tpm0` in there. The camera is recording, but that room has no screen.
+
+So I booted a live Linux instead, link:https://grml.org/[GRML] (a small Debian-based live system built for exactly this kind of rescue and inspection job, and a lovely one). I did all of it remotely, through an IP KVM that can mount an ISO as a virtual CD. (If you'd like an open source one, link:https://pikvm.org[PiKVM] exists.)
+
+Nice detail I didn't plan for: when the virtual CD appeared, the firmware created a boot entry for it by itself, `Boot0008`, and put it first in the boot order. Nobody asked it to. Firmware has opinions.
+
+Before anything else, I asked fwupd how this box scores. It came back as `HSI:3!`, because every check in HSI-1 to HSI-3 passes, including Boot Guard enabled with its key fused, while HSI-4 fails only on hardware disk encryption, and the `!` is fwupd's runtime suffix (it flags runtime issues, here among others that Secure Boot is disabled). A decently locked box, then. Exactly the kind where you'd assume nothing can move without you knowing.
+
+== What a capture is
+
+Each capture saves the same four things. As root, on the live system:
+
+[source,bash]
+----
+cp /sys/kernel/security/tpm0/binary_bios_measurements eventlog.bin
+tpm2_eventlog eventlog.bin > eventlog.yaml
+tpm2_pcrread sha256 > pcrs.txt
+efibootmgr -v > efibootmgr.txt
+----
+
+The raw event log, a decoded version of it, the current PCR values, and the boot entries. link:https://github.com/tpm2-software/tpm2-tools[tpm2-tools] does the heavy lifting here, and it's the reference toolbox for talking to a TPM 2.0 from Linux. The decoded YAML is very long, so I wrote a small script, `eventlog_view.py` (it's on GitHub, with the capture script: link:https://github.com/gounthar/tpm-eventlog-diff[tpm-eventlog-diff]), that prints one line per event and diffs two captures.
+
+Here's part of the baseline, the boot entries section of the log:
+
+----
+#16  PCR1  EFI_VARIABLE_BOOT                  BootOrder                                c7d6319d02c8
+#17  PCR1  EFI_VARIABLE_BOOT                  Boot0008                                 900a780e3201
+#18  PCR1  EFI_VARIABLE_BOOT                  Boot0000                                 2ff194f6be50
+#19  PCR1  EFI_VARIABLE_BOOT                  Boot0007                                 d58d5a950f71
+#20  PCR1  EFI_VARIABLE_BOOT                  Boot0003                                 da67d651ecb2
+#21  PCR1  EFI_VARIABLE_BOOT                  Boot0004                                 bb5d2d36e6f7
+#22  PCR1  EFI_VARIABLE_BOOT                  Boot0005                                 e07a7f75a9e7
+#23  PCR1  EFI_VARIABLE_BOOT                  Boot0006                                 dde860f6976f
+----
+
+Look at that. The firmware measures the `BootOrder` variable itself, then each boot entry, in the order it's going to try them. Keep that in mind. It's the whole trick.
+
+One small accounting note, since you'll count if you're the type (I am). The log holds 40 events, but the view starts at `#2` and the diff counts 38. The two missing ones are `EV_NO_ACTION` events: informational entries that sit in the log but are never extended into a PCR. Nothing measured, nothing to compare.
+
+== Boot one, boot two: the control
+
+Here's the step people skip, and it's the one that makes the rest mean anything. Before changing a single setting, I rebooted the machine as it was, and captured again.
+
+----
+$ eventlog_view.py diff avant/eventlog.yaml controle/eventlog.yaml
+38 → 38 events · 0 removed · 0 added
+(exit 0)
+----
+
+Zero. And the PCRs? Identical, all 24 of them. (Yes, I compared all 24. No, I didn't need to. Yes, I enjoyed it.)
+
+Why bother? Because without this, any difference you see later could just be noise: a timestamp, a counter, something that changes on every boot. With it, you know that on this machine, an unchanged boot produces the exact same log. The camera is reproducible. Now a change means something.
+
+== The bet
+
+Now the one change. From the live system, I swapped two entries in the boot order, the installed hypervisor's entry (`Boot0000`) and the disk's fallback entry (`Boot0007`):
+
+[source,bash]
+----
+efibootmgr -o 0008,0007,0000,0003,0004,0005,0006
+----
+
+Before and after, as `efibootmgr` reports it (shortened to the lines that matter; the disk's GUID redacted):
+
+----
+BootOrder: 0008,0000,0007,0003,0004,0005,0006
+----
+
+----
+BootOrder: 0008,0007,0000,0003,0004,0005,0006
+Boot0007* UEFI OS	HD(4,GPT,<GUID>,0x5000800,0x100000)/\EFI\BOOT\BOOTX64.EFI0000424f
+----
+
+Same firmware, same keys, same bootloaders. Full disclosure: the bouncer wasn't even on duty for this run (Secure Boot was disabled, fwupd said so). But it wouldn't have mattered. Nothing new needed a signature, so the bouncer would have waved it all through, and PCR7, the register that holds the Secure Boot configuration, is identical across all three boots. As far as Secure Boot is concerned, nothing happened.
+
+So, before you scroll: how many lines of the event log move? None? One? More than one?
+
+[TODO: image. Three cards on a table, labelled "0", "1" and "more", with a coin on each.]
+
+== The answer
+
+----
+$ eventlog_view.py diff avant/eventlog.yaml apres/eventlog.yaml
+- #16  PCR1  EFI_VARIABLE_BOOT                  BootOrder                                c7d6319d02c8
++ #16  PCR1  EFI_VARIABLE_BOOT                  BootOrder                                50af0271d4b2
++ #18  PCR1  EFI_VARIABLE_BOOT                  Boot0007                                 d58d5a950f71
+- #19  PCR1  EFI_VARIABLE_BOOT                  Boot0007                                 d58d5a950f71
+38 → 38 events · 2 removed · 2 added
+(exit 1)
+----
+
+Two things moved.
+
+The first one is the real change: `BootOrder`, event `#16`, gets a new digest, `c7d6319d02c8` becoming `50af0271d4b2`. The variable's content changed, so its hash changed. That's the one line that genuinely differs.
+
+The second is a consequence. `Boot0007` moves from `#19` to `#18`, with exactly the same digest, `d58d5a950f71`. The entry itself didn't change at all; only its position did, because the firmware measures boot entries in the order it will try them. Swap two of them, and they swap places in the log. (The diff reports it as `Boot0007` moving up one slot. `Boot0000` sliding down is the same move seen from the other side.)
+
+So if you bet "one", you win. If you bet "more than one", you win too. Everybody wins, except the person who bet "none". (Sorry. The camera was rolling.)
+
+And the PCRs? PCR1, the register that collects these boot variables, went from `0xF584...6EC0` to `0x02FC...0DF6`. PCR0 and PCR7 stayed exactly as they were in the baseline and the control.
+
+One more PCR moved, and I'll be honest about it. PCR10 changed in this third capture (`0x83D9...932B` to `0x5D38...925A`), while it had matched in the control. PCR10 belongs to the operating system, by convention to Linux's IMA, not to the firmware. I haven't established why it moved here. So I'm telling you it moved, and not pretending to know more.
+
+Afterwards I put the original order back, detached the virtual CD, and rebooted into the hypervisor. Leave the lab as you found it.
+
+== What the camera did and didn't tell me
+
+I didn't read a single line of this firmware's code. I can't: it's closed, and Boot Guard makes sure only the vendor's signed firmware runs on this box. But I know that something in its configuration changed, which variable it was, and at which stage of the boot it was measured. With a control boot proving the log doesn't drift on its own.
+
+That's what "making the red visible" means in practice. Not opening the floor. Watching it.
+
+Let's be precise about what this is, though. This is a local comparison of measured-boot logs, on one machine, by me, with a diff. It is not attestation. Attestation is the next step: a separate machine checks these measurements against a policy you set, and the machine being checked doesn't get to mark its own homework. link:https://keylime.dev/[Keylime], a CNCF project, does exactly that: agents send TPM measurements to a verifier, and the verifier sends revocation messages when a machine leaves the trusted state. What your fleet does with those messages is up to you.
+
+And on the update side, link:https://github.com/fwupd/fwupd[fwupd] and the link:https://fwupd.org/lvfs/[LVFS] are the pair that keeps firmware updates on Linux boring, in the best sense of the word, which is exactly what you want when your next update will show up in this log too.
+
+== Takeaways
+
+* _Measured boot is the camera, Secure Boot is the bouncer._ A properly signed change gets past the bouncer. It doesn't get past the camera.
+* _Always capture a control boot._ An unchanged reboot with zero differences is what turns any later difference into evidence.
+* _Expect order to matter._ Swapping two boot entries changed one digest and moved one entry: two lines, not one.
+* _Use a live system if your OS doesn't expose the log._ If `/sys/kernel/security/tpm0` isn't there, boot something that has it.
+* _Say what you don't know._ PCR10 moved, and I don't know why yet. That's a finding, not a failure.
+
+[source,c]
+----
+audit("boot order swap") = ? · the code stays closed, but now I know when it changes
+----
+
+The link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2101s[recorded demo from the talk] (in French, on a different lab machine) and the link:https://speakerdeck.com/gounthar/100-percent-open-source-au-dessus-de-cette-ligne[slides], sources in the appendix, are online.
+
+Next in the series: we take the same lift in another building. RISC-V, a Banana Pi F3, and the one binary on it that nobody rebuilt.

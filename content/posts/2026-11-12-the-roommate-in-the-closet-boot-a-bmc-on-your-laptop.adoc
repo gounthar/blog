@@ -1,0 +1,210 @@
+---
+layout: post
+title: 'The roommate in the closet: boot a BMC on your laptop'
+author: Bruno Verachten
+date: 2026-11-12 10:00:00 +0100
+categories:
+- Security
+- Infrastructure
+tags:
+- openbmc
+- bmc
+- qemu
+- redfish
+- firmware
+- security
+- open-source
+- homelab
+- cloud-nord
+series: ["Above This Line"]
+toc: true
+description: 'Floor -2 of the Above This Line series: booting a public OpenBMC image in QEMU on a laptop, logging into it, and asking its Redfish API who it is. Every line of it is readable.'
+excerpt: 'Your server has a roommate who lives in the closet and keeps a set of house keys. I could never read the code of mine, so I booted an open one on my laptop instead.'
+image: ""
+featured: false
+hidden: false
+draft: true
+---
+
+.Above This Line: the lift directory
+****
+* 0. link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[The lift ride]
+* -1. One setting changed, two lines moved (coming soon)
+* *▶ -2. The roommate in the closet* (you are here)
+* Monday morning. No `:latest` for firmware (coming soon)
+* RISC-V. Down to the last binary (coming soon)
+****
+
+Previously on Above This Line: in link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], we took the lift from the VM down to the silicon, calling an imaginary `audit()` on every floor. Floor -2 came out orange: closed by default, but with an open door. This post walks through that door, on a laptop, with nothing to break.
+
+[TODO: header image. A closet door ajar, a key ring hanging from the handle, and the green glow of a serial console spilling out from inside.]
+
+== The hands that dropped
+
+At Cloud Nord 2026 I asked the room two questions. Who has ever opened the web interface of a BMC? A handful of hands. And who has ever read the code running inside it?
+
+Every hand dropped. (Mine included, until summer 2026.)
+
+On link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=711s[floor -2] of the talk, I described the BMC as a roommate living in your closet, with the house keys. Handy roommate. They switch the lights on when you're away, and let you in through the back door when you've lost your own keys. But you've never seen their face, you don't know what they read at night, and you paid for them when you bought the house. (Nobody chooses this roommate. They come with the lease.)
+
+So what does it take to finally see their face?
+
+== A whole computer that never sleeps
+
+Let's be precise about what we're dealing with, because "the little management board" undersells it. A BMC (baseboard management controller) is a complete computer inside your server: its own processor, its own operating system, its own network port. It powers the server on and off, gives you a console, mounts an ISO remotely. And it keeps running while the server itself is switched off.
+
+Which OS? At Cloud Nord nearly nobody in the room knew, and before preparing the talk I didn't either. By default, on servers from the big vendors, it's proprietary firmware. Some of its features can even be licensed separately, depending on the model (on one machine I was lent, mounting an ISO needed a paid licence). Closed code, and sometimes closed features on top of it.
+
+Then there's link:https://github.com/openbmc/openbmc[OpenBMC]: an open source Linux distribution for BMCs. Facebook started it in 2014, and Meta's link:https://engineering.fb.com/2015/03/10/open-source/introducing-openbmc-an-open-software-framework-for-next-generation-system-management/[own 2015 engineering post] says it runs it in production. That's the only production user I can source, and it's Meta saying it about Meta.
+
+== Why not just run it on a real server?
+
+Fair question. Why emulate anything?
+
+Because OpenBMC isn't a binary you drop onto any BMC. It's built per board: each supported machine has its own layer in the openbmc/openbmc tree describing its hardware. If your board has no layer, there's no image for it, and the server ships with whatever its vendor put on it. I looked at every server I could get my hands on for the talk. Not one ran OpenBMC. (Not a complaint about anyone, just a count.)
+
+So I did what everyone does when hardware says no: I asked QEMU. I picked Bletchley, a board whose layer is in openbmc/openbmc (link:https://github.com/openbmc/openbmc/tree/master/meta-facebook/meta-bletchley[meta-facebook/meta-bletchley]) and that QEMU emulates, under the name "Facebook Bletchley BMC". One caveat before we start: this is the public build for that board, not the firmware Meta deploys.
+
+Everything below comes from a run on my WSL2 laptop on 3 November 2026. Emulated. No BMC hardware was harmed.
+
+== Hands-on: booting the roommate
+
+=== Get the image
+
+The OpenBMC project builds images continuously. Go to the link:https://jenkins.openbmc.org/job/latest-master/label=docker-builder,target=bletchley/[Jenkins latest-master job, target bletchley], open the latest successful build, and download the `obmc-phosphor-image-bletchley-*.static.mtd` artifact. Mine was `obmc-phosphor-image-bletchley-20261103025039.static.mtd`, from build 1786. I renamed it `bletchley.mtd`, because life is short.
+
+Then check what you got:
+
+[source,bash]
+----
+stat -c %s bletchley.mtd
+sha256sum bletchley.mtd
+----
+
+Mine was 60,736,564 bytes, sha256 starting with `2cde946874dfdc81`. Yours will differ (it's latest-master, it moves every build), but write yours down. You'll want to know later exactly which image you audited.
+
+=== Pad it to 128 MiB
+
+Here's the first gotcha. The emulated machine has a 128 MiB flash chip (U-Boot reports it as a `w25q01jv`), and the image is about 60 MB. So we fill the rest with 0xFF, which is what an erased flash chip reads as:
+
+[source,bash]
+----
+head -c $((134217728 - $(stat -c %s bletchley.mtd))) /dev/zero \
+  | tr '\0' '\377' >> bletchley.mtd
+----
+
+Why `tr` and not just zeros? Because erased flash reads as all ones, so that's what blank flash should look like to the machine.
+
+=== Get QEMU without installing it
+
+You can simply install your distro's `qemu-system-arm` package. I wanted to keep my system clean (I have enough mysterious packages already), so I unpacked the Debian 13 packages into a directory instead:
+
+[source,bash]
+----
+apt-get download qemu-system-arm qemu-system-data
+mkdir qemu
+dpkg -x qemu-system-arm_*.deb qemu
+dpkg -x qemu-system-data_*.deb qemu
+----
+
+That gave me QEMU 10.0.13 (`1:10.0.13+ds-0+deb13u1`), with nothing installed. One catch: `dpkg -x` doesn't bring the libraries QEMU links against. If `ldd qemu/usr/bin/qemu-system-arm | grep 'not found'` prints anything, install those (or give up and install the package, no shame).
+
+=== Boot it
+
+[source,bash]
+----
+qemu/usr/bin/qemu-system-arm -M bletchley-bmc -nographic -L qemu/usr/share/qemu \
+  -drive file=bletchley.mtd,format=raw,if=mtd,snapshot=on \
+  -net nic -net user,hostfwd=tcp:127.0.0.1:2443-:443,hostfwd=tcp:127.0.0.1:2222-:22
+----
+
+The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Without it, the first boot already rewrites it: my copy had a different sha256 afterwards.
+
+Second gotcha: QEMU prints a few early warnings, `qemu-system-arm: warning: nic ftgmac100.0 has no peer` and two siblings. They look like failure. They aren't (the emulated board has more network ports than we plugged in). Don't wait for them to stop, wait for `login:`. In between you'll see U-Boot 2019.04 go by, and a lot of boot messages, until this line shows up on the serial console:
+
+----
+Phosphor OpenBMC (Phosphor OpenBMC Project Reference Distro) nodistro.0 bletchley ttyS4
+----
+
+On my two runs of this image, the login prompt appeared after 181 and 172 seconds. For the talk's run, with an older image, it was about 150 seconds. (Emulating an Arm BMC on a laptop is not fast. Neither, it turns out, is a real server's POST, so you're in good company.)
+
+=== Log in
+
+OpenBMC's published default credentials are `root` / `0penBmc` (that's a zero). Use them here, in your throwaway VM, and change them on anything real. Seriously.
+
+[source,bash]
+----
+ssh -p 2222 -o PubkeyAuthentication=no root@127.0.0.1
+----
+
+Third gotcha, and this one cost me a few minutes of staring. Without `-o PubkeyAuthentication=no`, if your SSH agent holds several keys, ssh offers them one by one, and the BMC hangs up with "Too many authentication failures" before you ever get a password prompt. The BMC isn't broken. Your keyring is just too generous.
+
+=== Ask it who it is
+
+Once in, the first question is the one nobody in the room could answer: which OS?
+
+----
+$ grep -E 'VERSION_ID|OPENBMC_TARGET_MACHINE' /etc/os-release
+VERSION_ID=3.1.0-dev-1770-gffc4b47f41
+OPENBMC_TARGET_MACHINE="bletchley"
+$ uname -sr
+Linux 6.18.60-4a2f1ea
+----
+
+There it is. A Linux kernel, a version string you can trace back to a commit in the OpenBMC tree, and a target machine name. Ten seconds of typing, and I know more about this BMC than about any BMC I've ever plugged into a rack.
+
+Now the same question through the front door, Redfish, the standard management API. From your laptop (`-k` because this BMC's certificate isn't one your laptop trusts):
+
+[source,bash]
+----
+curl -k -u root:0penBmc https://127.0.0.1:2443/redfish/v1/Managers/bmc
+----
+
+The fields I recorded from the answer:
+
+[source,json]
+----
+{
+  "Name": "OpenBmc Manager",
+  "ManagerType": "BMC",
+  "FirmwareVersion": "3.1.0-dev-1770-gffc4b47f41",
+  "PowerState": "On"
+}
+----
+
+Same version string as `/etc/os-release`. The API and the filesystem agree, which is exactly what you'd hope for and exactly what you can't usually check.
+
+=== And the web UI?
+
+Point a browser (or `curl -k`, the certificate isn't one curl trusts) at `https://127.0.0.1:2443/` and you get a 401. Not a bug: this image ships no web interface. `/usr/share/www` holds `images`, `redfish` and `styles`, and that's it. Redfish only. If you came for a shiny dashboard, sorry. You came for the roommate's face, and that's what you got.
+
+== Why this matters
+
+Let's go back to the audit from the hub post. For this BMC, the code, the build, the image and the emulator are all public. You can read every line of what boots. You can rebuild it. You can diff two builds. You can audit it.
+
+That's the whole point, in one line: a BMC is just a Linux computer, and this one you can read.
+
+It doesn't make your production BMCs any more open. (Sorry. I checked.) But it changes what you can ask of them. Once you've seen a BMC answer "which OS?" in ten seconds, a BMC that can't answer at all looks very different.
+
+== Monday morning: put the roommate in their own cave
+
+In the talk, Oslo's buses went into a mountain cave to cut it off from the world. Your BMC deserves a cave of its own:
+
+* *A separate management network.* Never the production network.
+* *Default accounts changed.* Yes, `0penBmc` too, the moment it's anywhere but your laptop.
+* *Before your next purchase, check OpenBMC's supported platforms.* If your machine is on the list, this floor has an open door. Ask the salesperson too; the answer alone will tell you something.
+
+== Takeaways
+
+* _A BMC is a computer._ Its own CPU, OS and network, awake while the server sleeps.
+* _You can meet an open one today, for free._ A public image, QEMU, and about three minutes of boot.
+* _Pad the flash, mind the warnings, mind your keys._ 0xFF to 128 MiB, wait for `login:`, and `-o PubkeyAuthentication=no`.
+* _Ask it who it is, twice._ `/etc/os-release` and Redfish should agree.
+* _Write down the hash._ An audit you can't tie to an exact image isn't an audit.
+
+[source,c]
+----
+audit("bletchley in qemu") = 0;
+----
+
+Next in the series: Monday morning, five verbs for living with the floors you can't open, starting with an inventory of every firmware in the box.
