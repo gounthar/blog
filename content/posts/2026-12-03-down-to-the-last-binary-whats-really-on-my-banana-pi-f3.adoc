@@ -48,7 +48,7 @@ My most open board still had a binary on it that nobody in the room had rebuilt.
 
 On link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2526s[stage], I drew the RISC-V building with the same floors as the x86 one. On a RISC-V server, the spec asks for UEFI, and server data sheets list a BMC, so on paper the upper floors look just like yours. (On paper. What actually ships is another conversation.)
 
-My board isn't a server, though. I've been knocking on doors for a RISC-V server for a while (no luck yet, if any vendor is reading). On a dev board like the BPI-F3, there's no UEFI and no BMC. The chain is a first-stage loader, U-Boot, and link:https://github.com/riscv-software-src/opensbi[OpenSBI].
+My board isn't a server, though. I've been knocking on doors for a RISC-V server for a while (no luck yet, if any vendor is reading). On a dev board like the BPI-F3, there's no UEFI and no BMC. The pieces are a first-stage loader, link:https://github.com/riscv-software-src/opensbi[OpenSBI] and U-Boot.
 
 OpenSBI is the green floor of this building. It's the firmware sitting just below the OS, in M-mode, the most privileged mode on the chip, providing services to the kernel or the hypervisor. It's the open source reference implementation, BSD-2-Clause. `audit = 0`.
 

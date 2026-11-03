@@ -66,7 +66,7 @@ sudo dmidecode -t bios    # the system firmware version
 
 link:https://github.com/fwupd/fwupd[fwupd] is the firmware update daemon on Linux, and `get-devices` lists every device it can see on the machine, with its firmware version: the system firmware, and whatever else fwupd knows how to talk to on that particular box. `dmidecode` reads the system firmware's own tables and tells you its vendor, version and release date. What should you look for? Version numbers you can compare across machines, anything that doesn't match the rest of the fleet, and anything you didn't know was there. (That last category is usually the interesting one.)
 
-Then the BMC. Go and get its firmware version too. If it speaks Redfish, the manager resource reports a `FirmwareVersion` field (we saw one answer in the BMC post, on the emulated board). If it doesn't, the web interface will tell you, somewhere.
+Then the BMC. Go and get its firmware version too. If it speaks Redfish, the manager resource has a `FirmwareVersion` field (we saw it filled in, in the BMC post, on the emulated board). Not every BMC fills it in. If yours doesn't, or doesn't speak Redfish at all, the web interface will tell you, somewhere.
 
 And then the important bit: put all of it in the same inventory as everything else. Same database, same dashboards, same review as your container SBOMs. Firmware isn't a separate religion. It's software that happens to run before yours.
 
@@ -128,7 +128,7 @@ Cloud-native folks, I haven't forgotten you. link:https://www.youtube.com/watch?
 
 *One: turn on the virtual TPM.* The three big clouds each offer one: link:https://docs.cloud.google.com/compute/shielded-vm/docs/shielded-vm[Shielded VM] at Google, link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nitrotpm.html[NitroTPM] at AWS, link:https://learn.microsoft.com/en-us/azure/virtual-machines/trusted-launch[Trusted Launch] at Azure. Same grid for all three, no ranking. Your VM does its own measured boot, and you can attest its boot chain. Its own chain, mind you. Not the host's firmware underneath.
 
-*Two: confidential VMs.* On AMD it's SEV-SNP, on Intel it's TDX. The processor encrypts your VM's private memory, and the host should only see noise. Managed Kubernetes nodes can run that way too, for example with link:https://docs.cloud.google.com/kubernetes-engine/docs/how-to/confidential-gke-nodes[Confidential GKE Nodes]. And on AMD, guess who produces the link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report]? The SEV firmware, running in the PSP, our old acquaintance from floor -3. You trust the host less and the chip maker more. That's progress. It isn't openness.
+*Two: confidential VMs.* On AMD it's SEV-SNP, on Intel it's TDX. The processor encrypts your VM's private memory, so the host only sees noise there (it still runs the VM and handles its I/O). Managed Kubernetes nodes can run that way too, for example with link:https://docs.cloud.google.com/kubernetes-engine/docs/how-to/confidential-gke-nodes[Confidential GKE Nodes]. And on AMD, guess who produces the link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report]? The SEV firmware, running in the PSP, our old acquaintance from floor -3. You trust the host less and the chip maker more. That's progress. It isn't openness.
 
 *Three: ask your provider.* Who updates the firmware and the BMCs of my hosts? How often? With what proof? Same as the firmware SBOM: just asking the question moves the line a little.
 

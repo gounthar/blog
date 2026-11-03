@@ -107,18 +107,18 @@ dpkg -x qemu-system-arm_*.deb qemu
 dpkg -x qemu-system-data_*.deb qemu
 ----
 
-That gave me QEMU 10.0.13 (`1:10.0.13+ds-0+deb13u1`), with nothing installed.
+That gave me QEMU 10.0.13 (`1:10.0.13+ds-0+deb13u1`), with nothing installed. One catch: `dpkg -x` doesn't bring the libraries QEMU links against. If `ldd qemu/usr/bin/qemu-system-arm | grep 'not found'` prints anything, install those (or give up and install the package, no shame).
 
 === Boot it
 
 [source,bash]
 ----
 qemu/usr/bin/qemu-system-arm -M bletchley-bmc -nographic -L qemu/usr/share/qemu \
-  -drive file=bletchley.mtd,format=raw,if=mtd \
+  -drive file=bletchley.mtd,format=raw,if=mtd,snapshot=on \
   -net nic -net user,hostfwd=tcp:127.0.0.1:2443-:443,hostfwd=tcp:127.0.0.1:2222-:22
 ----
 
-The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only.
+The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Without it, the first boot already rewrites it: my copy had a different sha256 afterwards.
 
 Second gotcha: QEMU prints a few early warnings, `qemu-system-arm: warning: nic ftgmac100.0 has no peer` and two siblings. They look like failure. They aren't (the emulated board has more network ports than we plugged in). Don't wait for them to stop, wait for `login:`. In between you'll see U-Boot 2019.04 go by, and a lot of boot messages, until this line shows up on the serial console:
 
@@ -176,7 +176,7 @@ Same version string as `/etc/os-release`. The API and the filesystem agree, whic
 
 === And the web UI?
 
-Point a browser (or curl) at `https://127.0.0.1:2443/` and you get a 401. Not a bug: this image ships no web interface. `/usr/share/www` holds `images`, `redfish` and `styles`, and that's it. Redfish only. If you came for a shiny dashboard, sorry. You came for the roommate's face, and that's what you got.
+Point a browser (or `curl -k`, the certificate isn't one curl trusts) at `https://127.0.0.1:2443/` and you get a 401. Not a bug: this image ships no web interface. `/usr/share/www` holds `images`, `redfish` and `styles`, and that's it. Redfish only. If you came for a shiny dashboard, sorry. You came for the roommate's face, and that's what you got.
 
 == Why this matters
 
