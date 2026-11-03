@@ -32,10 +32,10 @@ draft: true
 .Above This Line: the lift directory
 ****
 * *▶ 0. The lift ride* (you are here)
-* -1. One setting changed, two lines moved (coming soon)
-* -2. The roommate in the closet (coming soon)
-* Monday morning. No `:latest` for firmware (coming soon)
-* RISC-V. Down to the last binary (coming soon)
+* -1. One setting changed, two lines moved (26 November)
+* -2. The roommate in the closet (12 November)
+* Monday morning. No `:latest` for firmware (19 November)
+* RISC-V. Down to the last binary (3 December)
 ****
 
 image::/assets/images/2026/11/05/00-header-mine-shaft.jpg["Looking straight down a square timber mine shaft, wooden frames receding floor after floor towards dark water at the bottom, a blue cable hanging down the middle"]
@@ -46,7 +46,7 @@ In October 2025, Ruter, the public transport operator in Oslo, asked itself a ve
 
 What did they find? The new one was built for over-the-air updates: its manufacturer could reach each bus directly, battery and power-supply control system included, over the mobile network, through a Romanian SIM card. (A Chinese bus, in Oslo, talking through Romania. I've stopped trying to make the geography work.) The old one had no OTA at all.
 
-Ruter's conclusion, in link:https://web.archive.org/web/2025/https://ruter.no/nyheter/ruter-med-omfattende-sikkerhetstest-av-elektriske-busser[its own publication], is that the manufacturer could, in theory, stop the bus or render it unusable. In theory. Nobody switched off a bus. But keep the shape of it in mind: closed firmware, that somebody else can update.
+Ruter's conclusion, in link:https://web.archive.org/web/2025/https://ruter.no/nyheter/ruter-med-omfattende-sikkerhetstest-av-elektriske-busser[its own publication], is that the manufacturer could, in theory, stop the bus or render it unusable. In theory. Nobody switched off a bus. But keep the shape of it in mind: closed firmware that somebody else can update.
 
 Hold on to the bus. It comes back.
 
@@ -58,11 +58,11 @@ First question to the room: who has ever opened a BMC's web interface? (The BMC 
 
 Every hand dropped.
 
-That's the whole talk, in two questions. (Cloud folks who kept their hands down from the start: lucky you, there's a paragraph for you further down.)
+That's the whole talk, in two questions. (If you only run cloud VMs and have never touched a BMC: lucky you, there's a paragraph for you further down.)
 
 I'm Bruno, community manager at Vates (we make XCP-ng and Xen Orchestra). At Cloud Nord 2025 I was turning Android phones into Jenkins agents; this year I came back to teach people to distrust their real, perfectly legit servers. « Je progresse dans la paranoïa, c'est l'âge. » _I'm getting more paranoid. It's my age._
 
-I'm not a firmware expert, by the way. Not really ops, not really a dev anymore: some kind of hybrid animal who loves hardware without knowing all that much about it. Nearly everything below, I discovered from summer 2026 onwards. And for once the talk came before the posts (so this series is me doing my homework in public, which is a little scary).
+I'm no firmware expert, by the way: nearly everything below, I discovered from summer 2026 onwards, so this series is me doing my homework in public.
 
 == The method: the "descenseur"
 
@@ -77,13 +77,17 @@ audit(floor) == -1;  // EACCES: you can't read it or remove it   -> red
 
 EACCES is what Linux hands you when it refuses you a file. At Cloud Nord the room voted with raised hands before each link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=340s[verdict]. You can vote in your head. I won't count (promise).
 
+Somewhere on the way down there's a line. Above it, you read the code. Below it, you only believe it. That's the line in the title, and on every floor the question is which side of it we're standing on.
+
+One more map, because you'll meet it in other people's writing. x86 rings run from 3 (apps) to 0 (kernel); the hypervisor sits in "ring -1", a figure of speech. Libreboot calls the ME and the PSP, which we'll meet on floor -3, "ring -2" or "ring -3": not a ring at all, but another processor reaching the centre. Rings aren't floors, but they point the same way: down. Audit your hypervisor all you like, you still haven't audited the bottom.
+
 == Floor 0: everything's fine
 
-Ground floor: your VMs, and the hypervisor underneath. Xen, KVM: link:https://xenbits.xen.org/gitweb/?p=xen.git;a=blob;f=COPYING[GPL], public code. You read it, you patch it, you send the patch upstream. `audit("hypervisor") = 0`. link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=406s[Green].
+Ground floor: your VMs, and the hypervisor underneath. Xen, KVM: link:https://xenbits.xen.org/gitweb/?p=xen.git;a=blob;f=COPYING[GPL], public code. You read it, you patch it, you send the patch upstream. `audit("hypervisor") == 0`. link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=406s[Green].
 
 Everything's fine... until you power the machine on.
 
-Even at home. I'd promised to put my own product in orange, so here goes: turn Secure Boot on in the firmware, and an XCP-ng host won't boot, installer or installed. I hit it in my lab, on an OptiPlex. First I blamed the USB stick. Then the ISO. Then the IP KVM. Best part? The ISO really was corrupt as well. Two problems, one symptom (where's the fun otherwise?). With a clean image and Secure Boot on:
+Even at home. On stage I'd promised to put my own product in orange, so here goes: the hypervisor's code is green, but booting it is another story. Secure Boot is the bouncer at the firmware's door ("Sneakers? You're not getting in."). Turn it on, and an XCP-ng host won't boot, installer or installed. I hit it in my lab, on an OptiPlex. First I blamed the USB stick. Then the ISO. Then the IP KVM. Best part? The ISO really was corrupt as well. Two problems, one symptom. With a clean image and Secure Boot on:
 
 ----
 All bootable devices failed Secure Boot verification.
@@ -91,7 +95,7 @@ All bootable devices failed Secure Boot verification.
 
 Not a bug.
 
-So what is it, then? The link:https://docs.xcp-ng.org/releases/release-8-1/[8.1 release notes] say Secure Boot relies on proprietary packages, the link:https://xcp-ng.org/forum/topic/8485[forum] says it would need a valid Microsoft certificate, and the link:https://github.com/xcp-ng/xcp/issues/294[request] has been open since 2019. Guests have had link:https://docs.xcp-ng.org/guides/guest-UEFI-Secure-Boot/[Secure Boot] since 8.2.1 (same name, different thing, just to keep you on your toes). And enrolling your own keys? Then you sign the whole chain, every update included.
+So what is it, then? Partly signatures: XCP-ng's boot chain isn't signed with a key your firmware trusts out of the box. The link:https://docs.xcp-ng.org/releases/release-8-1/[8.1 release notes] say Secure Boot relies on proprietary packages, the link:https://xcp-ng.org/forum/topic/8485[forum] says it would need a valid Microsoft certificate, and the link:https://github.com/xcp-ng/xcp/issues/294[request] has been open since 2019. Guests have had link:https://docs.xcp-ng.org/guides/guest-UEFI-Secure-Boot/[Secure Boot] since 8.2.1 (same name, different thing, just to keep you on your toes). And enrolling your own keys? Then you sign the whole chain, every update included.
 
 « Le Secure Boot ne vérifie pas que le code est ouvert. Il vérifie qui l'a signé. » _Secure Boot doesn't check that the code is open. It checks who signed it._
 
@@ -103,9 +107,9 @@ Knock knock. On link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=506s[floor -1
 
 « Ouvert en amont, fermé chez vous. » _Open upstream, closed at your place._
 
-Why orange, then, and not red? Because doors exist. link:https://doc.coreboot.org/[coreboot] does the bare minimum of hardware bring-up, then hands over to a payload such as TianoCore, which _is_ EDK2, compiled by you this time. link:https://libreboot.org/[Libreboot] is to coreboot what Debian is to Linux: the purist distribution, mostly on older machines (hello, ThinkPad X200 from 2008). On recent Intel, memory init goes through Intel's FSP blob, and the link:https://libreboot.org/faq.html[Libreboot FAQ] says replacing it would take the world's best developer years. (Not me, then.) link:https://dasharo.com/[Dasharo], also coreboot-based, ships on laptops and on a handful of server boards with paid support.
+Why orange, then, and not red? Because doors exist. link:https://doc.coreboot.org/[coreboot] does the bare minimum of hardware bring-up, then hands over to a payload such as TianoCore, which _is_ EDK2, compiled by you this time. link:https://libreboot.org/[Libreboot] is to coreboot what Debian is to Linux: a distribution of it, the purist one, mostly on older machines (hello, ThinkPad X200 from 2008). On recent Intel, memory init goes through Intel's FSP blob, and the link:https://libreboot.org/faq.html[Libreboot FAQ] says replacing it would take the world's best developer years. (Not me, then.) link:https://dasharo.com/[Dasharo], also coreboot-based, ships on laptops and on a handful of server boards with paid support.
 
-Dasharo can even stop the Intel ME after boot, with the link:https://docs.dasharo.com/osf-trivia-list/me/[HAP bit]. Stopped. Not removed. We'll meet it again two floors down.
+Dasharo can even stop the Intel ME after boot, with the link:https://docs.dasharo.com/osf-trivia-list/me/[HAP bit], a flag that tells the ME to halt once the hardware is up. Stopped. Not removed. We'll meet it again two floors down.
 
 .Dasharo's setup menu offers three Intel ME modes. Screenshot: 3mdeb, from the link:https://github.com/Dasharo/docs/blob/31300a0/docs/images/menus/me_menu2.jpeg[Dasharo documentation], link:https://www.apache.org/licenses/LICENSE-2.0[Apache-2.0].
 image::/assets/images/2026/11/05/dasharo-intel-me-mode-menu.jpeg["A blue and grey firmware setup screen titled Intel Management Engine Options, with the Intel ME mode drop-down open on three choices: Enabled, Disabled (Soft) and Disabled (HAP)"]
@@ -114,15 +118,15 @@ image::/assets/images/2026/11/05/dasharo-intel-me-mode-menu.jpeg["A blue and gre
 
 Who has ever updated their BMC's firmware? Who knows which OS runs inside it? (Before this talk, not me. Not a clue.)
 
-Remember the Romanian SIM? Your server has one too: the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=711s[BMC]. Power, console, ISOs, its own OS and its own network, even while the server is off. A roommate living in your closet, with the house keys. You paid for those keys with the server, though not always for everything: on one machine I was lent, mounting an ISO was a paid licence. That same 1.5 TB loaner spent more than four minutes in POST before even looking for its devices. Four minutes of code you can't read, before your OS even exists.
+Remember the Romanian SIM? Your server has one too: the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=711s[BMC]. Power, console, ISOs, its own OS and its own network, even while the server is off. A roommate living in your closet, with the house keys. The keys come with the server, though not always all of them: on one machine I was lent, mounting an ISO needed a paid licence. That same machine, with 1.5 TB of RAM, spent more than four minutes in POST, the power-on self-test, before even looking for its devices. Four minutes of code you can't read, before your OS even exists.
 
-Orange anyway, thanks to link:https://github.com/openbmc/openbmc[OpenBMC], an open source Linux distribution for BMCs. Facebook started it in 2014, and link:https://engineering.fb.com/2015/03/10/open-source/introducing-openbmc-an-open-software-framework-for-next-generation-system-management/[its own 2015 engineering post] says it runs it in production. My servers? None of them. So I booted the public image for Bletchley, a Meta board, in QEMU on my laptop. That one gets its own post.
+Orange anyway, thanks to link:https://github.com/openbmc/openbmc[OpenBMC], an open source Linux distribution for BMCs. Facebook started it in 2014, and link:https://engineering.fb.com/2015/03/10/open-source/introducing-openbmc-an-open-software-framework-for-next-generation-system-management/[Facebook's own 2015 engineering post] says Facebook runs it in production. My servers? None of them. So I booted the public image for Bletchley, a Meta board, in QEMU on my laptop. That one gets its own post.
 
 == Floor -3: knock knock, who's there?
 
 Guessing game. A reasonable one-socket server: how many processors inside? The invoice says one. The invoice is an optimist. There's the CPU you paid for, the BMC, your SSD's controller, and the one that answers when you link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=978s[knock on floor -3].
 
-Yes. And it was there before you.
+Yes, a fourth one. And it was there before you.
 
 On Intel, it's the Management Engine: a separate little computer in the chipset since 2006. It has handled part of hardware init since Nehalem, its firmware is signed by Intel, and on recent chips it runs a link:https://positechglobal.com/en/research/analytics/disabling-intel-me-11-via-undocumented-mode/[486-derived core running MINIX] (my favourite piece of trivia in the whole talk). Without valid signed firmware, the machine shuts down after 30 minutes, according to link:https://github.com/corna/me_cleaner/wiki/How-does-it-work%3F[people who took it apart].
 
@@ -132,40 +136,40 @@ And AMD? No favourites here. The link:https://www.youtube.com/watch?v=AqQ8B2DxZM
 
 Not thirty minutes: zero.
 
-Your processor is Darth Maul: two hearts, and you only hold the keys to one.
+Your processor has two brains, and you only hold the keys to one.
 
-This isn't about one brand, it's architecture. And these locks exist to protect you: anti-rollback, for one, stops anyone dragging you back to an older, vulnerable firmware. They just don't hand you the key. (AMD friends reading this: heart on you, as we say in French. I meant it on stage too.)
+This isn't about one brand, it's architecture. And these locks exist to protect you: anti-rollback, for one, stops anyone dragging you back to an older, vulnerable firmware. They just don't hand you the key. (AMD friends reading this: « cœur sur vous », _much love_. I meant it on stage too.)
 
-So I looked at a real one: a loaned AMD EPYC Genoa, booted from a live key. The kernel reported its PSP fused, debug locked and anti-rollback on, all of it protective, and Secure Boot had no keys enrolled at all.
+So I looked at a real one: an AMD EPYC Genoa belonging to a partner (not the loaner from floor -2), booted from a live key. The kernel reported its PSP fused, debug locked and anti-rollback on, all of it protective, and Secure Boot had no keys enrolled at all.
 
-No TPM was fitted on that box, which is why fwupd's PC-oriented link:https://fwupd.github.io/libfwupdplugin/hsi.html[HSI scale] stopped it at HSI:0, on its very first step. Count BIOS, BMC, network cards, disk controller and SSDs, and that's at least ten closed firmwares. « Je jette la pierre à personne. » _I'm not throwing stones at anyone._ Yours probably looks much the same.
+No TPM was fitted on that box, which is why fwupd's PC-oriented link:https://fwupd.github.io/libfwupdplugin/hsi.html[HSI scale] stopped it at HSI:0, on its very first step. Count BIOS, BMC, network cards, disk controller and SSDs, and that's at least ten closed firmwares. « Je ne jette la pierre à personne. » _I'm not throwing stones at anyone._ Yours probably looks much the same.
 
-To be fair, I ran the same checks on my own Intel NUC: ME version 18, manufacturing mode locked, and Boot Guard fused to the board vendor's key, so only that vendor's firmware boots (on _my_ NUC, yes, that one stung). It has a TPM, and fwupd gives it HSI:3, a better score earned partly _because_ of those vendor locks.
+To be fair, I ran the same checks on my own Intel NUC: ME version 18, manufacturing mode locked, and Boot Guard fused to the board vendor's key, so only that vendor's firmware boots (on _my_ NUC, yes, that one stung). It has a TPM (the small chip that keeps track of what booted), and fwupd gives it HSI:3, a better score earned partly _because_ of those vendor locks.
 
 « Plus sûr, oui. Plus ouvert, non. » _Safer, yes. More open, no._
+
+`audit("ME/PSP") == -1`. Red: you can't read it, and you can't remove it.
 
 [TIP]
 ====
 Two minutes, and it tells you a lot: `fwupdmgr security`. The HSI scale was designed for laptops and desktops, so read a server's score with that in mind.
 ====
 
-Quick detour through the rings (stay with me, it's short). x86 rings run from 3 (apps) to 0 (kernel); the hypervisor sits in "ring -1", a figure of speech. Libreboot calls the ME and the PSP "ring -2" or "ring -3": not a ring at all, but another processor reaching the centre. Audit your hypervisor all you like, you still haven't audited the bottom.
-
 "But Bruno, there's me_cleaner!" (Nobody said it. I felt it.) link:https://doc.coreboot.org/northbridge/intel/sandybridge/me_cleaner.html[me_cleaner] strips much of the ME firmware, and the HAP bit stops the ME once the hardware is up, but by then it has already done its job. Never run it on a machine you need. For the PSP, says Libreboot, there's no equivalent.
 
 In the cloud, this floor is still under your cluster (told you there was a paragraph for you). On AMD, a confidential VM's SEV-SNP link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report] comes from firmware running in, you guessed it, the PSP. You trust the host less and the chip maker more.
 
-And here's the part I genuinely like: with openSIL, AMD publishes its silicon initialisation code as open source, and link:https://review.coreboot.org/c/coreboot/+/88712[coreboot boots recent EPYC chips with it] on a few boards. A real step, and AMD is the one taking it. The PSP itself still runs AMD-signed firmware, so openSIL opens the initialisation, not the PSP. But a door that wasn't there is now ajar.
+And here's the part I genuinely like: with openSIL, AMD publishes its silicon initialisation code as open source, and link:https://review.coreboot.org/c/coreboot/+/88712[coreboot boots recent EPYC chips with it] on a few boards. A real step, and AMD is the one taking it. The PSP itself still runs AMD-signed firmware, so openSIL opens the initialisation, not the PSP. But a door that wasn't there is now ajar: not orange yet, but the first crack in the red.
 
 == Floor -4: the bottom of the cave
 
-Knock knock... nothing. On x86 the instruction set is link:https://www.sec.gov/Archives/edgar/data/2488/000119312509236705/dex102.htm[proprietary] and core designs are secret. Nobody expected to read a Xeon's RTL this morning. (Good. I didn't bring one.)
+Knock knock... nothing. On x86 the instruction set is link:https://www.sec.gov/Archives/edgar/data/2488/000119312509236705/dex102.htm[proprietary] and core designs are secret. Nobody expected to read a Xeon's RTL (the hardware description the chip is built from) this morning. (Good. I didn't bring one.) `audit("ISA") == -1`. Red.
 
 Not a law of physics, though: OpenPOWER is one open ISA, and on Raptor's machines the link:https://git.raptorcs.com/git/[platform firmware sources] are published and auditable. There's another open ISA, and I'm keeping it warm for later.
 
 == Express ride back up
 
-Oxygen masks on. Here's the map you voted on: green at the top, orange in the middle, red at the bottom. So is open source pointless? (Deliberately provocative. I'd left my troll costume at home.)
+Here's the map you voted on: green at the top, orange in the middle, red at the bottom. So is open source pointless? (Deliberately provocative.)
 
 No.
 
@@ -177,23 +181,21 @@ In October 2026, an intermediate certificate of the certificate authority eMudhr
 
 The line moves both ways. After 2015 FCC rules on 5 GHz radios, TP-Link locked out third-party firmware entirely. The link:https://docs.fcc.gov/public/attachments/DA-16-850A1.pdf[2016 consent decree] brought a $200,000 penalty (for its own firmware exceeding power limits, not for open source) and a commitment to work with the open source community and chip makers on reopening the door. On an Archer A7 sold in the US, link:https://openwrt.org/toh/tp-link/archer_a7_v5[OpenWrt installs] from TP-Link's own update page. Are the two connected? I can't prove it.
 
-So, off to raise goats in the Avesnois (a rural corner of the Nord)? No. It's damp there, and there's work on Monday.
-
 == Monday morning: make the red visible
 
 I won't ask you to flash coreboot onto production. Your CISO would find me, and rightly so.
 
 « On ne rend pas le rouge vert, on le rend visible. » _We don't turn red into green. We make it visible._
 
-Five link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[verbs]: *Inventory*, *Measure*, *Attest*, *Pin*, *Isolate*. Secure Boot is the bouncer: "Sneakers? You're not getting in." Measured boot is the CCTV camera, recording each step in the TPM. And pinning? Friends don't let friends use latest, firmware included. Red stays red, but you go from "I trust it" to "I know when it changes". That's not nothing. The floor -1 post shows one setting moving two lines in the TPM log; the Monday-morning post covers the rest.
+Five link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[verbs]. *Inventory*: list every firmware you have, and "no TPM" is a line in that list too. *Measure*: Secure Boot, our bouncer from floor 0, checks who signed each step; measured boot is the CCTV camera, recording each step in the TPM. *Attest*: have something else compare those recordings with what you expect, because a camera nobody watches is decoration. *Pin*: friends don't let friends use latest, firmware included. *Isolate*: the BMC gets its own network, and nobody else's. Red stays red, but you go from "I trust it" to "I know when it changes". That's not nothing. The floor -1 post shows one setting moving two lines in the TPM log; the Monday-morning post covers the rest.
 
 == The line moves
 
 What if, somewhere, floor -3 opened when you knocked?
 
-link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2526s[Same lift, different building]: RISC-V. On floor -3 sits link:https://github.com/riscv-software-src/opensbi[OpenSBI], the open source reference firmware just below the OS: `audit = 0`. On floor -4, the ISA is an link:https://docs.riscv.org/reference/isa/v20260120/unpriv/unpriv-index.html[open specification]. The core? It depends. SiFive sells the P550 as licensed IP; CVA6 publishes its RTL, though trying it on an FPGA needs a closed vendor tool. An open ISA isn't an open core (a confusion I used to make myself, so no judgement here).
+link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2526s[Same lift, different building]: RISC-V. On floor -3, where x86 keeps its ME, RISC-V puts link:https://github.com/riscv-software-src/opensbi[OpenSBI], the open source reference firmware running at the machine's most privileged level: `audit("OpenSBI") == 0`. On floor -4, the ISA is an link:https://docs.riscv.org/reference/isa/v20260120/unpriv/unpriv-index.html[open specification]. The core? It depends. SiFive sells the P550 as licensed IP; CVA6 publishes its RTL, though trying it on an FPGA needs a closed vendor tool. An open ISA isn't an open core (a confusion I used to make myself, so no judgement here).
 
-My Banana Pi BPI-F3's boot chain is GPL source, at the exact commit my distribution says it built. Lovely. But a link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2631s[second, 32-bit core] runs `esos.elf`, a prebuilt binary my distribution copies in, even though SpacemiT publishes its source. My most open board, and still a binary nobody here rebuilt. It gets its own post.
+On my first Banana Pi BPI-F3, the bootloader is GPL source, at the exact commit my distribution says it built. OpenSBI is open source too, though built from a contributor's tree. Lovely. But a link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2631s[second, 32-bit core] runs `esos.elf`, a prebuilt binary my distribution copies in, even though SpacemiT publishes its source. My most open board, and still a binary nobody here rebuilt. It gets its own post.
 
 The SpacemiT K3 announces everything a hypervisor needs: H for the CPU, AIA for interrupts, an IOMMU for devices. 16 cores!
 
@@ -201,18 +203,16 @@ Well... 8.
 
 Only eight of the sixteen have the H extension. link:https://missingno.tech[Julien Aubé] ran the commands on his board for me, and on that one board AIA is there while Linux sees no IOMMU.
 
+Still, RISC-V servers are starting to look like servers.
+
 .A rack server with its lid off, on a stand at the RVI Summit China 2026. Photo: link:https://www.linkedin.com/posts/ludovic-dev_riscv-opensource-rise-ugcPost-7519624662964740096-nWrE/[Ludovic Henry], used with his permission.
 image::/assets/images/2026/11/05/rvi-summit-rack-server.jpg["An open rack server on a trade-show stand, lid removed, rows of heatsinks and drive caddies visible, a product sheet resting on top."]
-
-And yes, Doom: on Xen, on RISC-V, all emulated in QEMU on x86. A prototype, and my colleague Baptiste's work (I'm not the Xen RISC-V maintainer; I port what's around it).
 
 No board? Scaleway rents bare-metal RISC-V, the link:https://www.scaleway.com/en/elastic-metal-rv1/[Elastic Metal EM-RV1], launched in February 2024. According to link:https://www.scaleway.com/en/blog/risc-v-servers-in-the-cloud/[Scaleway], it boots U-Boot, OpenSBI, then Linux, on top of "minimal proprietary code". link:https://github.com/riseproject-dev/riscv-runner/blob/main/website/docs/getting-started/labels.md[RISE's GitHub runners] run on these machines by default, and most of my riscv64 porting goes through them.
 
 == The bus comes back
 
-Told you. After Oslo, Denmark's Movia had link:https://www.moviatrafik.dk/media/3topzxnw/risk-assessment-of-cybersecurity-for-ev-bus-and-ev-vehicles____final-2296728_-1.pdf[EY audit] electric buses from several manufacturers, and found no basis to consider Chinese buses less cybersecure than the others. And the manufacturer that could least demonstrate its cybersecurity management? The three-year-old Dutch one. The bus without OTA.
-
-Didn't see that one coming, did you?
+Told you. After Oslo, Denmark's Movia had link:https://www.moviatrafik.dk/media/3topzxnw/risk-assessment-of-cybersecurity-for-ev-bus-and-ev-vehicles____final-2296728_-1.pdf[EY audit] electric buses from several manufacturers, and found no basis to consider Chinese buses less cybersecure than the others. And the manufacturer that could least demonstrate its cybersecurity management? The Dutch one, VDL: the maker of Oslo's bus without OTA.
 
 EY gives both halves: without OTA, nobody takes over the fleet remotely, and nobody patches, monitors or audits it either. Not having OTA doesn't make you auditable.
 
@@ -232,5 +232,5 @@ Thanks to the Cloud Nord crew for having me back, to Julien Aubé for running co
 
 [source,c]
 ----
-audit("this post") = 0;  // sources in the slides' appendix
+audit("this post") == 0;  // sources in the slides' appendix
 ----
