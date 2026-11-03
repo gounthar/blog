@@ -77,9 +77,9 @@ audit(floor) == -1;  // EACCES: you can't read it or remove it   -> red
 
 EACCES is what Linux hands you when it refuses you a file. At Cloud Nord the room voted with raised hands before each link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=340s[verdict]. You can vote in your head. I won't count (promise).
 
-Somewhere on the way down there's a line. Above it, you read the code. Below it, you only believe it. That's the line in the title, and on every floor the question is which side of it we're standing on.
+Somewhere on the way down there's a line. Above it, you read the code. Below it, you take the vendor's word for it. That's the line in the title, and on every floor we'll check which side of it we're standing on (spoiler: it doesn't improve).
 
-One more map, because you'll meet it in other people's writing. x86 rings run from 3 (apps) to 0 (kernel); the hypervisor sits in "ring -1", a figure of speech. Libreboot calls the ME and the PSP, which we'll meet on floor -3, "ring -2" or "ring -3": not a ring at all, but another processor reaching the centre. Rings aren't floors, but they point the same way: down. Audit your hypervisor all you like, you still haven't audited the bottom.
+One more map, because other people's writing uses it. x86 counts rings from 3 (apps) down to 0 (kernel), and the hypervisor gets "ring -1", which is a figure of speech, not a piece of hardware. Libreboot calls the ME and the PSP (floor -3, patience) "ring -2" or "ring -3". Not a ring at all: another processor, reaching the centre. Rings aren't floors, but they point the same way. Down. Audit your hypervisor all you like, you still haven't audited the bottom.
 
 == Floor 0: everything's fine
 
@@ -118,7 +118,7 @@ image::/assets/images/2026/11/05/dasharo-intel-me-mode-menu.jpeg["A blue and gre
 
 Who has ever updated their BMC's firmware? Who knows which OS runs inside it? (Before this talk, not me. Not a clue.)
 
-Remember the Romanian SIM? Your server has one too: the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=711s[BMC]. Power, console, ISOs, its own OS and its own network, even while the server is off. A roommate living in your closet, with the house keys. The keys come with the server, though not always all of them: on one machine I was lent, mounting an ISO needed a paid licence. That same machine, with 1.5 TB of RAM, spent more than four minutes in POST, the power-on self-test, before even looking for its devices. Four minutes of code you can't read, before your OS even exists.
+Remember the Romanian SIM? Your server has one too: the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=711s[BMC]. Power, console, ISOs, its own OS and its own network, even while the server is off. A roommate living in your closet, with the house keys. The keys come with the server, though not always all of them: on one machine I was lent, mounting an ISO needed a paid licence. That same machine, with 1.5 TB of RAM, spent more than four minutes in POST (the power-on self-test, the machine checking itself) before even looking for its devices. Four minutes of code you can't read, and your OS isn't even born yet. Long enough to wonder what it's doing in there.
 
 Orange anyway, thanks to link:https://github.com/openbmc/openbmc[OpenBMC], an open source Linux distribution for BMCs. Facebook started it in 2014, and link:https://engineering.fb.com/2015/03/10/open-source/introducing-openbmc-an-open-software-framework-for-next-generation-system-management/[Facebook's own 2015 engineering post] says Facebook runs it in production. My servers? None of them. So I booted the public image for Bletchley, a Meta board, in QEMU on my laptop. That one gets its own post.
 
@@ -138,17 +138,17 @@ Not thirty minutes: zero.
 
 Your processor has two brains, and you only hold the keys to one.
 
-This isn't about one brand, it's architecture. And these locks exist to protect you: anti-rollback, for one, stops anyone dragging you back to an older, vulnerable firmware. They just don't hand you the key. (AMD friends reading this: « cœur sur vous », _much love_. I meant it on stage too.)
+This isn't Intel bashing or AMD bashing (I just did both, to be fair), it's architecture. And these locks exist to protect you: anti-rollback, for one, stops anyone dragging you back to an older, vulnerable firmware. They just don't hand you the key. (AMD friends reading this: « cœur sur vous », _much love_. I meant it on stage too.)
 
 So I looked at a real one: an AMD EPYC Genoa belonging to a partner (not the loaner from floor -2), booted from a live key. The kernel reported its PSP fused, debug locked and anti-rollback on, all of it protective, and Secure Boot had no keys enrolled at all.
 
-No TPM was fitted on that box, which is why fwupd's PC-oriented link:https://fwupd.github.io/libfwupdplugin/hsi.html[HSI scale] stopped it at HSI:0, on its very first step. Count BIOS, BMC, network cards, disk controller and SSDs, and that's at least ten closed firmwares. « Je ne jette la pierre à personne. » _I'm not throwing stones at anyone._ Yours probably looks much the same.
+No TPM fitted on that box, so fwupd's link:https://fwupd.github.io/libfwupdplugin/hsi.html[HSI scale] (built with PCs in mind) stopped it at HSI:0, on step one. Ouch. Count BIOS, BMC, network cards, disk controller and SSDs, and that's at least ten closed firmwares. « Je ne jette la pierre à personne. » _I'm not throwing stones at anyone._ Yours probably looks much the same.
 
 To be fair, I ran the same checks on my own Intel NUC: ME version 18, manufacturing mode locked, and Boot Guard fused to the board vendor's key, so only that vendor's firmware boots (on _my_ NUC, yes, that one stung). It has a TPM (the small chip that keeps track of what booted), and fwupd gives it HSI:3, a better score earned partly _because_ of those vendor locks.
 
 « Plus sûr, oui. Plus ouvert, non. » _Safer, yes. More open, no._
 
-`audit("ME/PSP") == -1`. Red: you can't read it, and you can't remove it.
+`audit("ME/PSP") == -1`. Red. Can't read it, can't remove it.
 
 [TIP]
 ====
@@ -187,7 +187,7 @@ I won't ask you to flash coreboot onto production. Your CISO would find me, and 
 
 « On ne rend pas le rouge vert, on le rend visible. » _We don't turn red into green. We make it visible._
 
-Five link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[verbs]. *Inventory*: list every firmware you have, and "no TPM" is a line in that list too. *Measure*: Secure Boot, our bouncer from floor 0, checks who signed each step; measured boot is the CCTV camera, recording each step in the TPM. *Attest*: have something else compare those recordings with what you expect, because a camera nobody watches is decoration. *Pin*: friends don't let friends use latest, firmware included. *Isolate*: the BMC gets its own network, and nobody else's. Red stays red, but you go from "I trust it" to "I know when it changes". That's not nothing. The floor -1 post shows one setting moving two lines in the TPM log; the Monday-morning post covers the rest.
+Five link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2002s[verbs]. *Inventory*: list every firmware you have, and "no TPM" is a line in that list too. *Measure*: Secure Boot, our bouncer from floor 0, checks who signed each step; measured boot is the CCTV camera, recording each step in the TPM. *Attest*: have something else compare those recordings with what you expect, because a camera nobody watches is decoration. *Pin*: friends don't let friends use latest, firmware included. *Isolate*: the BMC gets its own network, and nobody else's. Red stays red, but you go from "I trust it" to "I know when it changes". That's not nothing. Want to watch one setting move two lines in the TPM log? That's the floor -1 post. The rest of Monday morning gets its own.
 
 == The line moves
 
