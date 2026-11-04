@@ -26,7 +26,7 @@ excerpt: 'In October 2025, Oslo drove two electric buses into a mountain to find
 image: assets/images/2026/11/05/00-header-mine-shaft.jpg
 featured: false
 hidden: false
-draft: true
+draft: false
 ---
 
 .Above This Line: the lift directory
