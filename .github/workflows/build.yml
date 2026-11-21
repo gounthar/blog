@@ -7,6 +7,10 @@ on:
   pull_request:
     branches:
       - main
+  # Bot PRs (updatecli, dev.to ID map) are opened with GITHUB_TOKEN, which
+  # triggers no push/pull_request run. Those workflows dispatch this one on
+  # the PR branch instead, so the PR still gets a build check.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,8 +24,9 @@ jobs:
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v3
         with:
-          hugo-version: 'latest'
-          extended: true
+          # Pinned: 'latest' let Hugo 0.170.0 break the build unannounced.
+          # Bumped by updatecli (updatecli.d/hugo.yaml).
+          hugo-version: '0.170.1'
 
       # Hugo 0.170.0 removed LibSass; the theme's toCSS needs Dart Sass.
       - name: Install Dart Sass
