@@ -24,7 +24,7 @@ excerpt: 'You know the digest of every image you run in production. Do you know 
 image: assets/images/2026/11/19/00-header-miner-hard-hat.jpg
 featured: false
 hidden: false
-draft: true
+draft: false
 ---
 
 .Above This Line: the lift directory

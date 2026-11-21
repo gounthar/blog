@@ -23,7 +23,7 @@ excerpt: 'Your server has a roommate who lives in the closet and keeps a set of 
 image: assets/images/2026/11/12/00-header-rusted-lock.jpg
 featured: false
 hidden: false
-draft: true
+draft: false
 ---
 
 .Above This Line: the lift directory
