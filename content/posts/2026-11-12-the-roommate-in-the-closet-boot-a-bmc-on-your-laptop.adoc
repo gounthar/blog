@@ -51,7 +51,7 @@ So what does it take to finally see their face?
 
 == A whole computer that never sleeps
 
-Let's be precise about what we're dealing with, because "the little management board" undersells it. A BMC (baseboard management controller) is a complete computer inside your server: its own processor, its own operating system, its own network port. It powers the server on and off, gives you a console, mounts an ISO remotely.
+First, let's size up the roommate, because "the little management board" undersells it. A BMC (baseboard management controller) is a complete computer inside your server: its own processor, its own operating system, its own network port. It powers the server on and off, gives you a console, mounts an ISO remotely.
 
 And it keeps running while the server itself is switched off.
 
@@ -65,7 +65,7 @@ Fair question. Why emulate anything?
 
 Because OpenBMC isn't a binary you drop onto any BMC. It's built per board: each supported machine has its own layer in the openbmc/openbmc tree describing its hardware. If your board has no layer, there's no image for it, and the server ships with whatever its vendor put on it. I looked at every server I could get my hands on for the talk. Not one ran OpenBMC. (Not a complaint about anyone, just a count.)
 
-So I did what everyone does when hardware says no: I asked QEMU. I picked Bletchley, a board whose layer is in openbmc/openbmc (link:https://github.com/openbmc/openbmc/tree/master/meta-facebook/meta-bletchley[meta-facebook/meta-bletchley]) and that QEMU emulates, under the name "Facebook Bletchley BMC". One caveat before we start: this is the public build for that board, not the firmware Meta deploys.
+So I did what everyone does when hardware says no: I asked QEMU. I picked Bletchley, which ticks both boxes: its layer is in openbmc/openbmc (link:https://github.com/openbmc/openbmc/tree/master/meta-facebook/meta-bletchley[meta-facebook/meta-bletchley]), and QEMU emulates it, under the name "Facebook Bletchley BMC". One caveat before we start: this is the public build for that board, not the firmware Meta deploys.
 
 Everything below comes from a run on my WSL2 laptop on 3 November 2026. Emulated. No BMC hardware was harmed.
 
@@ -73,7 +73,7 @@ Everything below comes from a run on my WSL2 laptop on 3 November 2026. Emulated
 
 === Get the image
 
-The OpenBMC project builds images continuously. Go to the link:https://jenkins.openbmc.org/job/latest-master/label=docker-builder,target=bletchley/[Jenkins latest-master job, target bletchley], open the latest successful build, and download the `obmc-phosphor-image-bletchley-*.static.mtd` artifact. Mine was `obmc-phosphor-image-bletchley-20261103025039.static.mtd`, from build 1786. I renamed it `bletchley.mtd`, because life is short.
+Good news first: you don't have to build anything yourself, because the OpenBMC project builds images continuously. Go to the link:https://jenkins.openbmc.org/job/latest-master/label=docker-builder,target=bletchley/[Jenkins latest-master job, target bletchley], open the latest successful build, and download the `obmc-phosphor-image-bletchley-*.static.mtd` artifact. Mine was `obmc-phosphor-image-bletchley-20261103025039.static.mtd`, from build 1786. I renamed it `bletchley.mtd`, because life is short.
 
 Then check what you got:
 
@@ -120,7 +120,7 @@ qemu/usr/bin/qemu-system-arm -M bletchley-bmc -nographic -L qemu/usr/share/qemu 
   -net nic -net user,hostfwd=tcp:127.0.0.1:2443-:443,hostfwd=tcp:127.0.0.1:2222-:22
 ----
 
-The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Without it, the first boot already rewrites it: my copy had a different sha256 afterwards.
+The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Why bother? Because without it, the first boot already rewrites it: my copy had a different sha256 afterwards. So much for that hash you so carefully wrote down.
 
 Second gotcha: QEMU prints a few early warnings, `qemu-system-arm: warning: nic ftgmac100.0 has no peer` and two siblings. They look like failure. They aren't (the emulated board has more network ports than we plugged in). Don't wait for them to stop, wait for `login:`. In between you'll see U-Boot 2019.04 go by, and a lot of boot messages, until this line shows up on the serial console:
 
@@ -162,7 +162,7 @@ Now the same question through the front door: Redfish, the standard management A
 curl -k -u root:0penBmc https://127.0.0.1:2443/redfish/v1/Managers/bmc
 ----
 
-The fields I recorded from the answer:
+Trimmed to the fields I recorded from the answer:
 
 [source,json]
 ----
@@ -178,11 +178,11 @@ Same version string as `/etc/os-release`. The API and the filesystem agree, whic
 
 === And the web UI?
 
-Point a browser (or `curl -k`, the certificate isn't one curl trusts) at `https://127.0.0.1:2443/` and you get a 401. Not a bug: this image ships no web interface. `/usr/share/www` holds `images`, `redfish` and `styles`, and that's it. Redfish only. If you came for a shiny dashboard, sorry. You came for the roommate's face, and that's what you got.
+Point a browser (or `curl -k`, the certificate isn't one curl trusts) at `https://127.0.0.1:2443/` and you get a 401. Not a bug: this image ships no web interface. `/usr/share/www` holds `images`, `redfish` and `styles`, and that's it. Redfish only. If you came for a shiny dashboard, sorry. You came for the roommate's face, though, and that's what you got.
 
 == Why this matters
 
-Let's go back to the audit from the hub post. For this BMC, the code, the build, the image and the emulator are all public. You can read every line of what boots. You can rebuild it. You can diff two builds. You can audit it.
+Let's go back to the `audit()` from the lift ride. For this BMC, the code, the build, the image and the emulator are all public. You can read every line of what boots, rebuild it, and diff two builds. In other words, you can audit it.
 
 That's the whole point, in one line: a BMC is just a Linux computer, and this one you can read.
 
