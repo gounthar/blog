@@ -72,10 +72,10 @@ One blob neither command will show you: the processor's own link:https://github.
 
 [source,bash]
 ----
-grep -m1 microcode /proc/cpuinfo
+grep microcode /proc/cpuinfo | sort -u
 ----
 
-You'll get a revision number. Not the code: Intel's and AMD's licences both forbid disassembling it. Still, a revision number is exactly what an inventory wants.
+You'll get a revision number, normally one line (more, if your cores disagree, and that would be worth a look). Not the code: Intel's and AMD's licences both forbid disassembling it. Still, a revision number is exactly what an inventory wants.
 
 Then the BMC. Go and get its firmware version too. If it speaks link:https://www.dmtf.org/standards/redfish[Redfish], the manager resource has a `FirmwareVersion` field (on the emulated board in the BMC post, it was filled in). Not every BMC bothers. If yours doesn't, or doesn't speak Redfish at all, the web interface will tell you. Somewhere. (Happy hunting.)
 
@@ -93,7 +93,7 @@ link:https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secu
 
 Secure Boot is the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2068s[bouncer]. Anything not signed by a key it knows doesn't get in. « Tu as des baskets, tu rentres pas. » _You're wearing sneakers, you're not getting in._ It decides at the door, and it doesn't keep a record of who it let through.
 
-Measured boot is the security camera. It lets everyone in, but it films them: each step of the boot gets measured and recorded in the TPM, and the event log tells the whole story afterwards. On Linux, you can read that log with link:https://github.com/tpm2-software/tpm2-tools[tpm2-tools]:
+Measured boot is the security camera. It lets everyone in, but it films them: each boot step the firmware measures gets recorded in the TPM, and the event log tells that story afterwards. On Linux, you can read that log with link:https://github.com/tpm2-software/tpm2-tools[tpm2-tools]:
 
 [source,bash]
 ----
@@ -155,7 +155,7 @@ Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I
 
 * [ ] Run `fwupdmgr get-devices` and `dmidecode -t bios` on every machine type in the fleet
 * [ ] Record each BMC's firmware version
-* [ ] Record each CPU's microcode revision (`grep -m1 microcode /proc/cpuinfo`)
+* [ ] Record each machine's microcode revision (`grep microcode /proc/cpuinfo | sort -u`)
 * [ ] Store it all next to your container SBOMs, missing TPMs included
 
 *Measure*

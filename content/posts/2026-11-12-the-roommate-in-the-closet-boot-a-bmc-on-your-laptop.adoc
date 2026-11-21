@@ -122,7 +122,7 @@ qemu/usr/bin/qemu-system-arm -M bletchley-bmc -nographic -L qemu/usr/share/qemu 
   -net nic -net user,hostfwd=tcp:127.0.0.1:2443-:443,hostfwd=tcp:127.0.0.1:2222-:22
 ----
 
-The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Why bother? Because without it, the first boot already rewrites it: my copy had a different sha256 afterwards. So much for that hash you so carefully wrote down.
+The two `hostfwd` rules forward the BMC's HTTPS port to 2443 on your laptop and its SSH port to 2222, on localhost only. `snapshot=on` keeps the BMC's own writes in a temporary file, so `bletchley.mtd` stays the image you started from. Why bother? Because without it, the first boot already rewrites it: my padded copy had a different sha256 after a single boot. So much for auditing the image you started from.
 
 Second gotcha: QEMU prints a few early warnings, `qemu-system-arm: warning: nic ftgmac100.0 has no peer` and two siblings. They look like failure. They aren't (the emulated board has more network ports than we plugged in). Don't wait for them to stop, wait for `login:`. In between you'll see U-Boot 2019.04 go by, and a lot of boot messages, until this line shows up on the serial console:
 
