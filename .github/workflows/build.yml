@@ -7,6 +7,10 @@ on:
   pull_request:
     branches:
       - main
+  # Bot PRs (updatecli, dev.to ID map) are opened with GITHUB_TOKEN, which
+  # triggers no push/pull_request run. Those workflows dispatch this one on
+  # the PR branch instead, so the PR still gets a build check.
+  workflow_dispatch:
 
 jobs:
   build:

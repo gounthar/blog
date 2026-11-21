@@ -21,6 +21,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       pull-requests: write
     steps:
@@ -80,6 +81,7 @@ jobs:
           fi
 
       - name: Open PR for updated ID map
+        id: idmap-pr
         if: >-
           ${{ !cancelled()
           && (github.event_name == 'push' || inputs.post != '') }}
@@ -98,3 +100,16 @@ jobs:
             run recognises those posts as already published and does not
             create duplicates. Direct pushes to `main` are blocked by branch
             protection, so the map is proposed as a PR instead.
+
+      # The PR above is opened with GITHUB_TOKEN, which triggers no build
+      # run. Dispatch one on its branch so the PR gets a build check.
+      - name: Run the build on the ID-map PR
+        if: >-
+          ${{ !cancelled()
+          && (steps.idmap-pr.outputs.pull-request-operation == 'created'
+          || steps.idmap-pr.outputs.pull-request-operation == 'updated') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run build.yml --repo "${GITHUB_REPOSITORY}" \
+            --ref chore/devto-ids-update
