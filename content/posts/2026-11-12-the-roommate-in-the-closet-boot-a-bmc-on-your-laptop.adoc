@@ -31,7 +31,7 @@ draft: true
 * 0. link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[The lift ride]
 * -1. One setting changed, two lines moved (coming soon)
 * *▶ -2. The roommate in the closet* (you are here)
-* Monday morning. No `:latest` for firmware (coming soon)
+* Monday morning. link:/2026/11/19/no-latest-for-firmware-five-verbs-for-monday-morning/[No `:latest` for firmware]
 * RISC-V. Down to the last binary (coming soon)
 ****
 

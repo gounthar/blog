@@ -33,8 +33,8 @@ draft: false
 ****
 * *▶ 0. The lift ride* (you are here)
 * -1. One setting changed, two lines moved (26 November)
-* -2. The roommate in the closet (12 November)
-* Monday morning. No `:latest` for firmware (19 November)
+* -2. link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[The roommate in the closet]
+* Monday morning. link:/2026/11/19/no-latest-for-firmware-five-verbs-for-monday-morning/[No `:latest` for firmware]
 * RISC-V. Down to the last binary (3 December)
 ****
 
