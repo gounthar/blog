@@ -44,13 +44,13 @@ _Photo: a coal miner's hard hat from a museum display, by link:++https://commons
 
 == Monday morning, coffee in hand
 
-You know the digest of every image you run in production. You have SBOMs, scanners, a policy that rejects anything unsigned. If someone pushes `:latest` to prod, a bot complains before a human even notices. (Bless that bot.)
+You know the digest of every image you run in production. You have link:https://en.wikipedia.org/wiki/Software_bill_of_materials[SBOMs], scanners, a policy that rejects anything unsigned. If someone pushes `:latest` to prod, a bot complains before a human even notices. (Bless that bot.)
 
 Now, quick: which firmware version is the BIOS of your third database server running? Its BMC? Its network cards?
 
 Yeah. Me neither, for most of my machines.
 
-First, let's set expectations. I'm not going to ask you to flash coreboot onto production on Monday. Your security officer would track me down, and they'd be right to. The red floors stay red. What we can change is whether we see them.
+First, let's set expectations. I'm not going to ask you to flash link:https://doc.coreboot.org/[coreboot] onto production on Monday. Your security officer would track me down, and they'd be right to. The red floors stay red. What we can change is whether we see them.
 
 « On ne rend pas le rouge vert, on le rend visible. » _We don't turn red into green. We make it visible._
 
@@ -66,19 +66,19 @@ fwupdmgr get-devices      # firmware that fwupd can see
 sudo dmidecode -t bios    # the system firmware version
 ----
 
-link:https://github.com/fwupd/fwupd[fwupd] is the firmware update daemon on Linux. `get-devices` lists every device it can see on the machine, with its firmware version: the system firmware, plus whatever else fwupd knows how to talk to on that particular box. `dmidecode` reads the system firmware's own tables and gives you its vendor, version and release date. What should you look for? Version numbers you can compare across machines, anything that doesn't match the rest of the fleet, and anything you didn't know was there. (That last category is usually the interesting one.)
+link:https://github.com/fwupd/fwupd[fwupd] is the firmware update daemon on Linux. `get-devices` lists every device it can see on the machine, with its firmware version: the system firmware, plus whatever else fwupd knows how to talk to on that particular box. link:https://www.nongnu.org/dmidecode/[`dmidecode`] reads the system firmware's own tables and gives you its vendor, version and release date. What should you look for? Version numbers you can compare across machines, anything that doesn't match the rest of the fleet, and anything you didn't know was there. (That last category is usually the interesting one.)
 
-Then the BMC. Go and get its firmware version too. If it speaks Redfish, the manager resource has a `FirmwareVersion` field (on the emulated board in the BMC post, it was filled in). Not every BMC bothers. If yours doesn't, or doesn't speak Redfish at all, the web interface will tell you. Somewhere. (Happy hunting.)
+Then the BMC. Go and get its firmware version too. If it speaks link:https://www.dmtf.org/standards/redfish[Redfish], the manager resource has a `FirmwareVersion` field (on the emulated board in the BMC post, it was filled in). Not every BMC bothers. If yours doesn't, or doesn't speak Redfish at all, the web interface will tell you. Somewhere. (Happy hunting.)
 
 And then the important bit: put all of it in the same inventory as everything else. Same database, same dashboards, same review as your container SBOMs. Firmware isn't a separate religion. It's software that happens to run before yours.
 
 How many lines should you expect? On one real server I looked at for the talk, counting the BIOS, the BMC, the network cards, the disk controller and the drives, I got to at least ten distinct firmware images in one box. Ten. In one box. Most of them closed.
 
-One more line that's easy to forget: what's missing. That same server had no TPM. "No TPM" is not an absence of data. It's an inventory line, and as we'll see in a minute, it's the line that tells you what you can't do next.
+One more line that's easy to forget: what's missing. That same server had no link:https://en.wikipedia.org/wiki/Trusted_Platform_Module[TPM]. "No TPM" is not an absence of data. It's an inventory line, and as we'll see in a minute, it's the line that tells you what you can't do next.
 
 == 2. Measure: the bouncer and the camera
 
-Secure Boot and measured boot sound like the same thing. They aren't.
+link:https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot[Secure Boot] and measured boot sound like the same thing. They aren't.
 
 Secure Boot is the link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2068s[bouncer]. Anything not signed by a key it knows doesn't get in. « Tu as des baskets, tu rentres pas. » _You're wearing sneakers, you're not getting in._ It decides at the door, and it doesn't keep a record of who it let through.
 
@@ -97,7 +97,7 @@ And the server with no TPM from the inventory? No TPM, no camera. You measure no
 
 A security camera that records to a disk nobody ever looks at is a very expensive piece of decoration. Same with measurements. They're only useful if someone, somewhere else, compares them against what you expect.
 
-That's link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2230s[remote attestation], and there's a project for exactly that, in a foundation you already know: link:https://keylime.dev/[Keylime], a link:https://www.cncf.io/projects/keylime/[CNCF project] (Sandbox level), Apache 2.0, born at MIT's Lincoln Laboratory. (Open source code keeping an eye on closed firmware. I do enjoy the irony.) An agent on each machine sends its TPM measurements. A verifier, on another machine, compares them with your policy. If they stop matching, the verifier link:https://keylime.readthedocs.io/en/latest/design/overview.html[sends revocation messages]. What happens next depends on how you wire it in: you can listen for those events and pull the node out of rotation, put it in quarantine, page someone. Zero trust, all the way down to the firmware.
+That's link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2230s[remote attestation], and there's a project for exactly that, in a foundation you already know: link:https://keylime.dev/[Keylime], a link:https://www.cncf.io/projects/keylime/[CNCF project] (Sandbox level), Apache 2.0, born at MIT's Lincoln Laboratory. (Open source code keeping an eye on closed firmware. I do enjoy the irony.) An agent on each machine sends its TPM measurements. A verifier, on another machine, compares them with your policy. If they stop matching, the verifier link:https://keylime.readthedocs.io/en/latest/design/overview.html[sends revocation messages]. What happens next depends on how you wire it in: you can listen for those events and pull the node out of rotation, put it in quarantine, page someone. link:https://en.wikipedia.org/wiki/Zero_trust_architecture[Zero trust], all the way down to the firmware.
 
 Now, be careful about what this buys you. Attestation tells you that something changed. It doesn't tell you the firmware is trustworthy. It doesn't tell you the firmware is open. A closed blob stays closed; it just can't change behind your back without you noticing anymore. That's not "everything's fine" versus "everything's broken". It's "something moved". Which, for a floor you can't read, is already a lot.
 
@@ -107,9 +107,9 @@ You refuse `:latest` in production for your images. Why would you accept it for 
 
 So, pin. Know which version you run, choose when it changes, and change it on purpose. The link:https://fwupd.org/lvfs/[LVFS] is the portal where hardware vendors upload their firmware updates for fwupd to apply. Where your hardware is supported, get it from there, rather than grabbing a binary by hand from some download page at two in the morning and pushing it straight onto a production box. (We've all been tempted. Two in the morning is when all the bad ideas look reasonable.)
 
-Then do what you'd do for any other software: canary it. Put the new version on an isolated test machine first, check that nothing odd happens, and only then roll it out to production. Boring. Effective. Exactly what you already do for everything above floor 0.
+Then do what you'd do for any other software: link:https://martinfowler.com/bliki/CanaryRelease.html[canary] it. Put the new version on an isolated test machine first, check that nothing odd happens, and only then roll it out to production. Boring. Effective. Exactly what you already do for everything above floor 0.
 
-And if your vendor doesn't publish on LVFS? Ask them. Ask what the new versions are, whether you can test them, whether they're signed and attested. While you're at it, ask for a firmware SBOM. They may not have one. The question alone moves things. Remember TP-Link in the hub post: an FCC consent decree committed it to work with the open source community, and on an Archer A7 sold in the US, OpenWrt installs from TP-Link's own update page. I can't prove the two are connected. But asking certainly didn't hurt.
+And if your vendor doesn't publish on LVFS? Ask them. Ask what the new versions are, whether you can test them, whether they're signed and attested. While you're at it, ask for a firmware SBOM. They may not have one. The question alone moves things. Remember TP-Link in the hub post: an FCC consent decree committed it to work with the open source community, and on an Archer A7 sold in the US, link:https://openwrt.org/[OpenWrt] installs from TP-Link's own update page. I can't prove the two are connected. But asking certainly didn't hurt.
 
 == 5. Isolate: the roommate gets their own cave
 
@@ -122,7 +122,7 @@ Remember the buses? Oslo drove them into a mountain to cut them off from the wor
 * a separate management network, never the production one;
 * restricted access, so only the people and machines that need it can reach it;
 * default accounts changed (no, not later, now);
-* and before your next purchase, check the list of platforms OpenBMC supports. If your machine is on it, that's one of the rare floors with an open alternative already. Ask the salesperson too. Their answer alone will tell you something.
+* and before your next purchase, check the list of platforms link:https://github.com/openbmc/openbmc[OpenBMC] supports. If your machine is on it, that's one of the rare floors with an open alternative already. Ask the salesperson too. Their answer alone will tell you something.
 
 == If your servers live at someone else's place
 
@@ -130,7 +130,7 @@ Cloud-native folks, I haven't forgotten you. link:https://www.youtube.com/watch?
 
 *One: turn on the virtual TPM.* The three big clouds each offer one: link:https://docs.cloud.google.com/compute/shielded-vm/docs/shielded-vm[Shielded VM] at Google, link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nitrotpm.html[NitroTPM] at AWS, link:https://learn.microsoft.com/en-us/azure/virtual-machines/trusted-launch[Trusted Launch] at Azure. Same treatment for all three, and no ranking (I'm not picking favourites today). Your VM does its own measured boot, and you can attest its boot chain. Its own chain, mind you. Not the host's firmware underneath.
 
-*Two: confidential VMs.* On AMD it's SEV-SNP, on Intel it's TDX. The processor encrypts your VM's private memory, so the host only sees noise there (it still runs the VM and handles its I/O). Managed Kubernetes nodes can run that way too, for example with link:https://docs.cloud.google.com/kubernetes-engine/docs/how-to/confidential-gke-nodes[Confidential GKE Nodes]. And on AMD, guess who produces the link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report]? The SEV firmware, running in the PSP, our old acquaintance from floor -3. You trust the host less and the chip maker more. That's progress. It isn't openness.
+*Two: confidential VMs.* On AMD it's link:https://docs.kernel.org/arch/x86/amd-memory-encryption.html[SEV-SNP], on Intel it's link:https://docs.kernel.org/arch/x86/tdx.html[TDX]. The processor encrypts your VM's private memory, so the host only sees noise there (it still runs the VM and handles its I/O). Managed Kubernetes nodes can run that way too, for example with link:https://docs.cloud.google.com/kubernetes-engine/docs/how-to/confidential-gke-nodes[Confidential GKE Nodes]. And on AMD, guess who produces the link:https://docs.kernel.org/virt/coco/sev-guest.html[attestation report]? The SEV firmware, running in the link:https://en.wikipedia.org/wiki/AMD_Platform_Security_Processor[PSP], our old acquaintance from floor -3. You trust the host less and the chip maker more. That's progress. It isn't openness.
 
 *Three: ask your provider.* Who updates the firmware and the BMCs of my hosts? How often? With what proof? Same as the firmware SBOM: just asking the question moves the line a little.
 
@@ -174,7 +174,7 @@ Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I
 * _No `:latest` for firmware._ LVFS where you can, a canary box always, and a polite question to every vendor.
 * _Give the BMC its own cave._ Separate network, restricted access, no default passwords.
 
-None of these verbs makes the management engine readable. Red stays red. But you go from "I trust it" to "I know when it changes", and for anyone who runs infrastructure, that's a big deal.
+None of these verbs makes the link:https://en.wikipedia.org/wiki/Intel_Management_Engine[management engine] readable. Red stays red. But you go from "I trust it" to "I know when it changes", and for anyone who runs infrastructure, that's a big deal.
 
 `audit("monday") = ? · but now you'll know when it changes`
 
