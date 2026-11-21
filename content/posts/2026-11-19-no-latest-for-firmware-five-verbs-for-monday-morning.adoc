@@ -21,7 +21,7 @@ series: ["Above This Line"]
 toc: true
 description: 'The practical floor of the Above This Line series: five verbs (Inventory, Measure, Attest, Pin, Isolate) to stop trusting closed firmware blindly, with a printable checklist and a box for cloud-native readers.'
 excerpt: 'You know the digest of every image you run in production. Do you know the version of a single firmware in the same rack? Five verbs for Monday morning, none of which turns red into green.'
-image: ""
+image: assets/images/2026/11/19/00-header-miner-hard-hat.jpg
 featured: false
 hidden: false
 draft: true
@@ -38,7 +38,9 @@ draft: true
 
 Previously on Above This Line: in link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], we went from the VM down to the silicon and found the bottom of the building red: closed firmware, closed processors, keys held by someone else. Then in link:/2026/11/12/the-roommate-in-the-closet-boot-a-bmc-on-your-laptop/[the roommate in the closet], we booted an open BMC on a laptop and asked it who it was. Lovely. But your production rack is still red at the bottom. So what do you actually do about it on Monday?
 
-[TODO: header image. A Monday-morning desk: a coffee mug, a head torch, and a printed checklist with five boxes, one already ticked.]
+image::/assets/images/2026/11/19/00-header-miner-hard-hat.jpg["A battered brass coal miner's hard hat with an electric headlamp fixed to the front and its cable trailing behind, resting on a dark cloth"]
+
+_Photo: a coal miner's hard hat from a museum display, by link:++https://commons.wikimedia.org/wiki/File:Coal_miner_hard_hat_with_headlamp..jpg++[Mikepascoe], link:https://creativecommons.org/licenses/by-sa/4.0/[CC BY-SA 4.0], resized._
 
 == Monday morning, coffee in hand
 

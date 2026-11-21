@@ -20,7 +20,7 @@ series: ["Above This Line"]
 toc: true
 description: 'Floor -2 of the Above This Line series: booting a public OpenBMC image in QEMU on a laptop, logging into it, and asking its Redfish API who it is. Every line of it is readable.'
 excerpt: 'Your server has a roommate who lives in the closet and keeps a set of house keys. I could never read the code of mine, so I booted an open one on my laptop instead.'
-image: ""
+image: assets/images/2026/11/12/00-header-rusted-lock.jpg
 featured: false
 hidden: false
 draft: true
@@ -37,7 +37,9 @@ draft: true
 
 Previously on Above This Line: in link:/2026/11/05/above-this-line-a-lift-ride-under-your-hypervisor/[the lift ride], we took the lift from the VM down to the silicon, calling an imaginary `audit()` on every floor. Floor -2 came out orange: closed by default, but with an open door. This post walks through that door, on a laptop, with nothing to break.
 
-[TODO: header image. A closet door ajar, a key ring hanging from the handle, and the green glow of a serial console spilling out from inside.]
+image::/assets/images/2026/11/12/00-header-rusted-lock.jpg["Close-up of an old rusted box lock on a worn door, a dark round knob in front and a keyhole in the scratched blue-grey metal plate behind it"]
+
+_Photo: an old door lock, by link:++https://commons.wikimedia.org/wiki/File:Old_Style_Lock_(16696189125).jpg++[darkday], link:https://creativecommons.org/licenses/by/2.0/[CC BY 2.0], resized._
 
 == The hands that dropped
 
