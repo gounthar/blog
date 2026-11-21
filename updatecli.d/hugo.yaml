@@ -1,0 +1,44 @@
+---
+name: "Update the Hugo version used by CI"
+
+scms:
+  default:
+    kind: github
+    spec:
+      owner: gounthar
+      repository: blog
+      branch: main
+      user: "{{ .github.user }}"
+      token: "{{ .github.token }}"
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    spec:
+      title: "chore(deps): update Hugo in CI"
+      labels:
+        - dependencies
+
+sources:
+  hugo:
+    name: "Get the latest Hugo release"
+    kind: githubrelease
+    spec:
+      owner: gohugoio
+      repository: hugo
+      token: "{{ .github.token }}"
+      versionfilter:
+        kind: semver
+    transformers:
+      - trimprefix: "v"
+
+targets:
+  build-workflow:
+    name: "Update hugo-version in the build workflow"
+    kind: yaml
+    scmid: default
+    sourceid: hugo
+    spec:
+      file: .github/workflows/build.yml
+      key: "$.jobs.build.steps[1].with.hugo-version"
