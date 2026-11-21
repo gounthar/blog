@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -25,3 +26,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATECLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATECLI_GITHUB_USER: gounthar
+
+      # PRs opened with GITHUB_TOKEN trigger no workflow runs, so the
+      # bump PRs would show no build check at all. Dispatching is allowed
+      # with GITHUB_TOKEN, and the run's checks land on the PR's head commit.
+      - name: Run the build on open updatecli PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr list --repo "${GITHUB_REPOSITORY}" --state open \
+            --author app/github-actions \
+            --json headRefName,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository | not) | .headRefName' \
+            | grep '^updatecli_' \
+            | while read -r branch; do
+                echo "Dispatching build.yml on ${branch}"
+                gh workflow run build.yml --repo "${GITHUB_REPOSITORY}" \
+                  --ref "${branch}"
+              done

@@ -1,0 +1,42 @@
+---
+name: "Update the Dart Sass version used by CI"
+
+scms:
+  default:
+    kind: github
+    spec:
+      owner: gounthar
+      repository: blog
+      branch: main
+      user: "{{ .github.user }}"
+      token: "{{ .github.token }}"
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    spec:
+      title: "chore(deps): update Dart Sass in CI"
+      labels:
+        - dependencies
+
+sources:
+  dart-sass:
+    name: "Get the latest Dart Sass release"
+    kind: githubrelease
+    spec:
+      owner: sass
+      repository: dart-sass
+      token: "{{ .github.token }}"
+      versionfilter:
+        kind: semver
+
+targets:
+  build-workflow:
+    name: "Update DART_SASS_VERSION in the build workflow"
+    kind: yaml
+    scmid: default
+    sourceid: dart-sass
+    spec:
+      file: .github/workflows/build.yml
+      key: "$.jobs.build.steps[2].env.DART_SASS_VERSION"
