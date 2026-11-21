@@ -68,6 +68,15 @@ sudo dmidecode -t bios    # the system firmware version
 
 link:https://github.com/fwupd/fwupd[fwupd] is the firmware update daemon on Linux. `get-devices` lists every device it can see on the machine, with its firmware version: the system firmware, plus whatever else fwupd knows how to talk to on that particular box. link:https://www.nongnu.org/dmidecode/[`dmidecode`] reads the system firmware's own tables and gives you its vendor, version and release date. What should you look for? Version numbers you can compare across machines, anything that doesn't match the rest of the fleet, and anything you didn't know was there. (That last category is usually the interesting one.)
 
+One blob neither command will show you: the processor's own link:https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files[microcode], the patch the chip maker ships to fix bugs and security holes in the CPU after the fact. The CPU forgets it at every power cut, so it gets reloaded at every boot, by the BIOS or by your kernel, link:https://docs.kernel.org/arch/x86/microcode.html[very early, from the initrd]. And it reaches you like everything else: as a distro package (`amd-ucode-firmware`, on my Fedora laptop). Ask for its version:
+
+[source,bash]
+----
+grep -m1 microcode /proc/cpuinfo
+----
+
+You'll get a revision number. Not the code: Intel's and AMD's licences both forbid disassembling it. Still, a revision number is exactly what an inventory wants.
+
 Then the BMC. Go and get its firmware version too. If it speaks link:https://www.dmtf.org/standards/redfish[Redfish], the manager resource has a `FirmwareVersion` field (on the emulated board in the BMC post, it was filled in). Not every BMC bothers. If yours doesn't, or doesn't speak Redfish at all, the web interface will tell you. Somewhere. (Happy hunting.)
 
 And then the important bit: put all of it in the same inventory as everything else. Same database, same dashboards, same review as your container SBOMs. Firmware isn't a separate religion. It's software that happens to run before yours.
@@ -75,6 +84,8 @@ And then the important bit: put all of it in the same inventory as everything el
 How many lines should you expect? On one real server I looked at for the talk, counting the BIOS, the BMC, the network cards, the disk controller and the drives, I got to at least ten distinct firmware images in one box. Ten. In one box. Most of them closed.
 
 One more line that's easy to forget: what's missing. That same server had no link:https://en.wikipedia.org/wiki/Trusted_Platform_Module[TPM]. "No TPM" is not an absence of data. It's an inventory line, and as we'll see in a minute, it's the line that tells you what you can't do next.
+
+And on Intel, read that line twice if you've ever switched the link:https://en.wikipedia.org/wiki/Intel_Management_Engine[ME] off. Intel's firmware TPM, PTT, is one of the ME's own features (it's listed among them in Intel's link:https://www.intel.com/content/dam/www/public/us/en/security-advisory/documents/intel-csme-security-white-paper.pdf[CSME white paper]), so it stops along with it. Dasharo's ME menu says so in plain words: link:https://github.com/Dasharo/DasharoModulePkg/blob/1a488a4da5643010d32004ee41bba525bf84b44a/Library/DasharoSystemFeaturesUiLib/DasharoSystemFeaturesStrings.uni#L73["with ME disabled, the firmware TPM will no longer be functional"]. A dedicated TPM chip keeps working. But close one door on floor -3, and you may find you've switched off the camera on floor -1. (Nobody said this building was simple.)
 
 == 2. Measure: the bouncer and the camera
 
@@ -106,6 +117,8 @@ Now, be careful about what this buys you. Attestation tells you that something c
 You refuse `:latest` in production for your images. Why would you accept it for firmware? link:https://www.youtube.com/watch?v=AqQ8B2DxZMI&t=2262s[Friends don't let friends use latest], and that goes for the BIOS too.
 
 So, pin. Know which version you run, choose when it changes, and change it on purpose. The link:https://fwupd.org/lvfs/[LVFS] is the portal where hardware vendors upload their firmware updates for fwupd to apply. Where your hardware is supported, get it from there, rather than grabbing a binary by hand from some download page at two in the morning and pushing it straight onto a production box. (We've all been tempted. Two in the morning is when all the bad ideas look reasonable.)
+
+And remember that microcode from the inventory? The copy your kernel loads doesn't come from the LVFS. It comes from a package. On my laptop, a perfectly ordinary `dnf update` replaces firmware files in `/usr/lib/firmware`, microcode included. Nothing gets flashed: the files just change under you. So pinning firmware also means pinning those packages, and canarying them like the rest.
 
 Then do what you'd do for any other software: link:https://martinfowler.com/bliki/CanaryRelease.html[canary] it. Put the new version on an isolated test machine first, check that nothing odd happens, and only then roll it out to production. Boring. Effective. Exactly what you already do for everything above floor 0.
 
@@ -142,6 +155,7 @@ Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I
 
 * [ ] Run `fwupdmgr get-devices` and `dmidecode -t bios` on every machine type in the fleet
 * [ ] Record each BMC's firmware version
+* [ ] Record each CPU's microcode revision (`grep -m1 microcode /proc/cpuinfo`)
 * [ ] Store it all next to your container SBOMs, missing TPMs included
 
 *Measure*
@@ -157,6 +171,7 @@ Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I
 *Pin*
 
 * [ ] Check which of your machines get firmware through LVFS
+* [ ] Pin the distro's firmware and microcode packages like any other dependency
 * [ ] Canary every firmware update on an isolated test box first
 * [ ] Ask each vendor for a firmware SBOM
 
@@ -174,7 +189,7 @@ Print it, stick it next to the coffee machine, tick it on Monday. (Or Tuesday. I
 * _No `:latest` for firmware._ LVFS where you can, a canary box always, and a polite question to every vendor.
 * _Give the BMC its own cave._ Separate network, restricted access, no default passwords.
 
-None of these verbs makes the link:https://en.wikipedia.org/wiki/Intel_Management_Engine[management engine] readable. Red stays red. But you go from "I trust it" to "I know when it changes", and for anyone who runs infrastructure, that's a big deal.
+None of these verbs makes the management engine readable. Red stays red. But you go from "I trust it" to "I know when it changes", and for anyone who runs infrastructure, that's a big deal.
 
 `audit("monday") = ? · but now you'll know when it changes`
 
